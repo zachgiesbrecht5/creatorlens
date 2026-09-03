@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      :root { --blue:#1a73e8; --line:#dadce0; --ink:#202124; --muted:#5f6368; --hover:#f1f3f4; }
+      body { font-family:'Google Sans',Roboto,Arial,sans-serif; margin:0; padding:20px; color:var(--ink); }
+      h2 { font-size:18px; font-weight:500; margin:0 0 4px; }
+      .sub { font-size:13px; color:var(--muted); margin:0 0 14px; }
+      input[type=text] { width:100%; box-sizing:border-box; padding:10px 12px; font-size:15px;
+        border:1px solid var(--line); border-radius:8px; outline:none; }
+      input[type=text]:focus { border-color:var(--blue); }
+      input[type=text]:disabled { background:#f8f9fa; color:#9aa0a6; }
+      #results { margin-top:6px; max-height:240px; overflow-y:auto; }
+      .row { display:flex; align-items:center; gap:10px; padding:8px; border-radius:8px; cursor:pointer; }
+      .row:hover { background:var(--hover); }
+      .row img { width:36px; height:36px; border-radius:50%; flex:0 0 auto; background:#eee; }
+      .row .meta { overflow:hidden; }
+      .row .name { font-size:14px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .row .desc { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .hint { font-size:12px; color:#9aa0a6; padding:8px; }
+      .status { font-size:13px; margin-top:16px; min-height:18px; }
+      .actions { margin-top:18px; display:flex; justify-content:flex-end; }
+      button { font-family:inherit; font-size:14px; border:none; background:none; color:var(--blue);
+        padding:9px 16px; border-radius:6px; cursor:pointer; }
+      button:hover { background:var(--hover); }
+    </style>
+  </head>
+  <body>
+    <h2>Scan a creator's channel</h2>
+    <p class="sub">Start typing a creator name, then click the right channel — the scan starts immediately.</p>
+
+    <input id="search" type="text" autocomplete="off" placeholder="e.g. Dave2D" />
+    <div id="results"></div>
+    <div id="status" class="status"></div>
+
+    <div class="actions">
+      <button id="cancelBtn" onclick="google.script.host.close()">Cancel</button>
+    </div>
+
+    <script>
+      var searchBox = document.getElementById('search');
+      var results   = document.getElementById('results');
+      var statusEl  = document.getElementById('status');
+      var cancelBtn = document.getElementById('cancelBtn');
+      var timer = null;
+      var busy  = false;
+
+      function esc(s){ var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+      searchBox.addEventListener('input', function(){
+        if (busy) return;
+        clearTimeout(timer);
+        statusEl.textContent = '';
+        var q = searchBox.value.trim();
+        if (q.length < 3) { results.innerHTML = ''; return; }
+        results.innerHTML = '<div class="hint">Searching…</div>';
+        timer = setTimeout(function(){                 // debounce: fire 400ms after last keystroke
+          google.script.run
+            .withSuccessHandler(render)
+            .withFailureHandler(function(e){ results.innerHTML = '<div class="hint">' + esc(e.message) + '</div>'; })
+            .searchChannelsForDialog(q);
+        }, 400);
+      });
+
+      function render(items){
+        if (busy) return;
+        if (!items || !items.length){ results.innerHTML = '<div class="hint">No channels found.</div>'; return; }
+        results.innerHTML = '';
+        items.forEach(function(it){
+          var row = document.createElement('div');
+          row.className = 'row';
+          row.innerHTML =
+            '<img src="' + esc(it.thumbnail) + '">' +
+            '<div class="meta">' +
+              '<div class="name">' + esc(it.title) + '</div>' +
+              '<div class="desc">' + esc(it.description) + '</div>' +
+            '</div>';
+          row.onclick = function(){ runScan(it); };
+          results.appendChild(row);
+        });
+      }
+
+      function runScan(it){
+        if (busy) return;
+        busy = true;
+        clearTimeout(timer);
+        searchBox.disabled = true;
+        results.innerHTML = '';
+        statusEl.style.color = '#5f6368';
+        statusEl.innerHTML = 'Scanning <strong>' + esc(it.title) + '</strong>… this can take a moment for large channels.';
+        google.script.run
+          .withSuccessHandler(onScanned)
+          .withFailureHandler(function(e){
+            busy = false;
+            searchBox.disabled = false;
+            statusEl.style.color = '#d93025';
+            statusEl.textContent = 'Scan failed: ' + e.message;
+          })
+          .runScanFromDialog(it.channelId, it.title);
+      }
+
+      function onScanned(res){
+        cancelBtn.textContent = 'Close';
+        if (res && res.count > 0){
+          statusEl.style.color = '#188038';
+          statusEl.innerHTML = '✓ Found <strong>' + res.count +
+            '</strong> brand detection(s). Open the “<strong>' + esc(res.tab) + '</strong>” tab.';
+        } else {
+          statusEl.style.color = '#5f6368';
+          statusEl.textContent = 'Scan finished but found no brands — double-check it\'s the right channel.';
+        }
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  body { font-family: 'Google Sans',Roboto,Arial,sans-serif; margin: 16px; color:#202124; }
+  .hint { color:#5f6368; font-size:12px; margin-bottom:10px; line-height:1.4; }
+  #box { position:relative; }
+  #q { width:100%; box-sizing:border-box; font-size:15px; padding:10px 14px; border:2px solid #1a73e8; border-radius:24px; outline:none; }
+  #dd { position:absolute; top:46px; left:0; right:0; background:#fff; border:1px solid #dadce0; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.15); max-height:230px; overflow:auto; display:none; z-index:5; }
+  .opt { padding:8px 14px; cursor:pointer; display:flex; justify-content:space-between; font-size:14px; }
+  .opt:hover, .opt.sel { background:#f1f3f4; }
+  .opt .deals { color:#5f6368; font-size:12px; }
+  .newb { color:#188038; }
+  #chips { margin:12px 0 8px; min-height:32px; }
+  .chip { display:inline-block; background:#e8f0fe; color:#1967d2; border-radius:16px; padding:5px 12px; margin:0 6px 6px 0; font-size:13px; }
+  .chip b { cursor:pointer; margin-left:6px; }
+  #run { background:#1a73e8; color:#fff; border:none; border-radius:4px; padding:9px 26px; font-size:14px; cursor:pointer; }
+  #run:disabled { background:#dadce0; }
+  #status { margin-top:10px; font-size:13px; color:#3c4043; white-space:pre-wrap; }
+  .foot { color:#80868b; font-size:11px; margin-top:10px; line-height:1.4; }
+</style>
+</head>
+<body>
+<div class="hint">Start typing - brands from your own database (with proven deals) suggest themselves. Pick one or type any new brand and press Enter. Up to 10 per run.</div>
+<div id="box">
+  <input id="q" placeholder="Type a brand... e.g. Olipop" autocomplete="off">
+  <div id="dd"></div>
+</div>
+<div id="chips"></div>
+<button id="run" disabled>Search</button>
+<div id="status"></div>
+<div class="foot">~6 search calls per brand of your ~100/day budget, 18-month lookback, min 10k subs, gifted/UGC excluded.<br>Advanced (type as-is): "Liquid IV | Liquid I.V." alias spellings &nbsp;|&nbsp; "Waterdrop = waterdrop.com" domain pin.</div>
+<script>
+var SUG = [], chips = [], sel = -1;
+google.script.run.withSuccessHandler(function (list) { SUG = list || []; }).bsGetBrandSuggestions();
+var q = document.getElementById('q'), dd = document.getElementById('dd');
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+function matches(t){ t = t.toLowerCase(); var st=[], inc=[];
+  for (var i=0;i<SUG.length;i++){ var n=SUG[i].n.toLowerCase();
+    if (n.indexOf(t)===0) { if (st.length<8) st.push(SUG[i]); }
+    else if (n.indexOf(t)>0 && inc.length<8) inc.push(SUG[i]);
+    if (st.length>=8) break; }
+  return st.concat(inc).slice(0,8); }
+function render(){ var t=q.value.trim();
+  if(!t){ dd.style.display='none'; return; }
+  var m=matches(t); sel=-1;
+  var h=m.map(function(s){ return '<div class="opt" data-v="'+esc(s.n)+'">'+esc(s.n)+'<span class="deals">'+s.d+' deal'+(s.d==1?"":"s")+' in your data</span></div>'; }).join("");
+  h += '<div class="opt newb" data-v="'+esc(t)+'">Search &quot;'+esc(t)+'&quot; (new brand)</div>';
+  dd.innerHTML=h; dd.style.display='block';
+  [].forEach.call(dd.children, function(el){ el.onmousedown=function(e){ e.preventDefault(); add(el.getAttribute('data-v')); }; }); }
+function add(v){ v=String(v).trim(); if(!v) return;
+  if(chips.length>=10) return;
+  if(chips.indexOf(v)<0) chips.push(v);
+  q.value=''; dd.style.display='none'; drawChips(); q.focus(); }
+function drawChips(){ document.getElementById('chips').innerHTML =
+  chips.map(function(c,i){ return '<span class="chip">'+esc(c)+'<b data-i="'+i+'">&times;</b></span>'; }).join("");
+  [].forEach.call(document.querySelectorAll('.chip b'), function(b){ b.onclick=function(){ chips.splice(+b.getAttribute('data-i'),1); drawChips(); }; });
+  document.getElementById('run').disabled = chips.length===0; }
+q.addEventListener('input', render);
+q.addEventListener('keydown', function(e){
+  var opts = dd.querySelectorAll('.opt');
+  if(e.key==='ArrowDown'&&dd.style.display==='block'){ sel=Math.min(sel+1,opts.length-1); mark(opts); e.preventDefault(); }
+  else if(e.key==='ArrowUp'){ sel=Math.max(sel-1,0); mark(opts); e.preventDefault(); }
+  else if(e.key==='Enter'){ e.preventDefault();
+    if(sel>=0&&opts[sel]) add(opts[sel].getAttribute('data-v'));
+    else if(q.value.trim()) add(q.value); }
+  else if(e.key===','){ e.preventDefault(); if(q.value.trim()) add(q.value); }
+});
+function mark(opts){ [].forEach.call(opts,function(o,i){ var isNew=(o.getAttribute('class')||'').indexOf('newb')>=0; o.className='opt'+(isNew?' newb':'')+(i===sel?' sel':''); }); }
+document.getElementById('run').onclick=function(){
+  var btn=this; btn.disabled=true;
+  document.getElementById('status').textContent='Searching YouTube for '+chips.length+' brand(s)... this can take a few minutes. Keep this window open.';
+  google.script.run.withSuccessHandler(function(msg){
+    document.getElementById('status').textContent=msg; btn.disabled=false;
+  }).withFailureHandler(function(err){
+    document.getElementById('status').textContent='Error: '+err.message; btn.disabled=false;
+  }).bsRunBrandSearch(chips.join(', '));
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "creatorlens",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm run test -w packages/engine",
+    "typecheck": "npm run typecheck -w packages/engine && npm run typecheck -w apps/worker && npm run typecheck -w apps/web",
+    "dev:web": "npm run dev -w apps/web",
+    "dev:worker": "npm run dev -w apps/worker",
+    "import:tracker": "tsx scripts/import-tracker.ts",
+    "sync:sheet": "tsx scripts/sync-sheet.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "googleapis": "^144.0.0",
+    "@supabase/supabase-js": "^2.45.4",
+    "@types/node": "^22.7.4"
+  }
+}

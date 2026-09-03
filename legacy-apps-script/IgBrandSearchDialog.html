@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  body { font-family: 'Google Sans',Roboto,Arial,sans-serif; margin: 16px; color:#202124; }
+  .hint { color:#5f6368; font-size:12px; margin-bottom:10px; line-height:1.4; }
+  label { display:block; font-size:12px; color:#5f6368; margin:12px 0 4px; }
+  #box { position:relative; }
+  #q, #tags { width:100%; box-sizing:border-box; font-size:15px; padding:10px 14px; border:2px solid #e1306c; border-radius:24px; outline:none; }
+  #tags { border:1px solid #dadce0; font-size:13px; padding:8px 14px; }
+  #dd { position:absolute; top:46px; left:0; right:0; background:#fff; border:1px solid #dadce0; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.15); max-height:200px; overflow:auto; display:none; z-index:5; }
+  .opt { padding:8px 14px; cursor:pointer; display:flex; justify-content:space-between; font-size:14px; }
+  .opt:hover, .opt.sel { background:#f1f3f4; }
+  .opt .deals { color:#5f6368; font-size:12px; }
+  .newb { color:#188038; }
+  .row { display:flex; gap:10px; }
+  .row > div { flex:1; }
+  select { width:100%; font-size:13px; padding:7px 8px; border:1px solid #dadce0; border-radius:6px; background:#fff; }
+  #run { background:#e1306c; color:#fff; border:none; border-radius:4px; padding:9px 26px; font-size:14px; cursor:pointer; margin-top:14px; }
+  #run:disabled { background:#dadce0; }
+  #status { margin-top:10px; font-size:13px; color:#3c4043; white-space:pre-wrap; }
+  .foot { color:#80868b; font-size:11px; margin-top:10px; line-height:1.4; }
+</style>
+</head>
+<body>
+<div class="hint">Type a brand - your database suggests ones with proven deals. Filters apply to the creators found.</div>
+<div id="box">
+  <input id="q" placeholder="Type a brand... e.g. Olipop" autocomplete="off">
+  <div id="dd"></div>
+</div>
+<label>Extra hashtags (optional, comma-separated - e.g. the brand\u2019s IG handle)</label>
+<input id="tags" placeholder="drinkolipop, olipoppartner" autocomplete="off">
+<div class="row">
+  <div><label>Min followers</label><select id="fmin">
+    <option value="">Any</option><option value="10000">10k</option><option value="50000">50k</option><option value="100000">100k</option><option value="250000">250k</option><option value="500000">500k</option><option value="1000000">1M</option>
+  </select></div>
+  <div><label>Max followers</label><select id="fmax">
+    <option value="">Any</option><option value="50000">50k</option><option value="100000">100k</option><option value="250000">250k</option><option value="500000">500k</option><option value="1000000">1M</option><option value="5000000">5M</option>
+  </select></div>
+  <div><label>Min engagement</label><select id="emin">
+    <option value="">Any</option><option value="1">1%</option><option value="2">2%</option><option value="3">3%</option><option value="5">5%</option>
+  </select></div>
+</div>
+<button id="run" disabled>Search Instagram</button>
+<div id="status"></div>
+<div class="foot">Uses ~2 of your 30 weekly hashtag credits per brand, 60-day window. When a size filter is set, creators Meta hides (unverifiable size) are excluded and counted separately.</div>
+<script>
+var SUG = [], sel = -1;
+google.script.run.withSuccessHandler(function (list) { SUG = list || []; }).bsGetBrandSuggestions();
+var q = document.getElementById('q'), dd = document.getElementById('dd'), run = document.getElementById('run');
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+function matches(t){ t = t.toLowerCase(); var st=[], inc=[];
+  for (var i=0;i<SUG.length;i++){ var n=SUG[i].n.toLowerCase();
+    if (n.indexOf(t)===0) { if (st.length<8) st.push(SUG[i]); }
+    else if (n.indexOf(t)>0 && inc.length<8) inc.push(SUG[i]);
+    if (st.length>=8) break; }
+  return st.concat(inc).slice(0,8); }
+function render(){ var t=q.value.trim(); run.disabled = !t;
+  if(!t){ dd.style.display='none'; return; }
+  var m=matches(t); sel=-1;
+  var h=m.map(function(s){ return '<div class="opt" data-v="'+esc(s.n)+'">'+esc(s.n)+'<span class="deals">'+s.d+' deal'+(s.d==1?"":"s")+' in your data</span></div>'; }).join("");
+  h += '<div class="opt newb" data-v="'+esc(t)+'">Search &quot;'+esc(t)+'&quot; (new brand)</div>';
+  dd.innerHTML=h; dd.style.display='block';
+  [].forEach.call(dd.children, function(el){ el.onmousedown=function(e){ e.preventDefault(); pick(el.getAttribute('data-v')); }; }); }
+function pick(v){ q.value=v; dd.style.display='none'; run.disabled=!v.trim(); }
+q.addEventListener('input', render);
+q.addEventListener('keydown', function(e){
+  var opts = dd.querySelectorAll('.opt');
+  if(e.key==='ArrowDown'&&dd.style.display==='block'){ sel=Math.min(sel+1,opts.length-1); mark(opts); e.preventDefault(); }
+  else if(e.key==='ArrowUp'){ sel=Math.max(sel-1,0); mark(opts); e.preventDefault(); }
+  else if(e.key==='Enter'){ e.preventDefault(); if(sel>=0&&opts[sel]) pick(opts[sel].getAttribute('data-v')); else dd.style.display='none'; }
+});
+function mark(opts){ [].forEach.call(opts,function(o,i){ var isNew=(o.getAttribute('class')||'').indexOf('newb')>=0; o.className='opt'+(isNew?' newb':'')+(i===sel?' sel':''); }); }
+run.onclick=function(){
+  var btn=this; btn.disabled=true;
+  document.getElementById('status').textContent='Searching Instagram for '+q.value.trim()+'... this can take a minute or two. Keep this window open.';
+  google.script.run.withSuccessHandler(function(msg){
+    document.getElementById('status').textContent=msg; btn.disabled=false;
+  }).withFailureHandler(function(err){
+    document.getElementById('status').textContent='Error: '+err.message; btn.disabled=false;
+  }).igbsRunBrandSearch(q.value.trim(), document.getElementById('tags').value,
+    document.getElementById('fmin').value, document.getElementById('fmax').value, document.getElementById('emin').value);
+};
+</script>
+</body>
+</html>
