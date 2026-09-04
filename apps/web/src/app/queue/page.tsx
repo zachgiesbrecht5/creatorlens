@@ -1,14 +1,29 @@
 import Link from "next/link";
-import { supabaseAdmin } from "@/lib/supabase";
+import { redirect } from "next/navigation";
+import { supabaseAdmin, currentProfile } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
+
+// Remove a queue entry. Scan results stay in the shared pool; only the job
+// row goes. Own jobs, or any job for admins.
+async function removeJob(formData: FormData) {
+  "use server";
+  const profile = await currentProfile();
+  if (!profile) return;
+  const id = String(formData.get("id"));
+  const admin = supabaseAdmin();
+  const q = admin.from("scan_jobs").delete().eq("id", id).in("status", ["done", "failed", "rate_limited", "queued"]);
+  await (profile.plan === "admin" ? q : q.eq("user_id", profile.id));
+  redirect("/queue");
+}
 
 // Team-wide queue: what everyone is scanning right now, and the house quota.
 export default async function Queue() {
   const admin = supabaseAdmin();
+  const me = await currentProfile();
   const day = new Date().toISOString().substring(0, 10);
   const [{ data: jobs }, { data: quota }, { data: tokens }] = await Promise.all([
-    admin.from("scan_jobs").select("id,platform,handle,status,error,items_checked,rows_found,quota_units,created_at,finished_at,profiles(full_name)").order("created_at", { ascending: false }).limit(60),
+    admin.from("scan_jobs").select("id,user_id,platform,handle,status,error,items_checked,rows_found,quota_units,created_at,finished_at,profiles(full_name)").order("created_at", { ascending: false }).limit(60),
     admin.from("house_quota").select("yt_units").eq("day", day).maybeSingle(),
     admin.from("ig_connections").select("ig_username,healthy,cooldown_until,calls_this_hour"),
   ]);
@@ -37,7 +52,7 @@ export default async function Queue() {
       <div className="card mt-6 overflow-x-auto">
         <table className="tbl">
           <thead>
-            <tr><th>Creator</th><th>By</th><th>Status</th><th>Items</th><th>Rows</th><th>Units</th><th>When</th></tr>
+            <tr><th>Creator</th><th>By</th><th>Status</th><th>Items</th><th>Rows</th><th>Units</th><th>When</th><th></th></tr>
           </thead>
           <tbody>
             {(jobs || []).map((j: any) => (
@@ -49,6 +64,9 @@ export default async function Queue() {
                 <td>{j.rows_found ?? ""}</td>
                 <td>{j.quota_units ?? ""}</td>
                 <td className="font-mono text-[11px] text-muted">{new Date(j.created_at).toLocaleString()}</td>
+                <td>{me && j.status !== "running" && (me.plan === "admin" || j.user_id === me.id) && (
+                  <form action={removeJob}><input type="hidden" name="id" value={j.id} /><button className="font-mono text-[10px] text-dim hover:text-bad" title="Remove from the queue (results stay in the pool)">remove</button></form>
+                )}</td>
               </tr>
             ))}
           </tbody>
