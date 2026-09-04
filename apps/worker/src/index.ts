@@ -9,7 +9,11 @@ import {
   type ScanResult, type PartnershipRow,
 } from "@creatorlens/engine";
 
-const env = (k: string, d?: string) => process.env[k] ?? d ?? (() => { throw new Error(`Missing env ${k}`); })();
+const env = (k: string, d?: string) => {
+  const v = process.env[k] ?? d;
+  if (v === undefined || v === "" || v === "PASTE_ME") throw new Error(`Env ${k} is missing or still a placeholder`);
+  return v;
+};
 const sb = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), { auth: { persistSession: false } });
 const YT_API_KEY = env("YT_API_KEY");
 const YT_DAILY_BUDGET = Number(env("YT_DAILY_BUDGET", "9000"));
@@ -134,9 +138,10 @@ async function runJob(job: any) {
 }
 
 async function tick() {
-  const { data: jobs } = await sb.from("scan_jobs").select("*")
+  const { data: jobs, error: pollErr } = await sb.from("scan_jobs").select("*")
     .in("status", ["queued", "rate_limited"]).lte("run_after", new Date().toISOString())
     .order("priority").order("created_at").limit(1);
+  if (pollErr) { log("poll failed:", pollErr.message, "(check SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)"); return; }
   const job = jobs?.[0];
   if (!job) return;
   try {
