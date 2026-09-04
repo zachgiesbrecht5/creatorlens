@@ -138,3 +138,18 @@ describe("brand wall", () => {
     expect(wall[1].repeatPartner).toBe(false);
   });
 });
+
+import { dropBoilerplate } from "./scan";
+describe("dropBoilerplate", () => {
+  const row = (brand: string, id: string, evidence = "https://x.com link") => ({ platform: "youtube", brand, confidenceScore: 5, confidenceLabel: "High", signalType: "", evidence, isMassSponsor: false, contentId: id, contentTitle: "", contentUrl: "", publishedAt: "", views: 0, thumbnail: "" } as any);
+  it("drops a URL-only brand present in most videos, keeps real sponsors", () => {
+    const rows = [...Array.from({ length: 12 }, (_, i) => row("Sixteenth", "v" + i)), row("Shopify", "v1", "Thanks Shopify for sponsoring"), row("Lowes", "v2")];
+    dropBoilerplate(rows, 20);
+    expect(rows.map((r) => r.brand)).toEqual(["Shopify", "Lowes"]);
+  });
+  it("keeps a brand that is explicitly thanked even if frequent", () => {
+    const rows = Array.from({ length: 12 }, (_, i) => row("Shopify", "v" + i, "Thanks Shopify for sponsoring"));
+    dropBoilerplate(rows, 20);
+    expect(rows.length).toBe(12);
+  });
+});

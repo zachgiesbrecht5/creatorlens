@@ -269,6 +269,10 @@ export const JUNK_DOMAINS: string[] = [
   // music / stock libraries credited in descriptions, never sponsors
   "extrememusic", "epidemicsound", "artlist", "musicbed", "uppbeat", "soundstripe", "storyblocks", "envato", "audiojungle", "premiumbeat", "audiio", "lickd",
   "extreme music", "epidemic sound",
+  // talent management / creator agencies (a creator's rep, not a sponsor)
+  "sixteenth", "viralnation", "viral nation", "nightmedia", "night media", "underscoretalent", "underscore talent", "selectmanagement", "select management", "ampstudios", "spotter", "jellysmack", "whalar", "influential", "creatorsagency", "digitalbrandarchitects", "dba", "wme", "caa", "uta", "gershagency", "aandrmanagement", "moxyi", "semaphore", "creatorsinc", "studio71", "bbtv", "fullscreen", "collab", "collabinc", "rootforgroup", "rootfor",
+  // production / post vendors
+  "radfordsc", "pttiming", "primetimetiming", "artgrid", "motionarray", "filmpac",
   "youtube",
   "instagram",
   "tiktok",

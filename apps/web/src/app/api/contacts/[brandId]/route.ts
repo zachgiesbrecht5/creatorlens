@@ -18,26 +18,35 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
   // for which email domains are acceptable. Without it we fall back to the
   // stored domain, and finally to a name-based lookup that must still look like
   // the brand (this is what stops "abercrombie.ru" from being offered).
-  const siteDomain = brand.website ? new URL(brand.website).hostname.replace(/^www\./, "") : brand.domain;
+  let siteDomain = brand.website ? new URL(brand.website).hostname.replace(/^www\./, "") : null;
+  if (!siteDomain) {
+    // Worker hasn't verified this brand yet: try the obvious domain right now.
+    const guess = await quickSite(`${brand.key}.com`);
+    if (guess) { siteDomain = guess; await admin.from("brands").update({ website: `https://${guess}`, site_status: "ok", site_checked_at: new Date().toISOString(), domain: guess }).eq("id", brandId); }
+  }
   const acceptable = (email: string) => {
-    const d = email.split("@")[1]?.toLowerCase() || "";
-    if (!d) return false;
-    if (siteDomain) return rootOf(d) === rootOf(siteDomain);
-    return rootOf(d).replace(/[^a-z0-9]/g, "") === brand.key;   // name-based: exact brand key, any TLD
+    const [local, d] = email.toLowerCase().split("@");
+    if (!d || !local) return false;
+    if (GENERIC_INBOX.test(local)) return false;                  // info@, support@ ... go to spam
+    if (siteDomain) return rootOf(d) === rootOf(siteDomain) && d.split(".").length <= 3;
+    // no verified site yet: exact brand key on a mainstream TLD only
+    return rootOf(d).replace(/[^a-z0-9]/g, "") === brand.key && /\.(com|ca|co|io|net|org|shop|us|uk|co\.uk)$/.test(d);
   };
+  const relevant = (title: string | null) => titleScore(title || "") > 0;
 
   let { data: contacts } = await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at").eq("brand_id", brandId)
     .order("verified", { ascending: false }).order("last_replied_at", { ascending: false, nullsFirst: false });
-  contacts = (contacts || []).filter((c) => c.source !== "hunter" && c.source !== "apollo" ? true : acceptable(c.email || ""));
+  const auto = (c: { source: string }) => c.source === "hunter" || c.source === "apollo";
+  contacts = (contacts || []).filter((c) => !auto(c) || (acceptable(c.email || "") && relevant(c.title)));
 
   if (!contacts.length) {
     let people: any[] = [];
     if (process.env.HUNTER_API_KEY) people = (await hunter(brand.name, siteDomain)).people;
-    people = people.filter((p) => acceptable(p.email));
-    if (!people.length && process.env.APOLLO_API_KEY && siteDomain) people = (await apollo(siteDomain)).filter((p) => acceptable(p.email));
+    people = people.filter((p) => acceptable(p.email) && relevant(p.title));
+    if (!people.length && process.env.APOLLO_API_KEY && siteDomain) people = (await apollo(siteDomain)).filter((p) => acceptable(p.email) && relevant(p.title));
     if (people.length) {
       await admin.from("contacts").upsert(people.map((p: any) => ({ brand_id: brandId, name: p.name, email: p.email, title: p.title, source: p.source || "hunter", verified: p.confidence >= 90 })), { onConflict: "brand_id,email" });
-      contacts = ((await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at").eq("brand_id", brandId)).data || []).filter((c) => acceptable(c.email || "") || (c.source !== "hunter" && c.source !== "apollo"));
+      contacts = ((await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at").eq("brand_id", brandId)).data || []).filter((c) => !auto(c) || (acceptable(c.email || "") && relevant(c.title)));
     }
   }
   brand.domain = siteDomain || brand.domain;
@@ -52,6 +61,29 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
     excluded: !!excl,
     domain: brand.domain,
   });
+}
+
+const GENERIC_INBOX = /^(info|contact|hello|hi|support|help|customerservice|customer\.?care|service|sales|press|media|careers|jobs|hr|legal|billing|orders?|admin|office|team|noreply|no-reply|marketing|partnerships?|collabs?|influencers?)$/;
+
+// Who actually books creators. 0 = not a fit (engineering, finance, licensing,
+// sales reps, talent managers at agencies); we never show 0.
+function titleScore(t: string): number {
+  const x = t.toLowerCase();
+  if (/engineer|developer|finance|account(ing|ant)|legal|counsel|licens|compliance|hr\b|human resources|recruit|talent manager|talent agent|customer (service|success|support)|logistics|supply|operations|warehouse|sales (rep|associate|executive)|account executive|performance marketing|growth marketing|paid (media|social)|seo|sem\b|email marketing|crm|data|analyst|it\b|security|product manager|designer|copywriter|intern/.test(x)) return 0;
+  if (/influencer|creator|partnership|collab|ambassador|talent|sponsorship/.test(x)) return 3;
+  if (/brand|marketing|social|community|\bpr\b|public relations|communications|content|campaign|digital/.test(x)) return 2;
+  if (/founder|ceo|cmo|owner|president|managing director/.test(x)) return 1;
+  return 0;
+}
+
+async function quickSite(host: string): Promise<string | null> {
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
+    const r = await fetch(`https://${host}`, { redirect: "follow", signal: ctl.signal, headers: { "user-agent": "Mozilla/5.0 (compatible; CreatorLens/1.0)" } });
+    clearTimeout(t);
+    if (r.status < 400 || r.status === 403 || r.status === 429) return new URL(r.url).hostname.replace(/^www\./, "");
+  } catch { /* unreachable */ }
+  return null;
 }
 
 // "shop.brand.co.uk" -> "brand"; good enough to compare an email domain to a site.
@@ -92,13 +124,11 @@ async function hunter(company: string, domain: string | null) {
   if (!r || !r.ok) return { domain: null as string | null, people: [] as any[] };
   const j: any = await r.json();
   const d = j.data || {};
-  const score = (t: string) => (/influencer|creator|partnership|collab|talent/i.test(t) ? 3 : /marketing|brand|social|community|pr\b|communications/i.test(t) ? 2 : /founder|ceo|owner/i.test(t) ? 1 : 0);
+  const score = titleScore;
   const people = (d.emails || [])
     .map((e: any) => ({ name: [e.first_name, e.last_name].filter(Boolean).join(" ") || null, email: e.value, title: e.position || null, confidence: e.confidence || 0 }))
     .filter((p: any) => p.email)
     .sort((a: any, b: any) => score(b.title || "") - score(a.title || "") || b.confidence - a.confidence)
     .slice(0, 5);
-  // generic inbox as a last resort (only when we asked by domain, so it is the right company)
-  if (!people.length && domain) people.push({ name: null, email: `partnerships@${domain}`, title: "generic inbox (unverified)", confidence: 0 });
   return { domain: d.domain || domain, people };
 }

@@ -20,9 +20,15 @@ export function BrandWall({ cards, creator, signedIn, roster }: { cards: WallCar
   const [showDead, setShowDead] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [contacts, setContacts] = useState<Record<string, ContactInfo | "loading">>({});
+  const [gone, setGone] = useState<Set<string>>(new Set());
   const rank = { High: 3, Medium: 2, Low: 1 };
   const dead = cards.filter((c) => c.site_status === "dead").length;
-  const shown = cards.filter((c) => rank[c.best_label] >= rank[minLabel] && !(hideMass && c.is_mass_sponsor) && (showDead || c.site_status !== "dead"));
+  const shown = cards.filter((c) => !gone.has(c.brand_id) && rank[c.best_label] >= rank[minLabel] && !(hideMass && c.is_mass_sponsor) && (showDead || c.site_status !== "dead"));
+
+  async function reject(brandId: string, scope: "pair" | "brand") {
+    setGone((g) => new Set(g).add(brandId));
+    await fetch("/api/reject", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ brandId, creatorId: creator.id, scope }) });
+  }
 
   async function hover(brandId: string) {
     if (!signedIn || contacts[brandId]) return;
@@ -85,6 +91,12 @@ export function BrandWall({ cards, creator, signedIn, roster }: { cards: WallCar
               {signedIn && (
                 <div className="mt-4 border-t border-line pt-4" onClick={(e) => e.stopPropagation()}>
                   <ContactCard brandId={c.brand_id} brand={c.brand} creator={creator} roster={roster} info={contacts[c.brand_id]} expanded={isOpen} onLoad={() => hover(c.brand_id)} />
+                  {isOpen && (
+                    <div className="mt-3 flex gap-3 font-mono text-[10px] text-dim">
+                      <button className="hover:text-bad" title="Hide this brand for this creator (agency link, own merch, collab credit)" onClick={() => reject(c.brand_id, "pair")}>not a sponsor of @{creator.handle}</button>
+                      <button className="hover:text-bad" title="Never a sponsor for anyone (music library, agency, vendor). Team accounts only." onClick={() => reject(c.brand_id, "brand")}>never a sponsor</button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -62,6 +62,7 @@ export async function scanYouTube(apiKey: string, handleOrId: string, opts: YtSc
       });
     }
   }
+  dropBoilerplate(rows, videos.length);
   rows.sort((a, b) => b.confidenceScore - a.confidenceScore);
   return {
     platform: "youtube",
@@ -145,4 +146,26 @@ export function buildBrandWall(rows: PartnershipRow[], minLabel: "High" | "Mediu
   }
   out.sort((a, b) => b.deals - a.deals || b.bestScore - a.bestScore || (b.lastSeen > a.lastSeen ? 1 : -1));
   return out;
+}
+
+// A "brand" that shows up in most of a creator's videos is description
+// boilerplate (their agency link, music library credit, own merch), not a
+// sponsor. Real sponsors appear in a minority of uploads. Explicit sponsor
+// grammar ("thanks X for sponsoring") is exempt; URL/credit-style hits are not.
+export function dropBoilerplate(rows: PartnershipRow[], itemsChecked: number, share = 0.45, minItems = 6): void {
+  if (itemsChecked < minItems) return;
+  const perBrand = new Map<string, Set<string>>();
+  const explicit = new Set<string>();
+  for (const r of rows) {
+    const k = r.brand.toLowerCase();
+    if (!perBrand.has(k)) perBrand.set(k, new Set());
+    perBrand.get(k)!.add(r.contentId);
+    if (/sponsor|partner|brought to you|presented by|paid|#ad\b|thank/i.test(r.evidence)) explicit.add(k);
+  }
+  const boiler = new Set<string>();
+  for (const [k, ids] of perBrand) {
+    if (ids.size >= minItems && ids.size / itemsChecked >= share && !explicit.has(k)) boiler.add(k);
+  }
+  if (!boiler.size) return;
+  for (let i = rows.length - 1; i >= 0; i--) if (boiler.has(rows[i].brand.toLowerCase())) rows.splice(i, 1);
 }
