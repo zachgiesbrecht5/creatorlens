@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { currentUser, supabaseAdmin } from "@/lib/supabase";
+import { redirectTo } from "@/lib/origin";
 
 const V = "v25.0";
-const fail = (req: NextRequest, msg: string) => NextResponse.redirect(new URL(`/settings?ig=${encodeURIComponent(msg)}`, req.url));
+const fail = (req: NextRequest, msg: string) => NextResponse.redirect(redirectTo(req, `/settings?ig=${encodeURIComponent(msg)}`));
 
 export async function GET(req: NextRequest) {
   const user = await currentUser();
-  if (!user) return NextResponse.redirect(new URL("/login", req.url));
+  if (!user) return NextResponse.redirect(redirectTo(req, "/login"));
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
   if (!code || !state || state !== req.cookies.get("cl_ig_state")?.value) return fail(req, "Instagram connect was cancelled or the state did not match.");
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
       access_token: token, healthy: true, cooldown_until: null, last_error: null,
     }, { onConflict: "ig_user_id" });
   }
-  const res = NextResponse.redirect(new URL("/settings?ig=ok", req.url));
+  const res = NextResponse.redirect(redirectTo(req, "/settings?ig=ok"));
   res.cookies.delete("cl_ig_state");
   return res;
 }
