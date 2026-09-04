@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { redirectTo } from "@/lib/origin";
 import { currentUser } from "@/lib/supabase";
 
 // Facebook Login for Business. The user picks the Page linked to their IG
@@ -7,7 +8,7 @@ const SCOPES = ["instagram_basic", "pages_show_list", "pages_read_engagement", "
 
 export async function GET(req: NextRequest) {
   const user = await currentUser();
-  if (!user) return NextResponse.redirect(new URL("/login?next=/settings", req.url));
+  if (!user) return NextResponse.redirect(redirectTo(req, "/login?next=/settings"));
   const redirect = `${process.env.NEXT_PUBLIC_APP_URL}/api/ig/callback`;
   const state = Buffer.from(JSON.stringify({ u: user.id, t: Date.now() })).toString("base64url");
   const url = `https://www.facebook.com/v25.0/dialog/oauth?client_id=${process.env.META_APP_ID}&redirect_uri=${encodeURIComponent(redirect)}&scope=${SCOPES}&state=${state}&response_type=code`;

@@ -2,6 +2,7 @@
 
 ## Done
 - Supabase project "Rootfor Internal" (ulzrgkkytkvrwldzwwas): migration applied, URL + publishable + secret key in apps/web/.env.local
+- Supabase custom domain auth.rootforgroup.com active (Pro + $10 add-on). App + worker use https://auth.rootforgroup.com as SUPABASE_URL; Google OAuth redirect https://auth.rootforgroup.com/auth/v1/callback added.
 - Google Cloud project "CreatorLens" (creatorlens-507522): YouTube key exists ("API key 1"), OAuth client "CreatorLens web (Supabase auth)" created with the Supabase callback, Client ID + secret in .env.local, Google provider enabled in Supabase with the Client ID
 - Google Sheets API enabled; service account creatorlens-sheets@creatorlens-507522.iam.gserviceaccount.com created (no key yet)
 - Meta app Rootfor Brand Scanner: Facebook Login for Business product present, redirect URI http://localhost:3000/api/ig/callback saved; META_APP_ID in .env.local
