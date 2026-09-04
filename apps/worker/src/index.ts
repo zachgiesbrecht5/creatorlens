@@ -89,8 +89,18 @@ async function persist(job: any, result: ScanResult) {
     confidence_score: r.confidenceScore, confidence_label: r.confidenceLabel,
     signal_type: r.signalType, evidence: r.evidence, scanned_at: new Date().toISOString(),
   })).filter((r) => r.brand_id);
-  for (let i = 0; i < rows.length; i += 500) {
-    const { error } = await sb.from("partnerships").upsert(rows.slice(i, i + 500), { onConflict: "creator_id,brand_id,content_id" });
+  // The same brand can be detected twice in one piece of content (e.g. title +
+  // description). Postgres rejects duplicate keys within a single upsert, so
+  // keep the highest-confidence row per (creator, brand, content).
+  const byKey = new Map<string, (typeof rows)[number]>();
+  for (const r of rows) {
+    const k = `${r.brand_id}|${r.content_id}`;
+    const prev = byKey.get(k);
+    if (!prev || (r.confidence_score ?? 0) > (prev.confidence_score ?? 0)) byKey.set(k, r);
+  }
+  const dedup = [...byKey.values()];
+  for (let i = 0; i < dedup.length; i += 500) {
+    const { error } = await sb.from("partnerships").upsert(dedup.slice(i, i + 500), { onConflict: "creator_id,brand_id,content_id" });
     if (error) throw new Error("partnership upsert failed: " + error.message);
   }
 
