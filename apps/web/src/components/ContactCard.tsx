@@ -17,8 +17,8 @@ export function ContactCard({ brandId, brand, creator, info, expanded, onLoad }:
   const [result, setResult] = useState<{ ok: boolean; msg: string; link?: string } | null>(null);
   const [manual, setManual] = useState("");
 
-  if (!info) return <button className="text-xs text-slate-500 hover:text-brand" onClick={onLoad}>hover for contact</button>;
-  if (info === "loading") return <div className="text-xs text-slate-400">finding contact…</div>;
+  if (!info) return <button className="font-mono text-[11px] text-dim hover:text-fg" onClick={onLoad}>hover for contact</button>;
+  if (info === "loading") return <div className="font-mono text-[11px] text-dim">finding contact…</div>;
 
   const contact = info.contacts.find((c) => c.id === picked) || info.contacts[0];
   const lastPitch = info.history[0];
@@ -35,37 +35,37 @@ export function ContactCard({ brandId, brand, creator, info, expanded, onLoad }:
   }
 
   return (
-    <div className="text-xs">
-      {info.excluded && <div className="mb-1 rounded bg-red-50 px-2 py-1 text-red-700">EXCLUDED: do not pitch (on your team's exclusion list)</div>}
+    <div className="text-sm">
+      {info.excluded && <div className="mb-2 rounded-lg border border-bad/40 px-3 py-1.5 font-mono text-[11px] text-bad">Excluded: do not pitch</div>}
       {lastPitch && (
-        <div className={`mb-1 rounded px-2 py-1 ${lastPitch.status === "replied" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
-          Pitched {new Date(lastPitch.created_at).toLocaleDateString()} {lastPitch.by ? `by ${lastPitch.by}` : ""}{lastPitch.creator_handle ? ` for @${lastPitch.creator_handle}` : ""} · {lastPitch.status}{lastPitch.status === "replied" ? " (has replied before!)" : ""}
+        <div className={`mb-2 rounded-lg border px-3 py-1.5 font-mono text-[11px] ${lastPitch.status === "replied" ? "border-ok/40 text-ok" : "border-warn/40 text-warn"}`}>
+          Pitched {new Date(lastPitch.created_at).toLocaleDateString()}{lastPitch.by ? ` by ${lastPitch.by}` : ""}{lastPitch.creator_handle ? ` for @${lastPitch.creator_handle}` : ""} · {lastPitch.status}{lastPitch.status === "replied" ? " · has replied before" : ""}
         </div>
       )}
       {contact ? (
-        <div className="flex flex-wrap items-center gap-x-2">
-          <span className="font-medium text-ink">{contact.name || "Partnerships"}</span>
-          {contact.title && <span className="text-slate-500">{contact.title}</span>}
-          <a href={`mailto:${contact.email}`} className="text-brand hover:underline">{contact.email}</a>
-          <span className="text-slate-400">via {contact.source}{contact.verified ? " ✓" : ""}</span>
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <span className="font-medium">{contact.name || "Partnerships"}</span>
+          {contact.title && <span className="text-muted">{contact.title}</span>}
+          <a href={`mailto:${contact.email}`} className="text-muted underline decoration-line hover:text-fg">{contact.email}</a>
+          <span className="font-mono text-[10px] text-dim">via {contact.source}{contact.verified ? " ✓" : ""}</span>
         </div>
       ) : (
         <div className="flex items-center gap-2">
-          <span className="text-slate-500">No contact on file{info.domain ? ` for ${info.domain}` : ""}.</span>
-          {expanded && <input className="input !w-48 !py-1" placeholder="paste an email" value={manual} onChange={(e) => setManual(e.target.value)} />}
+          <span className="text-muted">No contact on file{info.domain ? ` for ${info.domain}` : ""}.</span>
+          {expanded && <input className="input-flat !w-48 !py-1" placeholder="paste an email" value={manual} onChange={(e) => setManual(e.target.value)} />}
         </div>
       )}
       {expanded && info.contacts.length > 1 && (
-        <select className="input mt-1 !py-1" value={contact?.id} onChange={(e) => setPicked(e.target.value)}>
+        <select className="input-flat mt-2 !py-1" value={contact?.id} onChange={(e) => setPicked(e.target.value)}>
           {info.contacts.map((c) => <option key={c.id} value={c.id}>{c.name || c.email} {c.title ? `(${c.title})` : ""}</option>)}
         </select>
       )}
-      <div className="mt-2 flex items-center gap-2">
-        <button className="btn-primary !px-3 !py-1 text-xs" disabled={drafting || info.excluded || (!contact?.email && !manual)} onClick={draft}>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button className="btn-primary !px-4 !py-1.5" disabled={drafting || info.excluded || (!contact?.email && !manual)} onClick={draft}>
           {drafting ? "Writing…" : `Draft pitch for @${creator.handle}`}
         </button>
         {result && (
-          <span className={result.ok ? "text-emerald-700" : "text-red-700"}>
+          <span className={`font-mono text-[11px] ${result.ok ? "text-ok" : "text-bad"}`}>
             {result.msg} {result.link && <a className="underline" href={result.link} target="_blank" rel="noreferrer">open</a>}
           </span>
         )}

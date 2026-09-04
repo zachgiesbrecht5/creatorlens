@@ -18,14 +18,15 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
 
   if (!creator) {
     return (
-      <div className="mx-auto max-w-xl text-center">
-        <h1 className="text-2xl font-semibold">@{h}</h1>
+      <div className="mx-auto max-w-xl py-16 text-center">
+        <div className="label mb-4">{p === "youtube" ? "YouTube" : "Instagram"}</div>
+        <h1 className="h2">@{h}</h1>
         {job && (job.status === "queued" || job.status === "running" || job.status === "rate_limited") ? (
           <ScanProgress jobId={job.id} initialStatus={job.status} />
         ) : job?.status === "failed" ? (
-          <div className="card mt-6 p-6 text-sm text-red-700">Scan failed: {job.error}. Your credit was refunded.</div>
+          <div className="card mt-8 p-6 text-sm text-bad">Scan failed: {job.error}. Your credit was refunded.</div>
         ) : (
-          <p className="mt-4 text-slate-600">Not in the database yet. <Link href="/" className="text-brand underline">Scan it from the home page.</Link></p>
+          <p className="mt-6 text-muted">Not in the database yet. <Link href="/" className="underline hover:text-fg">Scan it from the home page.</Link></p>
         )}
       </div>
     );
@@ -39,26 +40,27 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
 
   return (
     <div>
-      <div className="card flex flex-wrap items-center gap-5 p-5">
-        {creator.avatar_url ? <img src={creator.avatar_url} alt="" className="h-16 w-16 rounded-full object-cover" /> : <div className="h-16 w-16 rounded-full bg-slate-200" />}
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-2xl font-semibold">{creator.display_name || creator.handle}</h1>
-          <div className="mt-1 flex flex-wrap gap-3 text-sm text-slate-600">
-            <a className="hover:text-brand" href={p === "youtube" ? `https://youtube.com/@${creator.handle}` : `https://instagram.com/${creator.handle}`} target="_blank" rel="noreferrer">
-              {p === "youtube" ? "YouTube" : "Instagram"} · @{creator.handle}
-            </a>
-            <span>{fmt(creator.followers)} {p === "youtube" ? "subscribers" : "followers"}</span>
-            <span>Scanned {creator.last_scanned_at ? new Date(creator.last_scanned_at).toLocaleDateString() : "never"}</span>
+      <div className="flex flex-wrap items-end justify-between gap-6 border-b border-line pb-8">
+        <div className="flex items-center gap-5">
+          {creator.avatar_url ? <img src={creator.avatar_url} alt="" className="h-20 w-20 rounded-full object-cover" /> : <div className="h-20 w-20 rounded-full bg-surface2" />}
+          <div className="min-w-0">
+            <div className="label mb-2">{p === "youtube" ? "YouTube" : "Instagram"} · @{creator.handle}</div>
+            <h1 className="h2 truncate text-3xl">{creator.display_name || creator.handle}</h1>
+            <div className="mt-2 flex flex-wrap gap-4 font-mono text-[11px] text-muted">
+              <a className="hover:text-fg" href={p === "youtube" ? `https://youtube.com/@${creator.handle}` : `https://instagram.com/${creator.handle}`} target="_blank" rel="noreferrer">open profile ↗</a>
+              <span>{fmt(creator.followers)} {p === "youtube" ? "subscribers" : "followers"}</span>
+              <span>scanned {creator.last_scanned_at ? new Date(creator.last_scanned_at).toLocaleDateString() : "never"}</span>
+            </div>
           </div>
-          {creator.bio && <p className="mt-2 line-clamp-2 max-w-3xl text-sm text-slate-500">{creator.bio}</p>}
         </div>
-        <div className="grid grid-cols-3 gap-4 text-center">
+        <div className="flex gap-10">
           <Stat n={highMed.length} label="brands" />
           <Stat n={highMed.reduce((s, c) => s + Number(c.deals), 0)} label="deals" />
-          <Stat n={repeat} label="repeat partners" />
+          <Stat n={repeat} label="repeat" />
         </div>
       </div>
 
+      {creator.bio && <p className="mt-6 max-w-3xl text-sm leading-relaxed text-muted">{creator.bio}</p>}
       {active && <ScanProgress jobId={job!.id} initialStatus={job!.status} compact />}
 
       <BrandWall cards={cards} creator={{ id: creator.id, handle: creator.handle, platform: p, displayName: creator.display_name || creator.handle }} signedIn={!!user} />
@@ -69,8 +71,8 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
 function Stat({ n, label }: { n: number; label: string }) {
   return (
     <div>
-      <div className="text-2xl font-semibold">{n}</div>
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-4xl font-semibold tracking-tight">{n}</div>
+      <div className="label mt-1">{label}</div>
     </div>
   );
 }

@@ -2,11 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: light; }
-body { @apply bg-slate-50 text-ink antialiased; }
-.card { @apply rounded-xl border border-slate-200 bg-white shadow-sm; }
-.btn { @apply inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed; }
-.btn-primary { @apply btn bg-brand text-white hover:bg-violet-700; }
-.btn-ghost { @apply btn border border-slate-200 bg-white hover:bg-slate-50; }
-.input { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand-soft; }
-.pill { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium; }
+:root { color-scheme: dark; --font-work: "Work Sans"; --font-mono: "Azeret Mono"; }
+html { background: #161616; }
+body { @apply bg-bg text-fg antialiased font-sans; }
+::selection { background: #f5f5f5; color: #161616; }
+
+.card { @apply rounded-2xl border border-line bg-surface; }
+.btn { @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2 font-mono text-[12px] tracking-wide transition disabled:opacity-40 disabled:cursor-not-allowed; }
+.btn-primary { @apply btn bg-fg text-bg hover:bg-white; }
+.btn-ghost { @apply btn border border-line bg-transparent text-fg hover:border-fg; }
+.input { @apply w-full rounded-full border border-line bg-surface px-4 py-2.5 text-sm text-fg placeholder:text-dim outline-none focus:border-fg; }
+.input-flat { @apply w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg placeholder:text-dim outline-none focus:border-fg; }
+.pill { @apply inline-flex items-center rounded-full border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted; }
+.pill-ok { @apply pill border-ok/40 text-ok; }
+.pill-warn { @apply pill border-warn/40 text-warn; }
+.pill-bad { @apply pill border-bad/40 text-bad; }
+.label { @apply font-mono text-[11px] uppercase tracking-widest text-muted; }
+.h1 { @apply font-sans text-4xl font-semibold leading-tight tracking-tight md:text-6xl; }
+.h2 { @apply font-sans text-2xl font-semibold tracking-tight; }
+table.tbl { @apply w-full text-sm; }
+table.tbl thead th { @apply label px-4 py-3 text-left font-normal; }
+table.tbl tbody td { @apply border-t border-line px-4 py-3; }
+table.tbl tbody tr:hover { @apply bg-surface2; }

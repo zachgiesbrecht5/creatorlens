@@ -32,9 +32,9 @@ export function ScanProgress({ jobId, initialStatus, compact }: { jobId: string;
     : status === "failed" ? `Scan failed: ${error}` : "Done. Refreshing…";
 
   return (
-    <div className={`card ${compact ? "mt-4 p-3 text-sm" : "mt-6 p-6"} flex items-center gap-3`}>
-      {status !== "failed" && <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-brand" />}
-      <span className={status === "failed" ? "text-red-700" : "text-slate-700"}>{msg}</span>
+    <div className={`card ${compact ? "mt-6 p-4 text-sm" : "mt-8 p-6"} flex items-center gap-3`}>
+      {status !== "failed" && <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-fg" />}
+      <span className={status === "failed" ? "text-bad" : "text-muted"}>{msg}</span>
     </div>
   );
 }

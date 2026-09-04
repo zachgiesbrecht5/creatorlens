@@ -14,16 +14,17 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
   const { data: rows } = await admin.from("brand_wall").select("*, creators(handle,display_name,platform,followers,avatar_url,category)").eq("brand_id", id).order("deals", { ascending: false });
   return (
     <div>
-      <h1 className="text-2xl font-semibold">{brand.name}</h1>
-      <p className="mt-1 text-sm text-slate-600">{brand.creator_count} creators booked · {brand.deal_count} deals{brand.last_seen ? ` · last seen ${brand.last_seen}` : ""}</p>
+      <div className="label mb-2">Brand</div>
+      <h1 className="h2 text-3xl">{brand.name}</h1>
+      <p className="mt-2 font-mono text-[11px] text-muted">{brand.creator_count} creators booked · {brand.deal_count} deals{brand.last_seen ? ` · last seen ${brand.last_seen}` : ""}</p>
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {(rows || []).map((r: any) => (
-          <Link key={r.creator_id} href={`/c/${r.creators.platform}/${r.creators.handle}`} className="card flex items-center gap-3 p-4 hover:border-brand">
-            {r.creators.avatar_url ? <img src={r.creators.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" /> : <div className="h-10 w-10 rounded-full bg-slate-200" />}
+          <Link key={r.creator_id} href={`/c/${r.creators.platform}/${r.creators.handle}`} className="card flex items-center gap-3 p-4 transition hover:border-fg">
+            {r.creators.avatar_url ? <img src={r.creators.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" /> : <div className="h-10 w-10 rounded-full bg-surface2" />}
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium">{r.creators.display_name || r.creators.handle}</div>
-              <div className="text-xs text-slate-500">{r.creators.platform === "youtube" ? "YT" : "IG"} · {fmt(r.creators.followers)} · {r.deals} {Number(r.deals) === 1 ? "deal" : "deals"}{r.repeat_partner ? " · repeat" : ""}</div>
-              <div className="mt-1 line-clamp-1 text-xs text-slate-500">{r.evidence}</div>
+              <div className="font-mono text-[10px] text-muted">{r.creators.platform === "youtube" ? "YT" : "IG"} · {fmt(r.creators.followers)} · {r.deals} {Number(r.deals) === 1 ? "deal" : "deals"}{r.repeat_partner ? " · repeat" : ""}</div>
+              <div className="mt-1 line-clamp-1 text-xs text-dim">{r.evidence}</div>
             </div>
           </Link>
         ))}
