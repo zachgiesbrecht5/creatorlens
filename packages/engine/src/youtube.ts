@@ -53,7 +53,8 @@ const COMMON_WORDS = new Set([
 ]);
 
 export function isJunkBrand(name: string): boolean {
-  return JUNK_SET.has(name);
+  const n = name.toLowerCase().trim();
+  return JUNK_SET.has(n) || JUNK_SET.has(n.replace(/[^a-z0-9]/g, ""));
 }
 
 export function isSocialPlatformDomain(domain: string): boolean {
@@ -124,6 +125,11 @@ export function cleanBrandCapture(raw: string | undefined): string {
     if (idx > 0) name = name.substring(0, idx).trim();
   }
   name = name.replace(/[.!,;:]+$/, "").trim();
+  // URL fragments that leak into captures: "Provided by https", "Board https",
+  // "Commission www.egyptf". Strip them; if nothing meaningful is left, drop it.
+  name = name.replace(/\s*\b(?:https?|www\.?\S*)$/i, "").trim();
+  name = name.replace(/\s+(?:and|the|of|at|by|for|to|with)$/i, "").trim();
+  if (/^(?:https?|www|http|my friends|the team|our friends)$/i.test(name)) return "";
   if (name.length < 2 || name.length > 40) return "";
   if (isCommonWord(name)) return "";
   return name;

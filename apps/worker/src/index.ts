@@ -147,13 +147,77 @@ async function runJob(job: any) {
   log(`done ${job.platform}/@${job.handle}: ${result.itemsChecked} items, ${result.rows.length} rows, ${result.quotaUnits} units`);
 }
 
+
+// ── Brand website resolution ────────────────────────────────
+// A brand that has no reachable website is usually a parsing artefact
+// ("Https", "Choice Bank And"). We try, in order: a URL in the evidence text
+// that contains the brand key, <key>.com, <firstword>.com. Verified with a
+// short GET (some sites reject HEAD). Result drives the link in the UI and
+// the "unverified" filter.
+const JUNK_NAME_RE = /^(?:https?|www|http|my friends|the team|our friends)$|https?$|^www/i;
+const NON_BRAND_HOSTS = new Set(["youtube", "youtu", "instagram", "tiktok", "facebook", "twitter", "x", "bit", "linktr", "amazon", "amzn", "google", "apple", "spotify", "discord", "twitch", "patreon", "shopify", "linkedin", "t", "goo"]);
+
+async function reachable(host: string): Promise<string | null> {
+  for (const url of [`https://${host}`, `https://www.${host}`]) {
+    try {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), 7000);
+      const r = await fetch(url, { method: "GET", redirect: "follow", signal: ctl.signal, headers: { "user-agent": "Mozilla/5.0 (compatible; CreatorLens/1.0)" } });
+      clearTimeout(t);
+      if (r.status < 400 || r.status === 403 || r.status === 429) return new URL(r.url).origin;  // 403/429 = bot wall, site exists
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+async function resolveBrandSite(brand: { id: string; key: string; name: string; domain: string | null }) {
+  if (JUNK_NAME_RE.test(brand.key) || JUNK_NAME_RE.test(brand.name)) {
+    await sb.from("brands").update({ is_junk: true, site_status: "dead", site_checked_at: new Date().toISOString() }).eq("id", brand.id);
+    return;
+  }
+  const candidates: string[] = [];
+  if (brand.domain) candidates.push(brand.domain.toLowerCase());
+  // evidence URLs mentioning the brand
+  const { data: ev } = await sb.from("partnerships").select("evidence").eq("brand_id", brand.id).limit(20);
+  for (const e of ev || []) {
+    for (const m of String(e.evidence || "").matchAll(/(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|co|io|org|net|ca|uk|us|shop|app))\b/gi)) {
+      const host = m[1].toLowerCase();
+      const root = host.split(".")[0];
+      if (NON_BRAND_HOSTS.has(root)) continue;
+      if (root.replace(/[^a-z0-9]/g, "").includes(brand.key.slice(0, Math.min(6, brand.key.length)))) candidates.push(host);
+    }
+  }
+  candidates.push(`${brand.key}.com`);
+  const first = brand.name.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(" ")[0];
+  if (first && first.length >= 4 && first !== brand.key) candidates.push(`${first}.com`);
+
+  let website: string | null = null;
+  for (const host of [...new Set(candidates)].slice(0, 5)) {
+    website = await reachable(host);
+    if (website) break;
+  }
+  await sb.from("brands").update({
+    website, site_status: website ? "ok" : "dead", site_checked_at: new Date().toISOString(),
+    domain: brand.domain || (website ? new URL(website).hostname.replace(/^www\./, "") : null),
+  }).eq("id", brand.id);
+}
+
+// Idle-time backfill: check a few unverified brands per tick.
+async function checkBrandSites(limit = 4) {
+  const { data } = await sb.from("brands").select("id,key,name,domain").is("site_checked_at", null).order("deal_count", { ascending: false }).limit(limit);
+  for (const b of data || []) {
+    try { await resolveBrandSite(b); } catch (e: any) { log("site check failed", b.name, e?.message); }
+  }
+  return (data || []).length;
+}
+
 async function tick() {
   const { data: jobs, error: pollErr } = await sb.from("scan_jobs").select("*")
     .in("status", ["queued", "rate_limited"]).lte("run_after", new Date().toISOString())
     .order("priority").order("created_at").limit(1);
   if (pollErr) { log("poll failed:", pollErr.message, "(check SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)"); return; }
   const job = jobs?.[0];
-  if (!job) return;
+  if (!job) { await checkBrandSites(); return; }
   try {
     await runJob(job);
   } catch (e: any) {

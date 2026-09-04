@@ -8,8 +8,42 @@ async function savePrompt(formData: FormData) {
   const sb = await supabaseServer();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return;
-  await sb.from("profiles").update({ pitch_prompt: String(formData.get("pitch_prompt") || "").slice(0, 4000) || null, signature: String(formData.get("signature") || "").slice(0, 80) || null }).eq("id", user.id);
+  await sb.from("profiles").update({
+    pitch_prompt: String(formData.get("pitch_prompt") || "").slice(0, 4000) || null,
+    signature: String(formData.get("signature") || "").slice(0, 80) || null,
+    email_signature: String(formData.get("email_signature") || "").slice(0, 1200) || null,
+  }).eq("id", user.id);
   redirect("/settings?saved=1");
+}
+
+async function addRoster(formData: FormData) {
+  "use server";
+  const sb = await supabaseServer();
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+  const name = String(formData.get("name") || "").trim().slice(0, 80);
+  if (!name) return;
+  const { data: prof } = await sb.from("profiles").select("org_id").eq("id", user.id).single();
+  const followers = parseInt(String(formData.get("followers") || "").replace(/[^0-9]/g, ""), 10);
+  await sb.from("roster_creators").insert({
+    user_id: user.id, org_id: prof?.org_id || null, name,
+    handle: String(formData.get("handle") || "").trim().replace(/^@/, "").slice(0, 60) || null,
+    platform: String(formData.get("platform") || "multi"),
+    followers: Number.isFinite(followers) ? followers : null,
+    niche: String(formData.get("niche") || "").trim().slice(0, 120) || null,
+    pitch_angle: String(formData.get("pitch_angle") || "").trim().slice(0, 600) || null,
+    media_kit_url: String(formData.get("media_kit_url") || "").trim().slice(0, 300) || null,
+  });
+  redirect("/settings#roster");
+}
+
+async function removeRoster(formData: FormData) {
+  "use server";
+  const sb = await supabaseServer();
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+  await sb.from("roster_creators").delete().eq("id", String(formData.get("id"))).eq("user_id", user.id);
+  redirect("/settings#roster");
 }
 
 export default async function Settings({ searchParams }: { searchParams: Promise<{ saved?: string; ig?: string }> }) {
@@ -17,10 +51,11 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const profile = await currentProfile();
   if (!profile) redirect("/login?next=/settings");
   const admin = supabaseAdmin();
-  const [{ data: ig }, { data: gc }, { data: ledger }] = await Promise.all([
+  const [{ data: ig }, { data: gc }, { data: ledger }, { data: roster }] = await Promise.all([
     admin.from("ig_connections").select("ig_username,healthy,cooldown_until,created_at").eq("user_id", profile.id),
     admin.from("google_connections").select("email,updated_at").eq("user_id", profile.id).maybeSingle(),
     admin.from("credit_ledger").select("kind,delta,reason,created_at").eq("user_id", profile.id).order("created_at", { ascending: false }).limit(15),
+    admin.from("roster_creators").select("*").eq("user_id", profile.id).order("name"),
   ]);
   const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/login?ref=${profile.referral_code}`;
 
@@ -31,13 +66,52 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <h2 className="h2 text-xl">Your pitch style</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">This is the skill the drafter follows. Write it the way you would brief a new teammate: tone, structure, what to lead with, what never to say. The deal evidence is added automatically.</p>
           <textarea name="pitch_prompt" rows={10} className="input-flat mt-5 font-mono text-xs leading-relaxed" defaultValue={profile.pitch_prompt || ""} placeholder={`Example:\nWarm and short, two paragraphs max. Open with the specific reason this creator fits (a past deal with them or a competitor). Second paragraph: one line on audience and format. Close with a single question. Never quote rates; ask for their budget range. No em dashes, no "I hope this finds you well".`} />
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="label">Sign-off phrase</label>
+              <input name="signature" className="input-flat mt-1" defaultValue={profile.signature || ""} placeholder="rooting for you" />
+            </div>
+            <div>
+              <label className="label">Email signature (appended to every draft, exactly as written)</label>
+              <textarea name="email_signature" rows={5} className="input-flat mt-1 font-mono text-xs leading-relaxed" defaultValue={profile.email_signature || ""} placeholder={`rooting for you,\n${profile.full_name || "Your name"}\nCo-Founder, Rootfor Group\nrootforgroup.com · 431-000-0000`} />
+            </div>
+          </div>
           <div className="mt-3 flex items-center gap-3">
-            <label className="label">Sign-off</label>
-            <input name="signature" className="input-flat !w-56" defaultValue={profile.signature || ""} placeholder="rooting for you" />
             <button className="btn-primary ml-auto">Save</button>
             {sp.saved && <span className="font-mono text-[11px] text-ok">Saved</span>}
           </div>
         </form>
+
+        <div className="card p-6" id="roster">
+          <h2 className="h2 text-xl">My creators</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted">The creators you represent. Every pitch is written for one of these; the scanned creator on a brand wall is only the proof that the brand books this kind of talent.</p>
+          {roster?.length ? (
+            <div className="mt-4 divide-y divide-line">
+              {roster.map((r) => (
+                <div key={r.id} className="flex items-start gap-3 py-3">
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">{r.name} {r.handle && <span className="font-mono text-[11px] text-muted">@{r.handle}</span>} {r.platform && r.platform !== "multi" && <span className="pill ml-1">{r.platform}</span>}</div>
+                    <div className="mt-0.5 text-xs text-muted">{[r.followers ? `${Intl.NumberFormat().format(r.followers)} followers` : null, r.niche].filter(Boolean).join(" · ")}</div>
+                    {r.pitch_angle && <div className="mt-1 text-xs leading-relaxed text-dim">{r.pitch_angle}</div>}
+                  </div>
+                  <form action={removeRoster}><input type="hidden" name="id" value={r.id} /><button className="font-mono text-[11px] text-dim hover:text-bad">remove</button></form>
+                </div>
+              ))}
+            </div>
+          ) : <p className="mt-4 font-mono text-[11px] text-warn">No creators yet. Add one below to unlock pitch drafts.</p>}
+          <form action={addRoster} className="mt-5 grid gap-3 border-t border-line pt-5 md:grid-cols-2">
+            <input name="name" required className="input-flat" placeholder="Name (e.g. Andy Yen)" />
+            <input name="handle" className="input-flat" placeholder="Primary handle (e.g. andyyyen)" />
+            <select name="platform" className="input-flat" defaultValue="multi">
+              <option value="multi">Multi-platform</option><option value="youtube">YouTube</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option>
+            </select>
+            <input name="followers" className="input-flat" placeholder="Followers (e.g. 250000)" inputMode="numeric" />
+            <input name="niche" className="input-flat md:col-span-2" placeholder="Niche (e.g. lifestyle / design, NYC)" />
+            <textarea name="pitch_angle" rows={2} className="input-flat md:col-span-2" placeholder="Pitch angle: the one or two lines a brand should hear first" />
+            <input name="media_kit_url" className="input-flat md:col-span-2" placeholder="Media kit link (optional)" />
+            <div className="md:col-span-2 flex justify-end"><button className="btn-ghost">Add creator</button></div>
+          </form>
+        </div>
 
         <div className="card p-6">
           <h2 className="h2 text-xl">Connections</h2>

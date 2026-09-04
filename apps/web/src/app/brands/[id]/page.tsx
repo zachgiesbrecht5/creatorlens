@@ -15,7 +15,7 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
   return (
     <div>
       <div className="label mb-2">Brand</div>
-      <h1 className="h2 text-3xl">{brand.name}</h1>
+      <h1 className="h2 text-3xl">{brand.website ? <a href={brand.website} target="_blank" rel="noreferrer" className="hover:underline">{brand.name} <span className="font-mono text-sm text-dim">↗</span></a> : brand.name}</h1>
       <p className="mt-2 font-mono text-[11px] text-muted">{brand.creator_count} creators booked · {brand.deal_count} deals{brand.last_seen ? ` · last seen ${brand.last_seen}` : ""}</p>
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {(rows || []).map((r: any) => (

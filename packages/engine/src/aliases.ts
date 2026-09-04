@@ -266,6 +266,9 @@ export const MASS_SPONSOR_BRANDS: string[] = [
 ];
 
 export const JUNK_DOMAINS: string[] = [
+  // music / stock libraries credited in descriptions, never sponsors
+  "extrememusic", "epidemicsound", "artlist", "musicbed", "uppbeat", "soundstripe", "storyblocks", "envato", "audiojungle", "premiumbeat", "audiio", "lickd",
+  "extreme music", "epidemic sound",
   "youtube",
   "instagram",
   "tiktok",

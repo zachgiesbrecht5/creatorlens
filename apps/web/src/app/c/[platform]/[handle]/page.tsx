@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { supabaseAdmin, currentUser } from "@/lib/supabase";
-import { BrandWall, type WallCard } from "@/components/BrandWall";
+import { BrandWall, type WallCard, type RosterCreator } from "@/components/BrandWall";
 import { ScanProgress } from "@/components/ScanProgress";
 import { fmt } from "@/lib/fmt";
 
@@ -33,7 +33,8 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
   }
 
   const { data: wall } = await admin.from("brand_wall").select("*").eq("creator_id", creator.id).order("deals", { ascending: false }).order("best_score", { ascending: false });
-  const cards = (wall || []) as WallCard[];
+  const cards = ((wall || []) as WallCard[]).filter((c) => !c.is_junk);
+  const { data: roster } = user ? await admin.from("roster_creators").select("id,name,handle,platform,followers").eq("user_id", user.id).order("name") : { data: [] };
   const highMed = cards.filter((c) => c.best_label !== "Low");
   const repeat = highMed.filter((c) => c.repeat_partner).length;
   const active = job && ["queued", "running", "rate_limited"].includes(job.status);
@@ -60,10 +61,10 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
         </div>
       </div>
 
-      {creator.bio && <p className="mt-6 max-w-3xl text-sm leading-relaxed text-muted">{creator.bio}</p>}
+      {creator.bio && <p className="mt-6 max-w-3xl line-clamp-3 text-sm leading-relaxed text-muted" title={creator.bio}>{creator.bio}</p>}
       {active && <ScanProgress jobId={job!.id} initialStatus={job!.status} compact />}
 
-      <BrandWall cards={cards} creator={{ id: creator.id, handle: creator.handle, platform: p, displayName: creator.display_name || creator.handle }} signedIn={!!user} />
+      <BrandWall cards={cards} creator={{ id: creator.id, handle: creator.handle, platform: p, displayName: creator.display_name || creator.handle }} signedIn={!!user} roster={(roster || []) as RosterCreator[]} />
     </div>
   );
 }

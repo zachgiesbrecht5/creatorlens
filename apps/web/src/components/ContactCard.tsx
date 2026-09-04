@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
+import type { RosterCreator } from "./BrandWall";
 
 export type ContactInfo = {
   contacts: { id: string; name: string | null; email: string | null; title: string | null; source: string; verified: boolean }[];
@@ -8,11 +10,14 @@ export type ContactInfo = {
   domain?: string | null;
 };
 
-export function ContactCard({ brandId, brand, creator, info, expanded, onLoad }: {
+// The scanned creator is the EVIDENCE (this brand books creators like them).
+// The pitch is written for one of the user's own roster creators.
+export function ContactCard({ brandId, brand, creator, roster, info, expanded, onLoad }: {
   brandId: string; brand: string; creator: { id: string; handle: string; platform: string; displayName: string };
-  info?: ContactInfo | "loading"; expanded: boolean; onLoad: () => void;
+  roster: RosterCreator[]; info?: ContactInfo | "loading"; expanded: boolean; onLoad: () => void;
 }) {
   const [picked, setPicked] = useState<string | null>(null);
+  const [rosterId, setRosterId] = useState<string>(roster[0]?.id || "");
   const [drafting, setDrafting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string; link?: string } | null>(null);
   const [manual, setManual] = useState("");
@@ -22,12 +27,13 @@ export function ContactCard({ brandId, brand, creator, info, expanded, onLoad }:
 
   const contact = info.contacts.find((c) => c.id === picked) || info.contacts[0];
   const lastPitch = info.history[0];
+  const pitched = roster.find((r) => r.id === rosterId);
 
   async function draft() {
     setDrafting(true); setResult(null);
     const r = await fetch("/api/draft", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ brandId, creatorId: creator.id, contactId: contact?.id, toEmail: contact?.email || manual }),
+      body: JSON.stringify({ brandId, creatorId: creator.id, rosterCreatorId: rosterId, contactId: contact?.id, toEmail: contact?.email || manual }),
     });
     const j = await r.json();
     setDrafting(false);
@@ -47,7 +53,7 @@ export function ContactCard({ brandId, brand, creator, info, expanded, onLoad }:
           <span className="font-medium">{contact.name || "Partnerships"}</span>
           {contact.title && <span className="text-muted">{contact.title}</span>}
           <a href={`mailto:${contact.email}`} className="text-muted underline decoration-line hover:text-fg">{contact.email}</a>
-          <span className="font-mono text-[10px] text-dim">via {contact.source}{contact.verified ? " ✓" : ""}</span>
+          {contact.verified && <span className="font-mono text-[10px] text-ok" title="Verified deliverable">✓</span>}
         </div>
       ) : (
         <div className="flex items-center gap-2">
@@ -60,16 +66,28 @@ export function ContactCard({ brandId, brand, creator, info, expanded, onLoad }:
           {info.contacts.map((c) => <option key={c.id} value={c.id}>{c.name || c.email} {c.title ? `(${c.title})` : ""}</option>)}
         </select>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        <button className="btn-primary !px-4 !py-1.5" disabled={drafting || info.excluded || (!contact?.email && !manual)} onClick={draft}>
-          {drafting ? "Writing…" : `Draft pitch for @${creator.handle}`}
-        </button>
-        {result && (
-          <span className={`font-mono text-[11px] ${result.ok ? "text-ok" : "text-bad"}`}>
-            {result.msg} {result.link && <a className="underline" href={result.link} target="_blank" rel="noreferrer">open</a>}
-          </span>
-        )}
-      </div>
+
+      {roster.length === 0 ? (
+        <div className="mt-3 font-mono text-[11px] text-muted">
+          Add the creators you represent in <Link href="/settings#roster" className="underline hover:text-fg">Settings</Link> to draft pitches.
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {roster.length > 1 ? (
+            <select className="input-flat !w-auto !py-1.5 font-mono text-[11px]" value={rosterId} onChange={(e) => setRosterId(e.target.value)} title="Which of your creators to pitch">
+              {roster.map((r) => <option key={r.id} value={r.id}>{r.name}{r.handle ? ` (${r.handle.replace(/^@/, "@")})` : ""}</option>)}
+            </select>
+          ) : null}
+          <button className="btn-primary !px-4 !py-1.5" disabled={drafting || info.excluded || !rosterId || (!contact?.email && !manual)} onClick={draft}>
+            {drafting ? "Writing…" : `Pitch ${pitched?.name || "creator"} to ${brand}`}
+          </button>
+          {result && (
+            <span className={`font-mono text-[11px] ${result.ok ? "text-ok" : "text-bad"}`}>
+              {result.msg} {result.link && <a className="underline" href={result.link} target="_blank" rel="noreferrer">open</a>}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

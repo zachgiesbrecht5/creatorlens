@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function Brands({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
   const admin = supabaseAdmin();
-  let query = admin.from("brands").select("id,name,deal_count,creator_count,last_seen,is_mass_sponsor,domain").order("creator_count", { ascending: false }).order("deal_count", { ascending: false }).limit(200);
+  let query = admin.from("brands").select("id,name,deal_count,creator_count,last_seen,is_mass_sponsor,domain,website,site_status").eq("is_junk", false).neq("site_status", "dead").order("creator_count", { ascending: false }).order("deal_count", { ascending: false }).limit(200);
   if (q) query = query.ilike("name", `%${q}%`);
   const { data } = await query;
   return (
@@ -19,7 +19,7 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
       <div className="card mt-6 overflow-x-auto">
         <table className="tbl">
           <thead>
-            <tr><th>Brand</th><th>Creators booked</th><th>Deals</th><th>Last seen</th><th></th></tr>
+            <tr><th>Brand</th><th>Creators booked</th><th>Deals</th><th>Last seen</th><th>Site</th></tr>
           </thead>
           <tbody>
             {(data || []).map((b) => (
@@ -28,7 +28,7 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
                 <td>{b.creator_count}</td>
                 <td>{b.deal_count}</td>
                 <td className="font-mono text-[11px] text-muted">{b.last_seen || ""}</td>
-                <td className="font-mono text-[11px] text-dim">{b.domain || ""}</td>
+                <td className="font-mono text-[11px] text-dim">{b.website ? <a href={b.website} target="_blank" rel="noreferrer" className="hover:text-fg">{b.website.replace(/^https?:\/\/(www\.)?/, "")} ↗</a> : b.site_status === "unknown" ? "checking…" : ""}</td>
               </tr>
             ))}
           </tbody>
