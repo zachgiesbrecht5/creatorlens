@@ -162,7 +162,7 @@ async function reachable(host: string): Promise<string | null> {
     try {
       const ctl = new AbortController();
       const t = setTimeout(() => ctl.abort(), 7000);
-      const r = await fetch(url, { method: "GET", redirect: "follow", signal: ctl.signal, headers: { "user-agent": "Mozilla/5.0 (compatible; CreatorLens/1.0)" } });
+      const r = await fetch(url, { method: "GET", redirect: "follow", signal: ctl.signal, headers: { "user-agent": "Mozilla/5.0 (compatible; Sponsorprint/1.0)" } });
       clearTimeout(t);
       if (r.status < 400 || r.status === 403 || r.status === 429) return new URL(r.url).origin;  // 403/429 = bot wall, site exists
     } catch { /* try next */ }

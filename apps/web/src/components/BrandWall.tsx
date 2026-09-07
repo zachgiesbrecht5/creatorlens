@@ -38,55 +38,55 @@ export function BrandWall({ cards, creator, signedIn, roster }: { cards: WallCar
     setContacts((s) => ({ ...s, [brandId]: j }));
   }
 
-  if (!cards.length) return <div className="card mt-8 p-10 text-center text-muted">No brand deals detected yet. Either the scan is still running or this creator has no disclosed partnerships in the window.</div>;
+  if (!cards.length) return <div className="card mt-8 p-10 text-center text-sm text-muted">No brand deals detected yet. Either the scan is still running or this creator has no disclosed partnerships in the window.</div>;
 
   return (
     <div className="mt-10">
-      <div className="mb-5 flex flex-wrap items-center gap-4">
-        <span className="label">{shown.length} brands</span>
-        <div className="flex rounded-full border border-line p-0.5 font-mono text-[11px]">
+      <div className="mb-4 mt-8 flex flex-wrap items-center gap-4">
+        <span className="label"><span className="num text-fg">{shown.length}</span> brands</span>
+        <div className="flex rounded-md bg-surface2 p-0.5 font-mono text-[11px]">
           {(["High", "Medium", "Low"] as const).map((l) => (
-            <button key={l} onClick={() => setMinLabel(l)} className={`rounded-full px-3 py-1 transition ${minLabel === l ? "bg-fg text-bg" : "text-muted hover:text-fg"}`}>{l}+</button>
+            <button key={l} onClick={() => setMinLabel(l)} className={`rounded px-3 py-1 transition ${minLabel === l ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}>{l}+</button>
           ))}
         </div>
-        <label className="flex items-center gap-2 font-mono text-[11px] text-muted"><input type="checkbox" className="accent-white" checked={hideMass} onChange={(e) => setHideMass(e.target.checked)} /> hide mass sponsors</label>
+        <label className="flex items-center gap-2 font-mono text-[11px] text-muted"><input type="checkbox" className="accent-accent" checked={hideMass} onChange={(e) => setHideMass(e.target.checked)} /> hide mass sponsors</label>
         {dead > 0 && (
           <label className="flex items-center gap-2 font-mono text-[11px] text-muted" title="Names we could not match to a live website; usually parsing noise">
-            <input type="checkbox" className="accent-white" checked={showDead} onChange={(e) => setShowDead(e.target.checked)} /> show {dead} unverified
+            <input type="checkbox" className="accent-accent" checked={showDead} onChange={(e) => setShowDead(e.target.checked)} /> show {dead} unverified
           </label>
         )}
         {!signedIn && <span className="ml-auto font-mono text-[11px] text-dim">Sign in to see contacts and draft pitches.</span>}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
         {shown.map((c) => {
           const isOpen = open === c.brand_id;
           return (
-            <div key={c.brand_id} className={`card relative p-5 transition ${isOpen ? "border-fg" : "hover:border-dim"}`}
+            <div key={c.brand_id} className={`card relative cursor-pointer p-5 transition ${isOpen ? "border-accent shadow-pop" : "hover:border-line2 hover:shadow-pop"}`}
               onMouseEnter={() => hover(c.brand_id)} onClick={() => setOpen(isOpen ? null : c.brand_id)}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   {c.website ? (
-                    <a href={c.website} target="_blank" rel="noreferrer" className="block truncate text-lg font-semibold hover:underline" onClick={(e) => e.stopPropagation()} title={c.website}>{c.brand} <span className="font-mono text-[10px] text-dim">↗</span></a>
+                    <a href={c.website} target="_blank" rel="noreferrer" className="block truncate text-base font-semibold tracking-tight hover:text-accent" onClick={(e) => e.stopPropagation()} title={c.website}>{c.brand} <span className="font-mono text-[10px] text-dim">↗</span></a>
                   ) : (
-                    <span className="block truncate text-lg font-semibold" title={c.site_status === "dead" ? "No website found for this name" : "Website not checked yet"}>{c.brand}</span>
+                    <span className="block truncate text-base font-semibold tracking-tight" title={c.site_status === "dead" ? "No website found for this name" : "Website not checked yet"}>{c.brand}</span>
                   )}
-                  <div className="mt-1 font-mono text-[10px] text-muted">
+                  <div className="num mt-1 text-[10px] text-muted">
                     {c.deals} {Number(c.deals) === 1 ? "deal" : "deals"} · {c.platforms.map((p) => (p === "youtube" ? "YT" : p === "instagram" ? "IG" : "TT")).join(" + ")}
                     {c.last_seen && <> · {new Date(c.last_seen).toLocaleDateString(undefined, { month: "short", year: "numeric" })}</>}
-                    {Number(c.creators_booked) > 1 && <> · <Link href={`/brands/${c.brand_id}`} className="hover:text-fg" onClick={(e) => e.stopPropagation()}>books {c.creators_booked} ↗</Link></>}
+                    {Number(c.creators_booked) > 1 && <> · <Link href={`/brands/${c.brand_id}`} className="text-accent hover:underline" onClick={(e) => e.stopPropagation()}>books {c.creators_booked} ↗</Link></>}
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <Conf label={c.best_label} />
-                  {c.repeat_partner && <span className="pill-ok" title="2+ deals 30+ days apart">repeat</span>}
+                  {c.repeat_partner && <span className="pill-accent" title="2+ deals 30+ days apart">repeat</span>}
                   {c.is_mass_sponsor && <span className="pill" title="Sponsors everyone; low signal">mass</span>}
                   {c.site_status === "dead" && <span className="pill-warn" title="No live website found">unverified</span>}
                 </div>
               </div>
-              {c.evidence && <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-muted" title={c.evidence}>“{c.evidence}”</p>}
+              {c.evidence && <p className="mt-3 line-clamp-2 border-l-2 border-line pl-3 text-[13px] leading-relaxed text-muted" title={c.evidence}>{c.evidence}</p>}
               {c.content_url && (
-                <a href={c.content_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="mt-2 inline-block font-mono text-[10px] text-dim hover:text-fg">view post ↗</a>
+                <a href={c.content_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="num mt-2 inline-block text-[10px] text-dim hover:text-accent">view post ↗</a>
               )}
               {signedIn && (
                 <div className="mt-4 border-t border-line pt-4" onClick={(e) => e.stopPropagation()}>

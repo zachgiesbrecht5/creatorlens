@@ -71,4 +71,4 @@ export async function POST(req: NextRequest) {
   }
 }
 
-const DEFAULT_STYLE = `Warm, concise, no filler openers, no em dashes. Two short paragraphs then a one-line ask. Mention one concrete piece of evidence (a past deal or the brand's other creator bookings). Never quote a rate; if budget comes up, ask for their range. Sign off with "rooting for you".`;
+const DEFAULT_STYLE = `Warm, concise, no filler openers, no em dashes. Two short paragraphs then a one-line ask. Mention one concrete piece of evidence (a past deal or the brand's other creator bookings). Never quote a rate; if budget comes up, ask for their range.`;

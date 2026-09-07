@@ -34,11 +34,11 @@ export function SearchBox({ signedIn }: { signedIn: boolean }) {
   }
 
   return (
-    <div className="relative">
-      <div className="flex items-center gap-2 rounded-full border border-line bg-surface p-1.5 focus-within:border-fg">
-        <div className="flex rounded-full bg-bg p-0.5 font-mono text-[11px]">
+    <div className="relative text-left">
+      <div className="flex items-center gap-2 rounded-lg border border-line2 bg-surface p-1.5 shadow-card transition focus-within:border-accent focus-within:shadow-focus">
+        <div className="flex rounded-md bg-surface2 p-0.5 font-mono text-[11px]">
           {(["youtube", "instagram"] as const).map((p) => (
-            <button key={p} onClick={() => setPlatform(p)} className={`rounded-full px-3 py-1.5 transition ${platform === p ? "bg-fg text-bg" : "text-muted hover:text-fg"}`}>
+            <button key={p} onClick={() => setPlatform(p)} className={`rounded px-3 py-1.5 transition ${platform === p ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}>
               {p === "youtube" ? "YouTube" : "Instagram"}
             </button>
           ))}
@@ -51,19 +51,19 @@ export function SearchBox({ signedIn }: { signedIn: boolean }) {
           onKeyDown={(e) => { if (e.key === "Enter" && q.trim()) scan(q.trim()); }}
         />
         <button className="btn-primary" disabled={busy || !q.trim()} onClick={() => scan(q.trim())}>
-          {busy ? "Queuing" : "Scan"}
+          {busy ? "Queuing…" : "Scan"}
         </button>
       </div>
-      {err && <p className="mt-3 text-left text-sm text-bad">{err}</p>}
+      {err && <p className="mt-3 text-sm text-bad">{err}</p>}
       {hits.length > 0 && (
-        <ul className="card absolute z-10 mt-2 w-full overflow-hidden text-left">
+        <ul className="card absolute z-10 mt-2 w-full overflow-hidden shadow-pop">
           {hits.map((h) => (
             <li key={h.platform + h.handle}>
-              <button className="flex w-full items-center gap-3 px-4 py-2.5 hover:bg-surface2" onClick={() => (h.cached ? router.push(`/c/${h.platform}/${h.handle}`) : scan(h.handle, h.platform))}>
+              <button className="flex w-full items-center gap-3 px-4 py-2.5 hover:bg-accentSoft/50" onClick={() => (h.cached ? router.push(`/c/${h.platform}/${h.handle}`) : scan(h.handle, h.platform))}>
                 {h.avatar_url ? <img src={h.avatar_url} alt="" className="h-7 w-7 rounded-full" /> : <div className="h-7 w-7 rounded-full bg-surface2" />}
-                <span className="text-sm">{h.display_name || h.handle}</span>
-                <span className="font-mono text-[10px] text-dim">@{h.handle} · {h.platform === "youtube" ? "YT" : "IG"}</span>
-                <span className={`ml-auto ${h.cached ? "pill-ok" : "pill"}`}>{h.cached ? "in database" : "new scan"}</span>
+                <span className="text-sm font-medium">{h.display_name || h.handle}</span>
+                <span className="num text-[10px] text-dim">@{h.handle} · {h.platform === "youtube" ? "YT" : "IG"}</span>
+                <span className={`ml-auto ${h.cached ? "pill-ok" : "pill"}`}>{h.cached ? "indexed" : "new scan"}</span>
               </button>
             </li>
           ))}

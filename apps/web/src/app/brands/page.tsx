@@ -12,9 +12,9 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
   const { data } = await query;
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="h2">Brands</h1>
-        <form><input name="q" defaultValue={q || ""} placeholder="search brands" className="input !w-64" /></form>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div><div className="label mb-1.5">Leaderboard</div><h1 className="h2">Brands</h1><p className="mt-1 text-sm text-muted">Who is booking creators across everything indexed. Sorted by creators booked.</p></div>
+        <form><input name="q" defaultValue={q || ""} placeholder="Search brands" className="input !w-64" /></form>
       </div>
       <div className="card mt-6 overflow-x-auto">
         <table className="tbl">
@@ -24,11 +24,11 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
           <tbody>
             {(data || []).map((b) => (
               <tr key={b.id}>
-                <td className="font-medium"><Link href={`/brands/${b.id}`} className="hover:underline">{b.name}</Link>{b.is_mass_sponsor && <span className="pill ml-2">mass</span>}</td>
-                <td>{b.creator_count}</td>
-                <td>{b.deal_count}</td>
-                <td className="font-mono text-[11px] text-muted">{b.last_seen || ""}</td>
-                <td className="font-mono text-[11px] text-dim">{b.website ? <a href={b.website} target="_blank" rel="noreferrer" className="hover:text-fg">{b.website.replace(/^https?:\/\/(www\.)?/, "")} ↗</a> : b.site_status === "unknown" ? "checking…" : ""}</td>
+                <td className="font-medium"><Link href={`/brands/${b.id}`} className="hover:text-accent">{b.name}</Link>{b.is_mass_sponsor && <span className="pill ml-2">mass</span>}</td>
+                <td className="num">{b.creator_count}</td>
+                <td className="num">{b.deal_count}</td>
+                <td className="num text-[11px] text-muted">{b.last_seen || ""}</td>
+                <td className="num text-[11px] text-dim">{b.website ? <a href={b.website} target="_blank" rel="noreferrer" className="hover:text-accent">{b.website.replace(/^https?:\/\/(www\.)?/, "")} ↗</a> : b.site_status === "unknown" ? "checking…" : ""}</td>
               </tr>
             ))}
           </tbody>

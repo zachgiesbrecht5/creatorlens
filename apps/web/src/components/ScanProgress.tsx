@@ -26,15 +26,24 @@ export function ScanProgress({ jobId, initialStatus, compact }: { jobId: string;
     return () => { sb.removeChannel(ch); clearInterval(poll); };
   }, [jobId, router]);
 
-  const msg = status === "queued" ? "Queued. Reading their content through the official API…"
-    : status === "running" ? "Scanning. Usually 10 to 40 seconds."
-    : status === "rate_limited" ? "Platform rate limit hit. Retrying automatically in a few minutes, you can leave this page."
-    : status === "failed" ? `Scan failed: ${error}` : "Done. Refreshing…";
+  const failed = status === "failed";
+  const title = status === "queued" ? "Queued" : status === "running" ? "Scanning" : status === "rate_limited" ? "Waiting on platform limit" : failed ? "Scan failed" : "Done";
+  const msg = status === "queued" ? "Reading their content through the official API."
+    : status === "running" ? "Usually 10 to 40 seconds."
+    : status === "rate_limited" ? "Retrying automatically in a few minutes. You can leave this page."
+    : failed ? String(error || "") : "Refreshing…";
 
   return (
-    <div className={`card ${compact ? "mt-6 p-4 text-sm" : "mt-8 p-6"} flex items-center gap-3`}>
-      {status !== "failed" && <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-fg" />}
-      <span className={status === "failed" ? "text-bad" : "text-muted"}>{msg}</span>
+    <div className={`card ${compact ? "mt-6 p-4" : "mt-8 p-6"}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          {!failed && <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent" />}
+          <span className={failed ? "text-bad" : ""}>{title}</span>
+        </div>
+        <span className="num text-[10px] uppercase tracking-wider text-dim">{status.replace("_", " ")}</span>
+      </div>
+      {!failed && <div className="scanbar mt-3"><span /></div>}
+      <p className={`mt-2 text-sm ${failed ? "text-bad" : "text-muted"}`}>{msg}</p>
     </div>
   );
 }

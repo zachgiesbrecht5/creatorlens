@@ -22,8 +22,8 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
   const [result, setResult] = useState<{ ok: boolean; msg: string; link?: string } | null>(null);
   const [manual, setManual] = useState("");
 
-  if (!info) return <button className="font-mono text-[11px] text-dim hover:text-fg" onClick={onLoad}>hover for contact</button>;
-  if (info === "loading") return <div className="font-mono text-[11px] text-dim">finding contact…</div>;
+  if (!info) return <button className="num text-[11px] text-dim hover:text-accent" onClick={onLoad}>hover for contact</button>;
+  if (info === "loading") return <div className="num flex items-center gap-2 text-[11px] text-dim"><span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> finding contact…</div>;
 
   const contact = info.contacts.find((c) => c.id === picked) || info.contacts[0];
   const lastPitch = info.history[0];
@@ -42,9 +42,9 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
 
   return (
     <div className="text-sm">
-      {info.excluded && <div className="mb-2 rounded-lg border border-bad/40 px-3 py-1.5 font-mono text-[11px] text-bad">Excluded: do not pitch</div>}
+      {info.excluded && <div className="mb-2 rounded-md border border-bad/20 bg-badSoft px-3 py-1.5 font-mono text-[11px] text-bad">Excluded: do not pitch</div>}
       {lastPitch && (
-        <div className={`mb-2 rounded-lg border px-3 py-1.5 font-mono text-[11px] ${lastPitch.status === "replied" ? "border-ok/40 text-ok" : "border-warn/40 text-warn"}`}>
+        <div className={`mb-2 rounded-md border px-3 py-1.5 font-mono text-[11px] ${lastPitch.status === "replied" ? "border-ok/20 bg-okSoft text-ok" : "border-warn/20 bg-warnSoft text-warn"}`}>
           Pitched {new Date(lastPitch.created_at).toLocaleDateString()}{lastPitch.by ? ` by ${lastPitch.by}` : ""}{lastPitch.creator_handle ? ` for @${lastPitch.creator_handle}` : ""} · {lastPitch.status}{lastPitch.status === "replied" ? " · has replied before" : ""}
         </div>
       )}
@@ -52,7 +52,7 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-medium">{contact.name || "Partnerships"}</span>
           {contact.title && <span className="text-muted">{contact.title}</span>}
-          <a href={`mailto:${contact.email}`} className="text-muted underline decoration-line hover:text-fg">{contact.email}</a>
+          <a href={`mailto:${contact.email}`} className="num text-[12px] text-muted underline decoration-line underline-offset-2 hover:text-accent">{contact.email}</a>
           {contact.verified && <span className="font-mono text-[10px] text-ok" title="Verified deliverable">✓</span>}
         </div>
       ) : (
@@ -69,7 +69,7 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
 
       {roster.length === 0 ? (
         <div className="mt-3 font-mono text-[11px] text-muted">
-          Add the creators you represent in <Link href="/settings#roster" className="underline hover:text-fg">Settings</Link> to draft pitches.
+          Add the creators you represent in <Link href="/settings#roster" className="text-accent hover:underline">Settings</Link> to draft pitches.
         </div>
       ) : (
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -78,7 +78,7 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
               {roster.map((r) => <option key={r.id} value={r.id}>{r.name}{r.handle ? ` (${r.handle.replace(/^@/, "@")})` : ""}</option>)}
             </select>
           ) : null}
-          <button className="btn-primary !px-4 !py-1.5" disabled={drafting || info.excluded || !rosterId || (!contact?.email && !manual)} onClick={draft}>
+          <button className="btn-primary !px-3.5 !py-1.5 !text-[12px]" disabled={drafting || info.excluded || !rosterId || (!contact?.email && !manual)} onClick={draft}>
             {drafting ? "Writing…" : `Pitch ${pitched?.name || "creator"} to ${brand}`}
           </button>
           {result && (

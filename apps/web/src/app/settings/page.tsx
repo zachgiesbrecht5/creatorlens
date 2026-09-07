@@ -65,19 +65,19 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         <form action={savePrompt} className="card p-6">
           <h2 className="h2 text-xl">Your pitch style</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">This is the skill the drafter follows. Write it the way you would brief a new teammate: tone, structure, what to lead with, what never to say. The deal evidence is added automatically.</p>
-          <textarea name="pitch_prompt" rows={10} className="input-flat mt-5 font-mono text-xs leading-relaxed" defaultValue={profile.pitch_prompt || ""} placeholder={`Example:\nWarm and short, two paragraphs max. Open with the specific reason this creator fits (a past deal with them or a competitor). Second paragraph: one line on audience and format. Close with a single question. Never quote rates; ask for their budget range. No em dashes, no "I hope this finds you well".`} />
+          <textarea name="pitch_prompt" rows={10} className="input-flat mt-5 font-mono text-xs leading-relaxed" defaultValue={profile.pitch_prompt || ""} placeholder={`Example:\nWarm and short, two paragraphs max. Open with the specific reason this creator fits (a past deal with them or a competitor). Second paragraph: one line on audience and format. Close with a single question. Never quote rates; ask for their budget range. No "I hope this finds you well".`} />
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div>
               <label className="label">Sign-off phrase</label>
-              <input name="signature" className="input-flat mt-1" defaultValue={profile.signature || ""} placeholder="rooting for you" />
+              <input name="signature" className="input-flat mt-1" defaultValue={profile.signature || ""} placeholder="Best" />
             </div>
             <div>
               <label className="label">Email signature (appended to every draft, exactly as written)</label>
-              <textarea name="email_signature" rows={5} className="input-flat mt-1 font-mono text-xs leading-relaxed" defaultValue={profile.email_signature || ""} placeholder={`rooting for you,\n${profile.full_name || "Your name"}\nCo-Founder, Rootfor Group\nrootforgroup.com · 431-000-0000`} />
+              <textarea name="email_signature" rows={5} className="input-flat mt-1 font-mono text-xs leading-relaxed" defaultValue={profile.email_signature || ""} placeholder={`Best,\n${profile.full_name || "Your name"}\nFounder, Your Agency\nyouragency.com · 555-000-0000`} />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-3">
-            <button className="btn-primary ml-auto">Save</button>
+            <button className="btn-primary ml-auto">Save style</button>
             {sp.saved && <span className="font-mono text-[11px] text-ok">Saved</span>}
           </div>
         </form>
@@ -129,16 +129,16 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       <div className="space-y-6">
         <div className="card p-6">
           <h2 className="h2 text-xl">Plan</h2>
-          <p className="mt-1 font-mono text-[11px] uppercase text-muted">{profile.plan}</p>
+          <p className="mt-1"><span className="pill-accent">{profile.plan}</span></p>
           {profile.plan === "trial" && (
             <div className="mt-3 grid grid-cols-2 gap-3 text-center">
-              <div className="rounded-xl bg-bg p-3"><div className="text-2xl font-semibold">{profile.scan_credits}</div><div className="label">scans left</div></div>
-              <div className="rounded-xl bg-bg p-3"><div className="text-2xl font-semibold">{profile.draft_credits}</div><div className="label">drafts left</div></div>
+              <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.scan_credits}</div><div className="label">scans left</div></div>
+              <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.draft_credits}</div><div className="label">drafts left</div></div>
             </div>
           )}
           <h3 className="mt-6 text-sm font-medium">Invite a teammate</h3>
           <p className="mt-1 text-xs text-muted">You both get 10 scans when they sign up.</p>
-          <input readOnly className="input-flat mt-2 font-mono text-[11px]" value={inviteUrl} onFocus={undefined} />
+          <input readOnly className="input-flat mt-2 font-mono text-[11px]" value={inviteUrl} />
         </div>
         <div className="card p-6">
           <h2 className="label">Recent activity</h2>
@@ -156,7 +156,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
 function Row({ title, ok, detail, action }: { title: string; ok: boolean; detail: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-start gap-3 py-3">
-      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${ok ? "bg-ok" : "bg-dim"}`} />
+      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${ok ? "bg-ok" : "bg-line2"}`} />
       <div className="flex-1"><div className="text-sm font-medium">{title}</div><div className="mt-0.5 text-xs leading-relaxed text-muted">{detail}</div></div>
       {action}
     </div>

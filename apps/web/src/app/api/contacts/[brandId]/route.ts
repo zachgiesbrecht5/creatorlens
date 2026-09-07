@@ -79,7 +79,7 @@ function titleScore(t: string): number {
 async function quickSite(host: string): Promise<string | null> {
   try {
     const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
-    const r = await fetch(`https://${host}`, { redirect: "follow", signal: ctl.signal, headers: { "user-agent": "Mozilla/5.0 (compatible; CreatorLens/1.0)" } });
+    const r = await fetch(`https://${host}`, { redirect: "follow", signal: ctl.signal, headers: { "user-agent": "Mozilla/5.0 (compatible; Sponsorprint/1.0)" } });
     clearTimeout(t);
     if (r.status < 400 || r.status === 403 || r.status === 429) return new URL(r.url).hostname.replace(/^www\./, "");
   } catch { /* unreachable */ }

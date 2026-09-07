@@ -1,4 +1,4 @@
-# CreatorLens
+# Sponsorprint
 
 Scan any creator, see every brand they have worked with, hover for the contact, click for a pitch draft in your own Gmail. Every scan anyone runs lands in one shared database, so the second person to look up a creator pays nothing.
 
