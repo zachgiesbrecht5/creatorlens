@@ -26,6 +26,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <nav className="flex items-center gap-1 text-[13px]">
               {profile ? (
                 <>
+                  <NavLink href="/">Search</NavLink>
                   <NavLink href="/brands">Brands</NavLink>
                   <NavLink href="/queue">Queue</NavLink>
                   <NavLink href="/settings">Settings</NavLink>
