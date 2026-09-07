@@ -21,6 +21,8 @@ async function removeJob(formData: FormData) {
 export default async function Queue() {
   const admin = supabaseAdmin();
   const me = await currentProfile();
+  if (!me) redirect("/login?next=/queue");
+  if (me.plan !== "admin") redirect("/scans");
   const day = new Date().toISOString().substring(0, 10);
   const [{ data: jobs }, { data: quota }, { data: tokens }] = await Promise.all([
     admin.from("scan_jobs").select("id,user_id,platform,handle,status,error,items_checked,rows_found,quota_units,created_at,finished_at,profiles(full_name)").order("created_at", { ascending: false }).limit(60),

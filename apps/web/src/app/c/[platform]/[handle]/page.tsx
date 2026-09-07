@@ -46,7 +46,7 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
           <div className="flex items-center gap-5">
             {creator.avatar_url ? <img src={creator.avatar_url} alt="" className="h-16 w-16 rounded-full object-cover ring-1 ring-line" /> : <div className="h-16 w-16 rounded-full bg-surface2" />}
             <div className="min-w-0">
-              <div className="label mb-1.5">{p === "youtube" ? "YouTube" : "Instagram"} · @{creator.handle}</div>
+              <div className="mb-1.5 flex items-center gap-2"><span className="label">{p === "youtube" ? "YouTube" : "Instagram"} · @{creator.handle}</span>{creator.category && creator.category !== "Other" && <Link href={`/brands?cat=${encodeURIComponent(creator.category)}`} className="pill-accent hover:underline" title="Creator vertical">{creator.category}</Link>}</div>
               <h1 className="h2 truncate text-3xl">{creator.display_name || creator.handle}</h1>
               <div className="num mt-2 flex flex-wrap gap-4 text-[11px] text-muted">
                 <a className="hover:text-accent" href={p === "youtube" ? `https://youtube.com/@${creator.handle}` : `https://instagram.com/${creator.handle}`} target="_blank" rel="noreferrer">open profile ↗</a>

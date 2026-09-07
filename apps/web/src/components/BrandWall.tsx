@@ -8,6 +8,7 @@ export type WallCard = {
   best_score: number; best_label: "High" | "Medium" | "Low"; first_seen: string | null; last_seen: string | null;
   evidence: string | null; content_url: string | null; content_title: string | null; repeat_partner: boolean; creators_booked: number;
   website: string | null; site_status: "unknown" | "ok" | "dead"; is_junk: boolean;
+  category: string | null; is_self_brand: boolean;
 };
 
 export type RosterCreator = { id: string; name: string; handle: string | null; platform: string | null; followers: number | null };
@@ -18,12 +19,14 @@ export function BrandWall({ cards, creator, signedIn, roster }: { cards: WallCar
   const [minLabel, setMinLabel] = useState<"High" | "Medium" | "Low">("Medium");
   const [hideMass, setHideMass] = useState(false);
   const [showDead, setShowDead] = useState(false);
+  const [showSelf, setShowSelf] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [contacts, setContacts] = useState<Record<string, ContactInfo | "loading">>({});
   const [gone, setGone] = useState<Set<string>>(new Set());
   const rank = { High: 3, Medium: 2, Low: 1 };
   const dead = cards.filter((c) => c.site_status === "dead").length;
-  const shown = cards.filter((c) => !gone.has(c.brand_id) && rank[c.best_label] >= rank[minLabel] && !(hideMass && c.is_mass_sponsor) && (showDead || c.site_status !== "dead"));
+  const self = cards.filter((c) => c.is_self_brand).length;
+  const shown = cards.filter((c) => !gone.has(c.brand_id) && rank[c.best_label] >= rank[minLabel] && !(hideMass && c.is_mass_sponsor) && (showDead || c.site_status !== "dead") && (showSelf || !c.is_self_brand));
 
   async function reject(brandId: string, scope: "pair" | "brand") {
     setGone((g) => new Set(g).add(brandId));
@@ -55,6 +58,11 @@ export function BrandWall({ cards, creator, signedIn, roster }: { cards: WallCar
             <input type="checkbox" className="accent-accent" checked={showDead} onChange={(e) => setShowDead(e.target.checked)} /> show {dead} unverified
           </label>
         )}
+        {self > 0 && (
+          <label className="flex items-center gap-2 font-mono text-[11px] text-muted" title="Brands this creator owns (merch, own company). Not sponsors.">
+            <input type="checkbox" className="accent-accent" checked={showSelf} onChange={(e) => setShowSelf(e.target.checked)} /> show {self} creator-owned
+          </label>
+        )}
         {!signedIn && <span className="ml-auto font-mono text-[11px] text-dim">Sign in to see contacts and draft pitches.</span>}
       </div>
 
@@ -72,7 +80,7 @@ export function BrandWall({ cards, creator, signedIn, roster }: { cards: WallCar
                     <span className="block truncate text-base font-semibold tracking-tight" title={c.site_status === "dead" ? "No website found for this name" : "Website not checked yet"}>{c.brand}</span>
                   )}
                   <div className="num mt-1 text-[10px] text-muted">
-                    {c.deals} {Number(c.deals) === 1 ? "deal" : "deals"} · {c.platforms.map((p) => (p === "youtube" ? "YT" : p === "instagram" ? "IG" : "TT")).join(" + ")}
+                    {c.category && <><Link href={`/brands?cat=${encodeURIComponent(c.category)}`} className="hover:text-accent" onClick={(e) => e.stopPropagation()}>{c.category}</Link> · </>}{c.deals} {Number(c.deals) === 1 ? "deal" : "deals"} · {c.platforms.map((p) => (p === "youtube" ? "YT" : p === "instagram" ? "IG" : "TT")).join(" + ")}
                     {c.last_seen && <> · {new Date(c.last_seen).toLocaleDateString(undefined, { month: "short", year: "numeric" })}</>}
                     {Number(c.creators_booked) > 1 && <> · <Link href={`/brands/${c.brand_id}`} className="text-accent hover:underline" onClick={(e) => e.stopPropagation()}>books {c.creators_booked} ↗</Link></>}
                   </div>
@@ -82,6 +90,7 @@ export function BrandWall({ cards, creator, signedIn, roster }: { cards: WallCar
                   {c.repeat_partner && <span className="pill-accent" title="2+ deals 30+ days apart">repeat</span>}
                   {c.is_mass_sponsor && <span className="pill" title="Sponsors everyone; low signal">mass</span>}
                   {c.site_status === "dead" && <span className="pill-warn" title="No live website found">unverified</span>}
+                  {c.is_self_brand && <span className="pill-warn" title="Owned by this creator; not a sponsor">own brand</span>}
                 </div>
               </div>
               {c.evidence && <p className="mt-3 line-clamp-2 border-l-2 border-line pl-3 text-[13px] leading-relaxed text-muted" title={c.evidence}>{c.evidence}</p>}

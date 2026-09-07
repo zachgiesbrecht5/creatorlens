@@ -1,13 +1,15 @@
 // Scan worker. Polls scan_jobs, runs the engine, writes to the shared pool.
 // Run one instance (Railway/Fly/Render background service, or `npm run dev:worker`).
 //
-// Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, YT_API_KEY, YT_DAILY_BUDGET (default 9000)
+// Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, YT_API_KEY, YT_DAILY_BUDGET (default 9000),
+//      ANTHROPIC_API_KEY (optional: creator verticals + brand categories via Claude)
 
 import { createClient } from "@supabase/supabase-js";
 import {
   scanYouTube, scanInstagram, addLearnedAliases, isLearnable, IgRateLimitError,
   type ScanResult, type PartnershipRow,
 } from "@creatorlens/engine";
+import { classifyCreator, classifyBrands, rollupVerticals, classifyBackfill } from "./classify";
 
 const env = (k: string, d?: string) => {
   const v = process.env[k] ?? d;
@@ -115,6 +117,15 @@ async function persist(job: any, result: ScanResult) {
     const { data: b } = await sb.from("brands").select("name,key").eq("id", id).single();
     if (b && isLearnable(b.name, strong)) await sb.from("learned_aliases").upsert({ key: b.key, name: b.name, deal_count: strong }, { onConflict: "key" });
   }
+
+  // categories: creator vertical (every scan, so a changed bio re-files them),
+  // brand categories for anything new, then the verticals rollup.
+  const touched = [...new Set(brandIds.values())];
+  try {
+    await classifyCreator(sb, creator.id, true);
+    await classifyBrands(sb, touched);
+    await rollupVerticals(sb, touched);
+  } catch (e: any) { log("classify failed:", e?.message); }
   return creator.id;
 }
 
@@ -217,7 +228,7 @@ async function tick() {
     .order("priority").order("created_at").limit(1);
   if (pollErr) { log("poll failed:", pollErr.message, "(check SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)"); return; }
   const job = jobs?.[0];
-  if (!job) { await checkBrandSites(); return; }
+  if (!job) { if (!(await checkBrandSites())) await classifyBackfill(sb); return; }
   try {
     await runJob(job);
   } catch (e: any) {
