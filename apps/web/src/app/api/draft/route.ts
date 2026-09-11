@@ -18,8 +18,10 @@ export async function POST(req: NextRequest) {
   const { data: mine } = rosterCreatorId ? await admin.from("roster_creators").select("*").eq("id", rosterCreatorId).eq("user_id", profile.id).maybeSingle() : { data: null };
   if (!mine) return NextResponse.json({ error: "Pick one of your own creators to pitch (add them in Settings)." }, { status: 400 });
 
+  // Gmail connection is optional. With one, the draft lands silently in the
+  // user's Drafts folder. Without one (or if the token has expired), we return
+  // a prefilled Gmail compose URL the client opens in a new tab.
   const { data: gc } = await admin.from("google_connections").select("refresh_token,email").eq("user_id", profile.id).maybeSingle();
-  if (!gc) return NextResponse.json({ error: "Gmail is not connected. Sign out and back in to grant draft access." }, { status: 412 });
 
   const [{ data: brand }, { data: creator }, { data: evidence }, { data: others }, { data: contact }] = await Promise.all([
     admin.from("brands").select("name,domain,deal_count,creator_count").eq("id", brandId).single(),
@@ -38,7 +40,7 @@ export async function POST(req: NextRequest) {
   const otherCreators = (others || []).map((o: any) => o.creators).filter(Boolean).map((c: any) => `@${c.handle} (${c.followers} followers)`);
 
   const facts = {
-    sender: { name: profile.full_name, email: gc.email, org: org?.name || null, signOff: profile.signature || null },
+    sender: { name: profile.full_name, email: gc?.email || profile.email || null, org: org?.name || null, signOff: profile.signature || null },
     creatorBeingPitched: { name: mine.name, handle: mine.handle, platform: mine.platform, followers: mine.followers, niche: mine.niche, pitchAngle: mine.pitch_angle, mediaKit: mine.media_kit_url },
     recipient: { email: toEmail, name: contact?.name || null, title: contact?.title || null },
     brand: { name: brand.name, domain: brand.domain, dealsInOurData: brand.deal_count, creatorsBooked: brand.creator_count, otherCreatorsBooked: otherCreators },
@@ -59,16 +61,31 @@ export async function POST(req: NextRequest) {
   const sig = (profile.email_signature || "").trim() || [profile.signature ? `${profile.signature},` : "Best,", profile.full_name || "", org?.name || ""].filter(Boolean).join("\n");
   parsed.body = parsed.body.trimEnd() + "\n\n" + sig;
 
-  try {
-    const token = await googleAccessToken(gc.refresh_token);
-    const d = await createGmailDraft(token, { to: toEmail, subject: parsed.subject, body: parsed.body });
-    await admin.from("drafts").insert({ user_id: profile.id, creator_id: creatorId, brand_id: brandId, contact_id: contactId || null, subject: parsed.subject, body: parsed.body, gmail_draft_id: d.id, model: msg.model });
-    await admin.from("outreach_log").insert({ org_id: profile.org_id, user_id: profile.id, brand_id: brandId, creator_handle: mine.handle || mine.name, contact_email: toEmail, subject: parsed.subject, status: "drafted", gmail_draft_id: d.id });
-    return NextResponse.json({ ok: true, link: d.link, subject: parsed.subject });
-  } catch (e: any) {
-    await admin.rpc("grant_credits", { p_user: profile.id, p_kind: "draft", p_n: 1, p_reason: "refund:gmail" });
-    return NextResponse.json({ error: e.message }, { status: 502 });
+  const logDraft = async (gmailDraftId: string | null) => {
+    await admin.from("drafts").insert({ user_id: profile.id, creator_id: creatorId, brand_id: brandId, contact_id: contactId || null, subject: parsed.subject, body: parsed.body, gmail_draft_id: gmailDraftId, model: msg.model });
+    await admin.from("outreach_log").insert({ org_id: profile.org_id, user_id: profile.id, brand_id: brandId, creator_handle: mine.handle || mine.name, contact_email: toEmail, subject: parsed.subject, status: "drafted", gmail_draft_id: gmailDraftId });
+  };
+
+  if (gc) {
+    try {
+      const token = await googleAccessToken(gc.refresh_token);
+      const d = await createGmailDraft(token, { to: toEmail, subject: parsed.subject, body: parsed.body });
+      await logDraft(d.id);
+      return NextResponse.json({ ok: true, mode: "gmail", link: d.link, subject: parsed.subject });
+    } catch (e: any) {
+      // expired/revoked token (7-day expiry while the Google app is in Testing): fall through to compose
+      console.warn("gmail draft failed, falling back to compose:", e?.message);
+    }
   }
+  await logDraft(null);
+  return NextResponse.json({ ok: true, mode: "compose", link: gmailComposeUrl({ to: toEmail, subject: parsed.subject, body: parsed.body }), subject: parsed.subject, body: parsed.body });
+}
+
+// Prefilled Gmail compose window. No API, no OAuth scope, works for any Google
+// account; the user reviews and either sends or closes it (Gmail keeps a draft).
+function gmailComposeUrl({ to, subject, body }: { to: string; subject: string; body: string }) {
+  const q = new URLSearchParams({ view: "cm", fs: "1", to, su: subject, body });
+  return `https://mail.google.com/mail/?${q.toString()}`;
 }
 
 const DEFAULT_STYLE = `Warm, concise, no filler openers, no em dashes. Two short paragraphs then a one-line ask. Mention one concrete piece of evidence (a past deal or the brand's other creator bookings). Never quote a rate; if budget comes up, ask for their range.`;

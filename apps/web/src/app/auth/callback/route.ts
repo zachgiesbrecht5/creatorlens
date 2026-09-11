@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
   const admin = supabaseAdmin();
   const user = data.session.user;
-  if (data.session.provider_refresh_token) {
+  if (data.session.provider_refresh_token && req.nextUrl.searchParams.get("gmail") === "1") {
     await admin.from("google_connections").upsert({
       user_id: user.id,
       refresh_token: data.session.provider_refresh_token,

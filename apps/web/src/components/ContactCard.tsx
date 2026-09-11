@@ -37,7 +37,12 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
     });
     const j = await r.json();
     setDrafting(false);
-    setResult(r.ok ? { ok: true, msg: "Draft is in your Gmail.", link: j.link } : { ok: false, msg: j.error || "Draft failed" });
+    if (r.ok && j.mode === "compose") {
+      const w = window.open(j.link, "_blank", "noopener");
+      setResult({ ok: true, msg: w ? "Opened in Gmail. Review, then send or close (Gmail keeps the draft)." : "Pop-up blocked.", link: w ? undefined : j.link });
+      return;
+    }
+    setResult(r.ok ? { ok: true, msg: "Draft is in your Gmail Drafts folder.", link: j.link } : { ok: false, msg: j.error || "Draft failed" });
   }
 
   return (

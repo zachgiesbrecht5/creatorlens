@@ -1,3 +1,4 @@
+import { GoogleButton } from "@/components/GoogleButton";
 import { redirect } from "next/navigation";
 import { currentProfile, supabaseAdmin, supabaseServer } from "@/lib/supabase";
 
@@ -116,7 +117,9 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         <div className="card p-6">
           <h2 className="h2 text-xl">Connections</h2>
           <div className="mt-4 divide-y divide-line">
-            <Row title="Gmail drafts" ok={!!gc} detail={gc ? `Connected as ${gc.email}. Drafts only; nothing is ever sent.` : "Not connected. Sign out and sign in again, then approve the Gmail draft permission."} />
+            <Row title="Gmail drafts" ok={!!gc}
+              detail={gc ? `Connected as ${gc.email}. Pitches land silently in your Drafts folder. Drafts only; nothing is ever sent.` : "Optional. Without it, each pitch opens as a prefilled Gmail compose window for you to review. Connecting places drafts straight into your Drafts folder instead; Google shows an \"unverified app\" notice while Sponsorprint is in beta, and the connection needs renewing every 7 days."}
+              action={<GoogleButton next="/settings" gmail label={gc ? "Reconnect" : "Connect Gmail"} className="btn-ghost" />} />
             <Row title="Instagram" ok={!!ig?.length}
               detail={ig?.length ? `Connected: ${ig.map((c) => "@" + c.ig_username).join(", ")}. ${ig.some((c) => c.cooldown_until && new Date(c.cooldown_until) > new Date()) ? "Cooling down after a rate limit." : "Healthy."}` : "Connect your Instagram Business or Creator account. It adds scanning capacity for everyone and unlocks Instagram scans for you."}
               action={<a href="/api/ig/connect" className="btn-ghost">{ig?.length ? "Add another" : "Connect Instagram"}</a>} />

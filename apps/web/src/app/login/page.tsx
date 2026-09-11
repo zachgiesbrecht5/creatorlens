@@ -9,7 +9,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
         <div className="mb-6 flex justify-center"><Logo size={28} wordmark={false} /></div>
         <h1 className="h2">Sign in to Sponsorprint</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted">
-          One Google sign-in does everything: your account, and permission to place pitch drafts in your own Gmail. Nothing is ever sent for you.
+          Sign in with Google to scan creators and write pitches. Drafts open in a prefilled Gmail compose window; nothing is ever sent for you.
         </p>
         <div className="mt-8">
           <GoogleButton next={sp.next || "/"} refCode={sp.ref} />
