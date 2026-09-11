@@ -58,14 +58,15 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
    line per step, the way a real one clunks; the LED blinks while it prints,
    then goes green. Plays once on load. */
 .rc-wrap { position: relative; width: 100%; max-width: 440px; margin-inline: auto; font-family: var(--font-mono), ui-monospace, monospace; }
-.rc-slot { position: relative; z-index: 3; height: 26px; border-radius: 8px;
-  background: linear-gradient(180deg, #2a2f3a 0%, #151922 55%, #0b0d12 100%);
-  box-shadow: 0 10px 24px -8px rgba(11,13,18,.55), inset 0 1px 0 rgba(255,255,255,.12), inset 0 -1px 0 rgba(0,0,0,.6); }
-.rc-slot::after { content: ""; position: absolute; left: 16px; right: 16px; top: 11px; height: 5px; border-radius: 3px; background: #000; box-shadow: inset 0 1px 1px rgba(255,255,255,.08), 0 1px 0 rgba(255,255,255,.06); }
-.rc-led { position: absolute; right: 12px; top: 9px; width: 7px; height: 7px; border-radius: 50%; background: #ffb454; box-shadow: 0 0 6px #ffb454; z-index: 4; animation: rc-led-blink .5s steps(2, end) infinite, rc-led-done 0s linear 4.6s forwards; }
+.rc-machine { position: relative; z-index: 3; display: block; width: 100%; height: auto; }
+.rc-led { fill: #ffb454; filter: drop-shadow(0 0 4px #ffb454); animation: rc-led-blink .5s steps(2, end) infinite, rc-led-done 0s linear 4.6s forwards; }
 @keyframes rc-led-blink { to { opacity: .25; } }
-@keyframes rc-led-done { to { background: #2bd07c; box-shadow: 0 0 8px #2bd07c; animation: none; opacity: 1; } }
-.rc-feed { position: relative; margin: 0 14px; overflow: hidden; padding-bottom: 14px; }
+@keyframes rc-led-done { to { fill: #2bd07c; filter: drop-shadow(0 0 5px #2bd07c); animation: none; opacity: 1; } }
+.rc-lcd-printing { animation: rc-lcd-swap 0s linear 4.6s forwards; }
+.rc-lcd-done { opacity: 0; animation: rc-lcd-show 0s linear 4.6s forwards; }
+@keyframes rc-lcd-swap { to { opacity: 0; } }
+@keyframes rc-lcd-show { to { opacity: 1; } }
+.rc-feed { position: relative; margin: -12px 30px 0; overflow: hidden; padding-bottom: 14px; }
 .rc-paper { position: relative; padding: 18px 18px 10px; background: #fbfbfa; color: #0b0d12; font-size: 12px; line-height: 1.5;
   box-shadow: 0 30px 50px -30px rgba(11,13,18,.45), 0 1px 0 rgba(11,13,18,.06);
   transform: translateY(-100%); animation: rc-feed 4.4s steps(16, end) .3s forwards; }
@@ -102,7 +103,8 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 @keyframes rc-curl { to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .rc-paper { transform: none; animation: none; }
-  .rc-led { animation: none; background: #2bd07c; box-shadow: 0 0 8px #2bd07c; }
+  .rc-led { animation: none; fill: #2bd07c; }
+  .rc-lcd-printing { opacity: 0; animation: none; } .rc-lcd-done { opacity: 1; animation: none; }
   .rc-paper::after { animation: none; opacity: 1; }
 }
 
