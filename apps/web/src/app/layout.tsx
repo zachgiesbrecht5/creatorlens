@@ -45,7 +45,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
         <footer className="mx-auto flex max-w-6xl items-center justify-between px-6 py-10 font-mono text-[11px] text-dim">
           <span>© {new Date().getFullYear()} Sponsorprint</span>
-          <span>Public data only · Drafts, never sends</span>
+          <span className="flex gap-4"><span>Public data only · Drafts, never sends</span><a href="/privacy" className="hover:text-fg">Privacy</a><a href="/terms" className="hover:text-fg">Terms</a></span>
         </footer>
       </body>
     </html>
