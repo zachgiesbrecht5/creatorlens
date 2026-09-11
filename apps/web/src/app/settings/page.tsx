@@ -74,7 +74,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             </div>
             <div>
               <label className="label">Email signature (appended to every draft, exactly as written)</label>
-              <textarea name="email_signature" rows={5} className="input-flat mt-1 font-mono text-xs leading-relaxed" defaultValue={profile.email_signature || ""} placeholder={`Best,\n${profile.full_name || "Your name"}\nFounder, Your Agency\nyouragency.com · 555-000-0000`} />
+              <textarea name="email_signature" rows={5} className="input-flat mt-1 font-mono text-xs leading-relaxed" defaultValue={profile.email_signature || ""} placeholder={"Best,\nYour name\nFounder, Your Agency\nyouragency.com · 555-000-0000"} />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-3">

@@ -77,19 +77,19 @@ export default async function Home() {
           <p className="mt-3 text-sm leading-relaxed text-muted">
             The pitch is for the talent you represent. The scanned creator's sponsors are the evidence that this brand books people like yours. Your style guide sets the voice, your signature closes it, and nothing is sent until you hit send.
           </p>
-          <p className="mt-6 font-mono text-[11px] text-dim">Real draft, contact redacted.</p>
+          <p className="mt-6 font-mono text-[11px] text-dim">Illustrative example. Names, brand and figures are made up.</p>
         </div>
         <div className="card overflow-hidden md:col-span-3">
           <div className="border-b border-line bg-surface2 px-5 py-3 font-mono text-[11px] text-muted">
-            <div><span className="text-dim">To</span> &nbsp; t.h@jcrew.com</div>
-            <div className="mt-1"><span className="text-dim">Subject</span> &nbsp; Andy Yen for J.Crew's fall home campaign</div>
+            <div><span className="text-dim">To</span> &nbsp; d.reyes@hearthline.co</div>
+            <div className="mt-1"><span className="text-dim">Subject</span> &nbsp; Priya Nair for Hearthline&apos;s holiday cookware push</div>
           </div>
           <div className="space-y-4 px-5 py-5 text-[13.5px] leading-relaxed">
-            <p>Andy turns his LA loft into content that gets product placed inside the story. His best recent piece, converting the open loft into a guest room, hit 1.8M views with every product linked in his ShopMy.</p>
-            <p>He's known for interior builds, hosting moments, and scenes with his cats Juji and Shuko. His audience comes for the aesthetic and the approachable DIY. 204K followers across platforms.</p>
-            <p>Since you've been working with lifestyle creators, I thought he might fit a fall hosting setup or a loft refresh featuring your knitwear and home pieces. He's currently working with adidas, IKEA, Logitech and Fancy Feast.</p>
-            <p>Does a placement like this fit into your Q4 or Q1 plans?</p>
-            <p className="text-muted">Thanks,<br />Z<br /><span className="font-mono text-[11px] text-dim">[your signature, appended automatically]</span></p>
+            <p>Hi Dana,</p>
+            <p>You booked @thekitchenlab in August for the Dutch oven launch, so I think you already know the format that works: a real weeknight cook, product in hand, no studio. Priya Nair (@priyacooks, 312K on Instagram, 140K on YouTube) does exactly that, one-pot dinners for families, filmed in her own kitchen, with a save rate about three times the category average.</p>
+            <p>For the holiday window she could do a two-part braise series built around your enameled line, with a swipe-up to your gift bundles. Her audience is 78% women 28 to 44, mostly US and Canada, which is the same profile that bought through her Le Petit Four collab last winter.</p>
+            <p>Is there room in your Q4 plan for a creator like Priya? Happy to send her rate card and three concept options.</p>
+            <p className="text-muted">Best,<br />Jordan<br /><span className="font-mono text-[11px] text-dim">[your signature, appended automatically]</span></p>
           </div>
         </div>
       </section>
