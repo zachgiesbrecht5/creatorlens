@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { supabaseAdmin, currentAccess } from "@/lib/supabase";
 import { fmt } from "@/lib/fmt";
 import { Verticals } from "@/components/Verticals";
+import { BookingMap, type Deal } from "@/components/BookingMap";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,11 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
   const { data: brand } = await admin.from("brands").select("*").eq("id", id).single();
   if (!brand) return <p>Brand not found.</p>;
   const { data: rows } = await admin.from("brand_wall").select("*, creators(handle,display_name,platform,followers,avatar_url,category)").eq("brand_id", id).order("deals", { ascending: false });
+  // every deal, for the timeline
+  const { data: dealRows } = await admin.from("partnerships").select("published_at,platform,confidence_label,content_url,creator_id,creators(id,handle,display_name,followers,category,avatar_url)").eq("brand_id", id).neq("status", "rejected").not("published_at", "is", null).order("published_at", { ascending: true }).limit(500);
+  const repeatIds = new Set((rows || []).filter((r: any) => r.repeat_partner).map((r: any) => r.creator_id));
+  const deals: Deal[] = (dealRows || []).filter((d: any) => d.creators).map((d: any) => ({ published_at: d.published_at, platform: d.platform, confidence_label: d.confidence_label, content_url: d.content_url, repeat: repeatIds.has(d.creator_id), creator: d.creators }));
+  const pc = (brand.platform_counts || {}) as Record<string, number>;
   const top = Object.entries((brand.verticals || {}) as Record<string, number>).filter(([k]) => k !== "Other").sort((a, b) => b[1] - a[1])[0];
   return (
     <div>
@@ -29,7 +35,7 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
               {brand.is_self_brand && <span className="pill-warn">creator-owned</span>}
             </div>
             <h1 className="h2 text-3xl">{brand.website ? <a href={brand.website} target="_blank" rel="noreferrer" className="hover:text-accent">{brand.name} <span className="font-mono text-sm text-dim">↗</span></a> : brand.name}</h1>
-            <p className="num mt-2 text-[11px] text-muted">{brand.creator_count} creators booked · {brand.deal_count} deals{brand.last_seen ? ` · last seen ${brand.last_seen}` : ""}</p>
+            <p className="num mt-2 text-[11px] text-muted">{brand.creator_count} creators booked · {brand.deal_count} deals{pc.youtube ? ` · YT ${pc.youtube}` : ""}{pc.instagram ? ` · IG ${pc.instagram}` : ""}{brand.last_seen ? ` · last seen ${brand.last_seen}` : ""}</p>
             {top && <p className="mt-3 text-sm text-muted">Books mostly <span className="font-medium text-fg">{top[0]}</span> creators{Object.keys(brand.verticals || {}).length > 1 ? ", plus the verticals below" : ""}.</p>}
           </div>
           <div className="w-full max-w-sm">
@@ -38,6 +44,8 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       </div>
+
+      <BookingMap deals={deals} />
 
       <div className="mt-6 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
         {(rows || []).map((r: any) => (
