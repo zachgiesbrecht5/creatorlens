@@ -162,11 +162,21 @@ export function detectInstagram(caption: string | null | undefined, ownHandle?: 
     }
   }
 
+  // Evidence snippet: a window around the match, snapped outward to whole
+  // words so it never starts or ends mid-token ("o gas. polestarcars" was a
+  // cut of "no gas"). Leading/trailing ellipses mark where the caption goes on.
   const snip = (aIdx: number, aLen: number) => {
-    const s = Math.max(0, aIdx - 20);
-    let e = Math.min(text.length, aIdx + aLen + 40);
-    if (e - s > 160) e = s + 160;
-    return text.substring(s, e).replace(/\s+/g, " ").trim();
+    let s = Math.max(0, aIdx - 24);
+    let e = Math.min(text.length, aIdx + aLen + 48);
+    while (s > 0 && !/\s/.test(text[s - 1])) s--;
+    while (e < text.length && !/\s/.test(text[e])) e++;
+    // hard cap, still on a word boundary (trim the far end, keep the match)
+    while (e - s > 180 && e > aIdx + aLen) { e--; while (e > aIdx + aLen && !/\s/.test(text[e])) e--; }
+    while (e - s > 180 && s < aIdx) { s++; while (s < aIdx && !/\s/.test(text[s - 1])) s++; }
+    let out = text.substring(s, e).replace(/\s+/g, " ").trim();
+    if (s > 0) out = "…" + out;
+    if (e < text.length) out += "…";
+    return out;
   };
 
   const out: Record<string, { brand: string; type: string; score: number; label: "High" | "Medium" | "Low"; evidence: string }> = {};

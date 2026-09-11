@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { supabaseAdmin } from "@/lib/supabase";
+import { supabaseAdmin, currentUser } from "@/lib/supabase";
 import { Verticals } from "@/components/Verticals";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 export default async function Brands({ searchParams }: { searchParams: Promise<{ q?: string; cat?: string; sort?: string }> }) {
   const { q, cat, sort } = await searchParams;
   const admin = supabaseAdmin();
+  const user = await currentUser();
+  const PREVIEW = 10;  // signed-out visitors see the top rows, the rest is frosted
 
   // category counts for the filter row (cheap: brands table only)
   const { data: catRows } = await admin.from("brands").select("category").eq("is_junk", false).eq("is_self_brand", false).neq("site_status", "dead").not("category", "is", null);
@@ -17,7 +19,7 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
   const cats = [...counts.entries()].sort((a, b) => b[1] - a[1]);
 
   let query = admin.from("brands")
-    .select("id,name,category,verticals,deal_count,creator_count,last_seen,is_mass_sponsor,domain,website,site_status")
+    .select("id,name,category,verticals,deal_count,creator_count,last_seen,is_mass_sponsor,is_affiliate,classified_at,domain,website,site_status")
     .eq("is_junk", false).eq("is_self_brand", false).neq("site_status", "dead").limit(300);
   if (q) query = query.ilike("name", `%${q}%`);
   if (cat) query = query.eq("category", cat);
@@ -38,7 +40,7 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
         <div>
           <div className="label mb-1.5">Leaderboard</div>
           <h1 className="h2">Brands</h1>
-          <p className="mt-1 text-sm text-muted">Who is booking creators across everything indexed, and which verticals they book.</p>
+          <p className="mt-1 text-sm text-muted">Who is booking creators across everything indexed. Category is what the brand sells; Books is the creator verticals it has hired at least twice.</p>
         </div>
         <form className="flex gap-2">
           {cat && <input type="hidden" name="cat" value={cat} />}
@@ -60,14 +62,14 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
       <div className="card mt-4 overflow-x-auto">
         <table className="tbl">
           <thead>
-            <tr><th>Brand</th><th>Category</th><th>Books</th><th className="text-right">Creators</th><th className="text-right">Deals</th><th>Last seen</th><th>Site</th></tr>
+            <tr><th>Brand</th><th>Category</th><th title="Creator verticals with 2+ distinct creators booked">Books</th><th className="text-right">Creators</th><th className="text-right">Deals</th><th>Last seen</th><th>Site</th></tr>
           </thead>
           <tbody>
-            {(data || []).map((b) => (
+            {(data || []).slice(0, user ? undefined : PREVIEW).map((b) => (
               <tr key={b.id}>
-                <td className="font-medium"><Link href={`/brands/${b.id}`} className="hover:text-accent">{b.name}</Link>{b.is_mass_sponsor && <span className="pill ml-2" title="Sponsors everyone; low signal">mass</span>}</td>
-                <td>{b.category ? <Link href={href({ cat: b.category })} className="pill hover:border-accent hover:text-accent">{b.category}</Link> : <span className="num text-[10px] text-dim">classifying…</span>}</td>
-                <td><Verticals v={b.verticals} max={3} /></td>
+                <td className="font-medium"><Link href={user ? `/brands/${b.id}` : `/login?next=/brands/${b.id}`} className="hover:text-accent">{b.name}</Link>{b.is_mass_sponsor && <span className="pill ml-2" title="Sponsors everyone; low signal">mass</span>}{b.is_affiliate && <span className="pill ml-2" title="One creator accounts for nearly all of these deals: affiliate, ambassador or house brand">affiliate</span>}</td>
+                <td>{b.category ? <Link href={href({ cat: b.category })} className="pill hover:border-accent hover:text-accent">{b.category}</Link> : <span className="num text-[10px] text-dim">{b.classified_at ? "Uncategorized" : "classifying…"}</span>}</td>
+                <td><Verticals v={b.verticals} max={3} min={2} /></td>
                 <td className="num text-right">{b.creator_count}</td>
                 <td className="num text-right">{b.deal_count}</td>
                 <td className="num text-[11px] text-muted">{b.last_seen || ""}</td>
@@ -77,6 +79,24 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
             {!data?.length && <tr><td colSpan={7} className="py-10 text-center text-sm text-muted">Nothing here yet.</td></tr>}
           </tbody>
         </table>
+        {!user && (data?.length || 0) > PREVIEW && (
+          <div className="relative">
+            <div className="pointer-events-none select-none blur-[3px]" aria-hidden>
+              <table className="tbl">
+                <tbody>
+                  {data!.slice(PREVIEW, PREVIEW + 4).map((b) => (
+                    <tr key={b.id}><td className="font-medium">{b.name}</td><td>{b.category && <span className="pill">{b.category}</span>}</td><td><Verticals v={b.verticals} max={3} min={2} /></td><td className="num text-right">{b.creator_count}</td><td className="num text-right">{b.deal_count}</td><td className="num text-[11px] text-muted">{b.last_seen || ""}</td><td /></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-b from-transparent via-surface/80 to-surface">
+              <div className="text-sm font-medium">{data!.length - PREVIEW} more brands, with the contact behind each one</div>
+              <Link href="/login?next=/brands" className="btn-primary">Sign in with Google to see everything</Link>
+              <div className="font-mono text-[11px] text-dim">Free while in beta · drafts only, never sends</div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

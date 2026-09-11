@@ -123,6 +123,9 @@ async function persist(job: any, result: ScanResult) {
   const touched = [...new Set(brandIds.values())];
   try {
     await classifyCreator(sb, creator.id, true);
+    // resolve sites for new brands first so the classifier sees the brand's own page (cap per scan; backfill gets the rest)
+    const { data: fresh } = await sb.from("brands").select("id,key,name,domain,website,website_locked,name_locked").in("id", touched).is("site_checked_at", null).order("deal_count", { ascending: false }).limit(12);
+    for (const b of fresh || []) { try { await resolveBrandSite(b); } catch (e: any) { log("site check failed", b.name, e?.message); } }
     await classifyBrands(sb, touched);
     await rollupVerticals(sb, touched);
   } catch (e: any) { log("classify failed:", e?.message); }
@@ -168,54 +171,117 @@ async function runJob(job: any) {
 const JUNK_NAME_RE = /^(?:https?|www|http|my friends|the team|our friends)$|https?$|^www/i;
 const NON_BRAND_HOSTS = new Set(["youtube", "youtu", "instagram", "tiktok", "facebook", "twitter", "x", "bit", "linktr", "amazon", "amzn", "google", "apple", "spotify", "discord", "twitch", "patreon", "shopify", "linkedin", "t", "goo"]);
 
-async function reachable(host: string): Promise<string | null> {
+type SiteInfo = { origin: string; title: string | null; description: string | null };
+
+const decodeEntities = (t: string) => t.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+function readMeta(html: string): { title: string | null; description: string | null } {
+  const pick = (re: RegExp) => { const m = html.match(re); return m ? decodeEntities(m[1]).slice(0, 200) : null; };
+  const title = pick(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i)
+    || pick(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["']/i)
+    || pick(/<title[^>]*>([^<]{1,200})<\/title>/i);
+  const description = pick(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)
+    || pick(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i)
+    || pick(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i);
+  return { title, description };
+}
+
+async function reachable(host: string): Promise<SiteInfo | null> {
   for (const url of [`https://${host}`, `https://www.${host}`]) {
     try {
       const ctl = new AbortController();
       const t = setTimeout(() => ctl.abort(), 7000);
-      const r = await fetch(url, { method: "GET", redirect: "follow", signal: ctl.signal, headers: { "user-agent": "Mozilla/5.0 (compatible; Sponsorprint/1.0)" } });
+      const r = await fetch(url, { method: "GET", redirect: "follow", signal: ctl.signal, headers: { "user-agent": "Mozilla/5.0 (compatible; Sponsorprint/1.0)", accept: "text/html" } });
       clearTimeout(t);
-      if (r.status < 400 || r.status === 403 || r.status === 429) return new URL(r.url).origin;  // 403/429 = bot wall, site exists
+      if (r.status < 400 || r.status === 403 || r.status === 429) {  // 403/429 = bot wall, site exists
+        let meta = { title: null as string | null, description: null as string | null };
+        if (r.status < 400) { try { meta = readMeta((await r.text()).slice(0, 200_000)); } catch { /* keep nulls */ } }
+        // strip checkout./shop./us. style subdomains back to the brand root
+        const u = new URL(r.url);
+        const parts = u.hostname.replace(/^www\./, "").split(".");
+        const root = parts.length > 2 && !/^(co|com|org|net)$/.test(parts[parts.length - 2]) ? parts.slice(-2).join(".") : parts.join(".");
+        return { origin: `${u.protocol}//${root === u.hostname.replace(/^www\./, "") ? u.hostname : "www." + root}`, ...meta };
+      }
     } catch { /* try next */ }
   }
   return null;
 }
 
-async function resolveBrandSite(brand: { id: string; key: string; name: string; domain: string | null }) {
+// Manual overrides: matched by domain first, then brand key.
+async function findOverride(brand: { key: string; domain: string | null; website?: string | null }) {
+  const keys = [brand.domain, brand.website ? new URL(brand.website).hostname.replace(/^www\./, "") : null, brand.key].filter(Boolean) as string[];
+  const { data } = await sb.from("brand_overrides").select("*").in("match_key", keys.map((k) => k.toLowerCase()));
+  if (!data?.length) return null;
+  // domain match beats key match
+  return data.find((o) => o.match_key !== brand.key) || data[0];
+}
+
+async function resolveBrandSite(brand: { id: string; key: string; name: string; domain: string | null; website?: string | null; website_locked?: boolean; name_locked?: boolean }) {
+  const ov = await findOverride(brand);
+  if (ov) {
+    const patch: Record<string, unknown> = { site_checked_at: new Date().toISOString() };
+    if (ov.is_junk != null) patch.is_junk = ov.is_junk;
+    if (ov.website) { patch.website = ov.website; patch.site_status = "ok"; patch.domain = new URL(ov.website).hostname.replace(/^www\./, ""); patch.website_locked = true; }
+    if (ov.display_name) { patch.name = ov.display_name; patch.name_locked = true; }
+    if (ov.category) { patch.category = ov.category; patch.category_locked = true; patch.classified_at = new Date().toISOString(); patch.category_confidence = 1; }
+    if (ov.website) { const info = await reachable(patch.domain as string); if (info) { patch.site_title = info.title; patch.site_description = info.description; } }
+    await sb.from("brands").update(patch).eq("id", brand.id);
+    log("override applied", brand.name, "->", ov.display_name || ov.category || ov.website);
+    return;
+  }
   if (JUNK_NAME_RE.test(brand.key) || JUNK_NAME_RE.test(brand.name)) {
     await sb.from("brands").update({ is_junk: true, site_status: "dead", site_checked_at: new Date().toISOString() }).eq("id", brand.id);
     return;
   }
   const candidates: string[] = [];
+  if (brand.website_locked && brand.website) candidates.push(new URL(brand.website).hostname.replace(/^www\./, ""));
   if (brand.domain) candidates.push(brand.domain.toLowerCase());
-  // evidence URLs mentioning the brand
   const { data: ev } = await sb.from("partnerships").select("evidence").eq("brand_id", brand.id).limit(20);
+  const keyStem = brand.key.slice(0, Math.min(6, brand.key.length));
   for (const e of ev || []) {
-    for (const m of String(e.evidence || "").matchAll(/(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|co|io|org|net|ca|uk|us|shop|app))\b/gi)) {
+    const text = String(e.evidence || "");
+    // partner-style hashtags and @mentions are the brand's own handle: #stanley1913partner -> stanley1913.com
+    for (const m of text.matchAll(/#([a-z0-9_]+?)(?:partner|ambassador|crew|family|team|collab|sponsored)\b/gi)) {
+      const stem = m[1].toLowerCase().replace(/_/g, "");
+      if (stem.length >= 4 && stem.includes(keyStem) && !NON_BRAND_HOSTS.has(stem)) candidates.push(`${stem}.com`);
+    }
+    for (const m of text.matchAll(/@([a-z0-9_.]+)/gi)) {
+      const stem = m[1].toLowerCase().replace(/[._]/g, "").replace(/(official|usa|us|uk|ca|global|hq|shop|store)$/, "");
+      if (stem.length >= 4 && stem.includes(keyStem) && !NON_BRAND_HOSTS.has(stem)) candidates.push(`${stem}.com`);
+    }
+    // evidence URLs mentioning the brand
+    for (const m of text.matchAll(/(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|co|io|org|net|ca|uk|us|shop|app))\b/gi)) {
       const host = m[1].toLowerCase();
       const root = host.split(".")[0];
       if (NON_BRAND_HOSTS.has(root)) continue;
-      if (root.replace(/[^a-z0-9]/g, "").includes(brand.key.slice(0, Math.min(6, brand.key.length)))) candidates.push(host);
+      if (root.replace(/[^a-z0-9]/g, "").includes(keyStem)) candidates.push(host);
     }
   }
   candidates.push(`${brand.key}.com`);
   const first = brand.name.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(" ")[0];
   if (first && first.length >= 4 && first !== brand.key) candidates.push(`${first}.com`);
 
-  let website: string | null = null;
-  for (const host of [...new Set(candidates)].slice(0, 5)) {
-    website = await reachable(host);
-    if (website) break;
+  let info: SiteInfo | null = null;
+  for (const host of [...new Set(candidates)].slice(0, 6)) {
+    info = await reachable(host);
+    if (info) break;
   }
-  await sb.from("brands").update({
-    website, site_status: website ? "ok" : "dead", site_checked_at: new Date().toISOString(),
-    domain: brand.domain || (website ? new URL(website).hostname.replace(/^www\./, "") : null),
-  }).eq("id", brand.id);
+  const patch: Record<string, unknown> = {
+    website: info?.origin ?? null, site_status: info ? "ok" : "dead", site_checked_at: new Date().toISOString(),
+    site_title: info?.title ?? null, site_description: info?.description ?? null,
+    domain: brand.domain || (info ? new URL(info.origin).hostname.replace(/^www\./, "") : null),
+  };
+  // og:site_name is the brand's own spelling ("Feastables", not "Fstbls")
+  if (info?.title && !brand.name_locked && info.title.length <= 40 && !/[|:\-–—]/.test(info.title)) {
+    const t = info.title.replace(/\b(official|site|store|shop|home)\b/gi, "").trim();
+    const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (t && (norm(t).includes(brand.key.slice(0, 4)) || brand.key.includes(norm(t).slice(0, 4)))) patch.name = t;
+  }
+  await sb.from("brands").update(patch).eq("id", brand.id);
 }
 
 // Idle-time backfill: check a few unverified brands per tick.
 async function checkBrandSites(limit = 4) {
-  const { data } = await sb.from("brands").select("id,key,name,domain").is("site_checked_at", null).order("deal_count", { ascending: false }).limit(limit);
+  const { data } = await sb.from("brands").select("id,key,name,domain,website,website_locked,name_locked").is("site_checked_at", null).order("deal_count", { ascending: false }).limit(limit);
   for (const b of data || []) {
     try { await resolveBrandSite(b); } catch (e: any) { log("site check failed", b.name, e?.message); }
   }

@@ -15,7 +15,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
           <GoogleButton next={sp.next || "/"} refCode={sp.ref} />
         </div>
         {sp.error && <p className="mt-4 text-sm text-bad">{sp.error}</p>}
-        <p className="mt-8 font-mono text-[11px] text-dim">Free trial: 5 creator scans and 3 drafts. No card, no API keys.</p>
+        <p className="mt-8 font-mono text-[11px] text-dim">Free while in beta: 5 creator scans and 3 drafts to start, more on request. No card, no API keys.</p>
       </div>
     </div>
   );

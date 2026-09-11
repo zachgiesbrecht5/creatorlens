@@ -76,28 +76,40 @@ export async function classifyCreator(sb: SupabaseClient, creatorId: string, for
 }
 
 // ── Brand category ─────────────────────────────────────────────
-// Batched: name + domain + one evidence line per brand. The model also gets a
-// chance to say "this is not a brand" (a person, a song, a URL fragment) which
-// we treat as junk.
+// Batched. The model sees the brand's OWN site title + meta description (and
+// its domain), never the creator's caption: a caption about dumplings does
+// not make Airbnb a food brand. Each answer carries a confidence; low
+// confidence leaves the category empty ("Uncategorized") rather than wrong.
+// Locked brands (manual override) are never touched.
+const MIN_CONFIDENCE = 0.6;
 export async function classifyBrands(sb: SupabaseClient, ids?: string[], limit = 25) {
-  let q = sb.from("brands").select("id,name,key,domain,website").is("classified_at", null).eq("is_junk", false).order("deal_count", { ascending: false }).limit(limit);
-  if (ids?.length) q = sb.from("brands").select("id,name,key,domain,website").in("id", ids).is("classified_at", null).eq("is_junk", false);
-  const { data: brands } = await q;
-  if (!brands?.length) return 0;
-
-  const evid = new Map<string, string>();
-  const { data: ev } = await sb.from("partnerships").select("brand_id,evidence").in("brand_id", brands.map((b) => b.id)).order("confidence_score", { ascending: false }).limit(brands.length * 3);
-  for (const e of ev || []) if (!evid.has(e.brand_id) && e.evidence) evid.set(e.brand_id, String(e.evidence).slice(0, 160));
+  const cols = "id,name,key,domain,website,site_title,site_description,site_status,site_checked_at";
+  let q = sb.from("brands").select(cols).is("classified_at", null).eq("is_junk", false).eq("category_locked", false).order("deal_count", { ascending: false }).limit(limit);
+  if (ids?.length) q = sb.from("brands").select(cols).in("id", ids).is("classified_at", null).eq("is_junk", false).eq("category_locked", false);
+  const { data: all } = await q;
+  // wait for the site check so the prompt has real brand info
+  const brands = (all || []).filter((b) => b.site_checked_at);
+  if (!brands.length) return 0;
 
   const out = await ask(
-    `You categorise sponsor brands for a creator-marketing database. For each item reply with its category from ${JSON.stringify(CATS)} (what the brand sells, from a marketer's point of view), or "JUNK" if the name is not a real brand or company (a person, a song, a URL fragment, a generic word, a platform like YouTube). Reply with JSON only: {"<id>": "<category|JUNK>", ...}.`,
-    brands.map((b) => `${b.id} | ${b.name} | ${b.domain || b.website || "no site"} | ${evid.get(b.id) || ""}`).join("\n"),
+    `You categorise sponsor brands for a creator-marketing database. For each item decide what the BRAND SELLS, judged only from its name, domain, site title and site description. Categories: ${JSON.stringify(CATS)}. Rules: Airbnb/hotels/airlines = Travel; drinkware and kitchen = Home; supplements and hydration = Wellness; apparel = Fashion; activewear = Fitness; SaaS and commerce tools = Business; toys and kids products = Baby or Parenting. Reply "JUNK" when the name is not a real company (a person, a song, a URL fragment, a generic word, a platform like YouTube). Reply with JSON only: {"<id>": {"category": "<category|JUNK>", "confidence": <0..1>}, ...}. Use confidence under 0.6 when the site info is missing and the name alone is ambiguous.`,
+    brands.map((b) => `${b.id} | name: ${b.name} | domain: ${b.domain || b.website || "unknown"} | site title: ${b.site_title || "n/a"} | site description: ${(b.site_description || "n/a").slice(0, 160)}`).join("\n"),
   );
   const now = new Date().toISOString();
   for (const b of brands) {
-    const v = out && typeof out === "object" ? String(out[b.id] || "") : "";
-    if (v === "JUNK") await sb.from("brands").update({ is_junk: true, classified_at: now }).eq("id", b.id);
-    else await sb.from("brands").update({ category: v ? norm(v) : (matchCategory(b.name) === "Other" ? null : matchCategory(b.name)), classified_at: out ? now : null }).eq("id", b.id);
+    const v = out && typeof out === "object" ? out[b.id] : null;
+    const cat = typeof v === "string" ? v : String(v?.category || "");
+    const conf = typeof v === "object" && v ? Number(v.confidence ?? 0) : cat ? 0.7 : 0;
+    if (cat === "JUNK" && conf >= 0.8) { await sb.from("brands").update({ is_junk: true, classified_at: now }).eq("id", b.id); continue; }
+    if (out && cat && cat !== "JUNK" && conf >= MIN_CONFIDENCE) {
+      await sb.from("brands").update({ category: norm(cat), category_confidence: conf, classified_at: now }).eq("id", b.id);
+    } else if (out) {
+      // classified, but not confidently: leave empty so the UI shows Uncategorized, not a guess
+      await sb.from("brands").update({ category: null, category_confidence: conf || null, classified_at: now }).eq("id", b.id);
+    } else {
+      const kw = matchCategory(b.name);
+      await sb.from("brands").update({ category: kw === "Other" ? null : kw, classified_at: null }).eq("id", b.id);
+    }
   }
   log(`brands classified: ${brands.length}${out ? "" : " (no model; keyword fallback, will retry)"}`);
   return brands.length;
@@ -112,7 +124,14 @@ export async function rollupVerticals(sb: SupabaseClient, brandIds: string[]) {
     for (const r of rows || []) seen.set(r.creator_id, ((r as any).creators?.category as string) || "Other");
     const verticals: Record<string, number> = {};
     for (const cat of seen.values()) verticals[cat] = (verticals[cat] || 0) + 1;
-    await sb.from("brands").update({ verticals }).eq("id", id);
+    // affiliate / house brand: one creator is nearly all of the deals
+    const perCreator = new Map<string, number>();
+    for (const r of rows || []) perCreator.set(r.creator_id, (perCreator.get(r.creator_id) || 0) + 1);
+    const total = rows?.length || 0;
+    const top = Math.max(0, ...perCreator.values());
+    const share = total ? top / total : null;
+    const is_affiliate = total >= 8 && share !== null && share >= 0.8;
+    await sb.from("brands").update({ verticals, dominant_creator_share: share, is_affiliate }).eq("id", id);
   }
 }
 

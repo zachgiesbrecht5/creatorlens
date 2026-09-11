@@ -58,7 +58,7 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
           <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-line bg-line">
             <Stat n={highMed.length} label="brands" />
             <Stat n={highMed.reduce((s, c) => s + Number(c.deals), 0)} label="deals" />
-            <Stat n={repeat} label="repeat" accent />
+            <Stat n={repeat} label="repeat (30d+)" accent />
           </div>
         </div>
         {creator.bio && <p className="mt-5 max-w-3xl line-clamp-2 text-sm leading-relaxed text-muted" title={creator.bio}>{creator.bio}</p>}

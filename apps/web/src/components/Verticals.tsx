@@ -1,6 +1,8 @@
 // Which creator verticals a brand books, as compact chips: "Tech ×3 · Lifestyle".
-export function Verticals({ v, max = 3, bar }: { v: Record<string, number> | null | undefined; max?: number; bar?: boolean }) {
-  const entries = Object.entries(v || {}).filter(([k]) => k && k !== "Other").sort((a, b) => b[1] - a[1]);
+// `min`: a vertical needs at least this many distinct creators before it is shown
+// as something the brand "books" (one creator is an anecdote, not a pattern).
+export function Verticals({ v, max = 3, bar, min = 1 }: { v: Record<string, number> | null | undefined; max?: number; bar?: boolean; min?: number }) {
+  const entries = Object.entries(v || {}).filter(([k, n]) => k && k !== "Other" && n >= min).sort((a, b) => b[1] - a[1]);
   if (!entries.length) return <span className="num text-[10px] text-dim">–</span>;
   const total = entries.reduce((s, [, n]) => s + n, 0);
   if (bar) {
