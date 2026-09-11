@@ -124,19 +124,35 @@ async function apollo(domain: string) {
   return out;
 }
 
-// Hunter.io domain search resolves a company name to a domain and lists
-// people; we prefer marketing / partnerships / influencer titles.
+// Hunter.io domain search. A plain search returns ten arbitrary people, which
+// at a large company is engineers and sales, so we ask by department and
+// seniority first (the people who actually book creators), then widen.
 async function hunter(company: string, domain: string | null) {
-  const q = domain ? `domain=${encodeURIComponent(domain)}` : `company=${encodeURIComponent(company)}`;
-  const r = await fetch(`https://api.hunter.io/v2/domain-search?${q}&limit=10&api_key=${process.env.HUNTER_API_KEY}`).catch(() => null);
-  if (!r || !r.ok) return { domain: null as string | null, people: [] as any[] };
-  const j: any = await r.json();
-  const d = j.data || {};
-  const score = titleScore;
-  const people = (d.emails || [])
-    .map((e: any) => ({ name: [e.first_name, e.last_name].filter(Boolean).join(" ") || null, email: e.value, title: e.position || null, confidence: e.confidence || 0 }))
-    .filter((p: any) => p.email)
-    .sort((a: any, b: any) => score(b.title || "") - score(a.title || "") || b.confidence - a.confidence)
-    .slice(0, 5);
-  return { domain: d.domain || domain, people };
+  const key = process.env.HUNTER_API_KEY;
+  const base = domain ? `domain=${encodeURIComponent(domain)}` : `company=${encodeURIComponent(company)}`;
+  const passes = [
+    `${base}&department=marketing,communication&seniority=executive,senior&limit=25`,
+    `${base}&department=marketing,communication&limit=50`,
+    `${base}&limit=25`,
+  ];
+  const seen = new Map<string, any>();
+  let resolved: string | null = null;
+  for (const q of passes) {
+    const r = await fetch(`https://api.hunter.io/v2/domain-search?${q}&api_key=${key}`).catch(() => null);
+    if (!r) continue;
+    if (!r.ok) { console.warn("hunter", r.status, await r.text().catch(() => "")); continue; }
+    const j: any = await r.json();
+    const d = j.data || {};
+    resolved = resolved || d.domain || null;
+    for (const e of d.emails || []) {
+      if (!e.value || seen.has(e.value)) continue;
+      seen.set(e.value, { name: [e.first_name, e.last_name].filter(Boolean).join(" ") || null, email: e.value, title: e.position || null, confidence: e.confidence || 0, source: "hunter" });
+    }
+    // stop once we have a few people who look like they book creators
+    if ([...seen.values()].filter((p) => titleScore(p.title || "") >= 2).length >= 3) break;
+  }
+  const people = [...seen.values()]
+    .sort((a, b) => titleScore(b.title || "") - titleScore(a.title || "") || b.confidence - a.confidence)
+    .slice(0, 8);
+  return { domain: resolved, people };
 }
