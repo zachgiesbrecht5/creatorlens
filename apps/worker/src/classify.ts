@@ -119,7 +119,7 @@ export async function classifyBrands(sb: SupabaseClient, ids?: string[], limit =
 // {"Tech": 3, "Lifestyle": 1}: distinct creators per creator vertical.
 export async function rollupVerticals(sb: SupabaseClient, brandIds: string[]) {
   for (const id of brandIds) {
-    const { data: rows } = await sb.from("partnerships").select("creator_id, creators(category)").eq("brand_id", id).neq("status", "rejected");
+    const { data: rows } = await sb.from("partnerships").select("creator_id, platform, creators(category)").eq("brand_id", id).neq("status", "rejected");
     const seen = new Map<string, string>();
     for (const r of rows || []) seen.set(r.creator_id, ((r as any).creators?.category as string) || "Other");
     const verticals: Record<string, number> = {};
@@ -131,7 +131,9 @@ export async function rollupVerticals(sb: SupabaseClient, brandIds: string[]) {
     const top = Math.max(0, ...perCreator.values());
     const share = total ? top / total : null;
     const is_affiliate = total >= 8 && share !== null && share >= 0.8;
-    await sb.from("brands").update({ verticals, dominant_creator_share: share, is_affiliate }).eq("id", id);
+    const platform_counts: Record<string, number> = {};
+    for (const r of rows || []) platform_counts[r.platform] = (platform_counts[r.platform] || 0) + 1;
+    await sb.from("brands").update({ verticals, dominant_creator_share: share, is_affiliate, platform_counts }).eq("id", id);
   }
 }
 

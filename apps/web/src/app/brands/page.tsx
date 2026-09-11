@@ -21,7 +21,7 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
   const cats = [...counts.entries()].sort((a, b) => b[1] - a[1]);
 
   let query = admin.from("brands")
-    .select("id,name,category,verticals,deal_count,creator_count,last_seen,is_mass_sponsor,is_affiliate,classified_at,domain,website,site_status")
+    .select("id,name,category,verticals,deal_count,creator_count,last_seen,is_mass_sponsor,is_affiliate,classified_at,domain,website,site_status,platform_counts")
     .eq("is_junk", false).eq("is_self_brand", false).neq("site_status", "dead").limit(300);
   if (q) query = query.ilike("name", `%${q}%`);
   if (cat) query = query.eq("category", cat);
@@ -64,7 +64,7 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
       <div className="card mt-4 overflow-x-auto">
         <table className="tbl">
           <thead>
-            <tr><th>Brand</th><th>Category</th><th title="Creator verticals with 2+ distinct creators booked">Books</th>{insider && <><th className="text-right">Creators</th><th className="text-right">Deals</th><th>Last seen</th></>}<th>Site</th></tr>
+            <tr><th>Brand</th><th>Category</th><th title="Creator verticals with 2+ distinct creators booked">Books</th><th title="Where the deals were found">Platform</th>{insider && <><th className="text-right">Creators</th><th className="text-right">Deals</th><th>Last seen</th></>}<th>Site</th></tr>
           </thead>
           <tbody>
             {(data || []).slice(0, user ? undefined : PREVIEW).map((b) => (
@@ -72,13 +72,14 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
                 <td className="font-medium">{insider ? <Link href={`/brands/${b.id}`} className="hover:text-accent">{b.name}</Link> : b.name}{b.is_mass_sponsor && <span className="pill ml-2" title="Sponsors everyone; low signal">mass</span>}{b.is_affiliate && <span className="pill ml-2" title="One creator accounts for nearly all of these deals: affiliate, ambassador or house brand">affiliate</span>}</td>
                 <td>{b.category ? <Link href={href({ cat: b.category })} className="pill hover:border-accent hover:text-accent">{b.category}</Link> : <span className="num text-[10px] text-dim">{b.classified_at ? "Uncategorized" : "classifying…"}</span>}</td>
                 <td><Verticals v={b.verticals} max={3} min={2} /></td>
+                <td><Platforms counts={b.platform_counts} showCounts={insider} /></td>
                 {insider && <><td className="num text-right">{b.creator_count}</td>
                 <td className="num text-right">{b.deal_count}</td>
                 <td className="num text-[11px] text-muted">{b.last_seen || ""}</td></>}
                 <td className="num text-[11px] text-dim">{b.website ? <a href={b.website} target="_blank" rel="noreferrer" className="hover:text-accent">{b.website.replace(/^https?:\/\/(www\.)?/, "")} ↗</a> : b.site_status === "unknown" ? "checking…" : ""}</td>
               </tr>
             ))}
-            {!data?.length && <tr><td colSpan={insider ? 7 : 4} className="py-10 text-center text-sm text-muted">Nothing here yet.</td></tr>}
+            {!data?.length && <tr><td colSpan={insider ? 8 : 5} className="py-10 text-center text-sm text-muted">Nothing here yet.</td></tr>}
           </tbody>
         </table>
         {!user && (data?.length || 0) > PREVIEW && (
@@ -87,7 +88,7 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
               <table className="tbl">
                 <tbody>
                   {data!.slice(PREVIEW, PREVIEW + 4).map((b) => (
-                    <tr key={b.id}><td className="font-medium">{b.name}</td><td>{b.category && <span className="pill">{b.category}</span>}</td><td><Verticals v={b.verticals} max={3} min={2} /></td><td /></tr>
+                    <tr key={b.id}><td className="font-medium">{b.name}</td><td>{b.category && <span className="pill">{b.category}</span>}</td><td><Verticals v={b.verticals} max={3} min={2} /></td><td><Platforms counts={b.platform_counts} showCounts={false} /></td><td /></tr>
                   ))}
                 </tbody>
               </table>
@@ -107,5 +108,22 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
 function Chip({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   return (
     <Link href={href} className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[12px] transition ${active ? "border-fg bg-fg text-white" : "border-line bg-surface text-muted hover:border-line2 hover:text-fg"}`}>{children}</Link>
+  );
+}
+
+// YT 12 · IG 3, or just the platform marks for outsiders.
+function Platforms({ counts, showCounts }: { counts: Record<string, number> | null | undefined; showCounts: boolean }) {
+  const order = ["youtube", "instagram", "tiktok"] as const;
+  const short = { youtube: "YT", instagram: "IG", tiktok: "TT" } as const;
+  const items = order.filter((k) => counts && counts[k]);
+  if (!items.length) return <span className="num text-[10px] text-dim">–</span>;
+  return (
+    <span className="num flex gap-2 text-[11px]">
+      {items.map((k) => (
+        <span key={k} className={k === "youtube" ? "text-[#c4302b]" : k === "instagram" ? "text-[#b13589]" : "text-fg"} title={k}>
+          {short[k]}{showCounts && <span className="text-muted"> {counts![k]}</span>}
+        </span>
+      ))}
+    </span>
   );
 }

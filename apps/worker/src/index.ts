@@ -272,7 +272,7 @@ async function resolveBrandSite(brand: { id: string; key: string; name: string; 
   };
   // og:site_name is the brand's own spelling ("Feastables", not "Fstbls")
   if (info?.title && !brand.name_locked && info.title.length <= 40 && !/[|:\-–—]/.test(info.title)) {
-    const t = info.title.replace(/\b(official|site|store|shop|home)\b/gi, "").trim();
+    const t = info.title.replace(/\s*[»«|·].*$/, "").replace(/\s*(Limited|Ltd\.?|Inc\.?|LLC|Ventures|Corp\.?|Co\.)(,|\s|$).*$/, "").replace(/\b(official|site|store|shop|home)\b/gi, "").replace(/[,:]+$/, "").trim();
     const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
     if (t && (norm(t).includes(brand.key.slice(0, 4)) || brand.key.includes(norm(t).slice(0, 4)))) patch.name = t;
   }
