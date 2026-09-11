@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { currentUser, supabaseAdmin } from "@/lib/supabase";
+import { currentUser, supabaseAdmin, grantCreatorAccess } from "@/lib/supabase";
 import { resolveChannel, isValidIgUsername } from "@creatorlens/engine";
 
 const FRESH_DAYS = 14;
@@ -29,23 +29,24 @@ export async function POST(req: NextRequest) {
     if (!ch) return NextResponse.json({ error: "Channel not found. Try the @handle from the channel URL." }, { status: 404 });
     handle = (ch.handle || ch.id).replace(/^@/, "");
     const { data: cached } = await admin.from("creators").select("id,last_scanned_at").eq("platform", "youtube").eq("external_id", ch.id).maybeSingle();
-    if (cached?.last_scanned_at && isFresh(cached.last_scanned_at)) return NextResponse.json({ handle, cached: true });
+    if (cached?.last_scanned_at && isFresh(cached.last_scanned_at)) { await grantCreatorAccess(user.id, "youtube", handle); await grantCreatorAccess(user.id, "youtube", ch.id); return NextResponse.json({ handle, cached: true }); }
   } else {
     handle = handle.toLowerCase();
     if (!isValidIgUsername(handle)) return NextResponse.json({ error: "That is not a valid Instagram username" }, { status: 400 });
     const { data: cached } = await admin.from("creators").select("id,last_scanned_at").eq("platform", "instagram").eq("handle", handle).maybeSingle();
-    if (cached?.last_scanned_at && isFresh(cached.last_scanned_at)) return NextResponse.json({ handle, cached: true });
+    if (cached?.last_scanned_at && isFresh(cached.last_scanned_at)) { await grantCreatorAccess(user.id, "instagram", handle); return NextResponse.json({ handle, cached: true }); }
   }
 
   // Already queued by anyone? Piggyback, no charge.
   const { data: existing } = await admin.from("scan_jobs").select("id").eq("platform", platform).eq("handle", handle).in("status", ["queued", "running", "rate_limited"]).limit(1);
-  if (existing?.length) return NextResponse.json({ handle, cached: false, jobId: existing[0].id, piggyback: true });
+  if (existing?.length) { await grantCreatorAccess(user.id, platform, handle); return NextResponse.json({ handle, cached: false, jobId: existing[0].id, piggyback: true }); }
 
   const { data: ok } = await admin.rpc("spend_credit", { p_user: user.id, p_kind: "scan", p_reason: "scan", p_ref: `${platform}:${handle}` });
   if (!ok) return NextResponse.json({ error: "You're out of scan credits. Invite a teammate for 10 more, or upgrade." }, { status: 402 });
 
   const { data: job, error } = await admin.from("scan_jobs").insert({ user_id: user.id, platform, handle, priority: 3 }).select("id").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await grantCreatorAccess(user.id, platform, handle);
   return NextResponse.json({ handle, cached: false, jobId: job.id });
 }
 

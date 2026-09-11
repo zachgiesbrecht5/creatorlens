@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { supabaseAdmin, currentUser } from "@/lib/supabase";
+import { supabaseAdmin, currentUser, currentAccess, canSeeCreator } from "@/lib/supabase";
+import { UnlockCreator } from "@/components/UnlockCreator";
 import { BrandWall, type WallCard, type RosterCreator } from "@/components/BrandWall";
 import { ScanProgress } from "@/components/ScanProgress";
 import { fmt } from "@/lib/fmt";
@@ -32,6 +33,8 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
     );
   }
 
+  const { insider } = await currentAccess();
+  const unlocked = await canSeeCreator(user?.id || null, insider, creator);
   const { data: wall } = await admin.from("brand_wall").select("*").eq("creator_id", creator.id).order("deals", { ascending: false }).order("best_score", { ascending: false });
   const cards = ((wall || []) as WallCard[]).filter((c) => !c.is_junk);
   const { data: roster } = user ? await admin.from("roster_creators").select("id,name,handle,platform,followers").eq("user_id", user.id).order("name") : { data: [] };
@@ -65,7 +68,11 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
       </div>
       {active && <ScanProgress jobId={job!.id} initialStatus={job!.status} compact />}
 
+      {!unlocked ? (
+        <UnlockCreator platform={p} handle={creator.handle} signedIn={!!user} brands={highMed.length} />
+      ) : (
       <BrandWall cards={cards} creator={{ id: creator.id, handle: creator.handle, platform: p, displayName: creator.display_name || creator.handle }} signedIn={!!user} roster={(roster || []) as RosterCreator[]} />
+      )}
     </div>
   );
 }

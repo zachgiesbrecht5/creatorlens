@@ -37,3 +37,30 @@ export async function currentProfile() {
   const { data } = await sb.from("profiles").select("*").eq("id", user.id).single();
   return data;
 }
+
+/**
+ * House scope. Insiders (members of the house org, or plan=admin) see the whole
+ * shared index; everyone else sees only creators they unlocked by scanning.
+ */
+export async function currentAccess() {
+  const profile = await currentProfile();
+  if (!profile) return { profile: null, insider: false };
+  if (profile.plan === "admin") return { profile, insider: true };
+  if (!profile.org_id) return { profile, insider: false };
+  const { data: org } = await supabaseAdmin().from("orgs").select("is_house").eq("id", profile.org_id).maybeSingle();
+  return { profile, insider: !!org?.is_house };
+}
+
+/** Has this user unlocked this creator (scanned it themselves)? Insiders always yes. */
+export async function canSeeCreator(userId: string | null, insider: boolean, creator: { platform: string; handle: string; external_id?: string | null }) {
+  if (insider) return true;
+  if (!userId) return false;
+  const admin = supabaseAdmin();
+  const handles = [creator.handle.toLowerCase(), (creator.external_id || "").toLowerCase()].filter(Boolean);
+  const { data } = await admin.from("creator_access").select("handle").eq("user_id", userId).eq("platform", creator.platform).in("handle", handles).limit(1);
+  return !!data?.length;
+}
+
+export async function grantCreatorAccess(userId: string, platform: string, handle: string) {
+  await supabaseAdmin().from("creator_access").upsert({ user_id: userId, platform, handle: handle.toLowerCase() }, { onConflict: "user_id,platform,handle", ignoreDuplicates: true });
+}

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { currentProfile, supabaseAdmin } from "@/lib/supabase";
+import { currentProfile, currentAccess, canSeeCreator, supabaseAdmin } from "@/lib/supabase";
 import { googleAccessToken, createGmailDraft } from "@/lib/gmail";
 
 // POST { brandId, creatorId, rosterCreatorId, contactId?, toEmail }
@@ -25,12 +25,14 @@ export async function POST(req: NextRequest) {
 
   const [{ data: brand }, { data: creator }, { data: evidence }, { data: others }, { data: contact }] = await Promise.all([
     admin.from("brands").select("name,domain,deal_count,creator_count").eq("id", brandId).single(),
-    admin.from("creators").select("handle,display_name,platform,followers,bio,category").eq("id", creatorId).single(),
+    admin.from("creators").select("handle,display_name,platform,followers,bio,category,external_id").eq("id", creatorId).single(),
     admin.from("partnerships").select("content_title,content_url,published_at,views,evidence,confidence_label").eq("brand_id", brandId).eq("creator_id", creatorId).neq("status", "rejected").order("published_at", { ascending: false }).limit(5),
     admin.from("partnerships").select("creators(handle,display_name,followers)").eq("brand_id", brandId).neq("creator_id", creatorId).limit(6),
     contactId ? admin.from("contacts").select("name,title").eq("id", contactId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   if (!brand || !creator) return NextResponse.json({ error: "Missing brand or creator" }, { status: 404 });
+  const { insider } = await currentAccess();
+  if (!(await canSeeCreator(profile.id, insider, creator as any))) return NextResponse.json({ error: "Scan this creator first to draft from their deals." }, { status: 403 });
 
   const { data: ok } = await admin.rpc("spend_credit", { p_user: profile.id, p_kind: "draft", p_reason: "draft", p_ref: `${brand.name}:${mine.handle || mine.name}` });
   if (!ok) return NextResponse.json({ error: "Out of draft credits" }, { status: 402 });

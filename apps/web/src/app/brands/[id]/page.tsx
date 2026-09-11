@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { supabaseAdmin } from "@/lib/supabase";
+import { redirect } from "next/navigation";
+import { supabaseAdmin, currentAccess } from "@/lib/supabase";
 import { fmt } from "@/lib/fmt";
 import { Verticals } from "@/components/Verticals";
 
@@ -9,6 +10,8 @@ export const dynamic = "force-dynamic";
 // intel for "who does Brand X work with" and for competitor pitches.
 export default async function BrandPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const { insider } = await currentAccess();
+  if (!insider) redirect("/brands");   // reverse view (every creator a brand booked, contacts) is house-only
   const admin = supabaseAdmin();
   const { data: brand } = await admin.from("brands").select("*").eq("id", id).single();
   if (!brand) return <p>Brand not found.</p>;

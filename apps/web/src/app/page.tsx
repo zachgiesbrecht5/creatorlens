@@ -1,19 +1,26 @@
 import Link from "next/link";
 import { SearchBox } from "@/components/SearchBox";
-import { supabaseAdmin, currentUser } from "@/lib/supabase";
+import { supabaseAdmin, currentAccess } from "@/lib/supabase";
 import { fmt } from "@/lib/fmt";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const user = await currentUser();
+  const { profile: user, insider } = await currentAccess();
   const admin = supabaseAdmin();
-  const [{ count: creators }, { count: brands }, { count: deals }, { data: recent }] = await Promise.all([
+  const [{ count: creators }, { count: brands }, { count: deals }] = await Promise.all([
     admin.from("creators").select("*", { count: "exact", head: true }),
     admin.from("brands").select("*", { count: "exact", head: true }),
     admin.from("partnerships").select("*", { count: "exact", head: true }),
-    admin.from("creators").select("platform,handle,display_name,avatar_url,followers").order("last_scanned_at", { ascending: false }).limit(12),
   ]);
+  // Recently scanned: the whole index for the house, only your own unlocks otherwise.
+  let recent: { platform: string; handle: string; display_name: string | null; avatar_url: string | null; followers: number | null }[] = [];
+  if (insider) {
+    recent = (await admin.from("creators").select("platform,handle,display_name,avatar_url,followers").order("last_scanned_at", { ascending: false }).limit(12)).data || [];
+  } else if (user) {
+    const { data: mine } = await admin.from("creator_access").select("platform,handle").eq("user_id", user.id).order("created_at", { ascending: false }).limit(24);
+    if (mine?.length) recent = ((await admin.from("creators").select("platform,handle,display_name,avatar_url,followers").in("handle", mine.map((m) => m.handle)).limit(12)).data || []);
+  }
 
   return (
     <div>
@@ -40,7 +47,7 @@ export default async function Home() {
       {recent && recent.length > 0 && (
         <section className="mt-4">
           <div className="mb-3 flex items-baseline justify-between">
-            <div className="label">Recently scanned</div>
+            <div className="label">{insider ? "Recently scanned" : "Your creators"}</div>
             <div className="font-mono text-[11px] text-dim">live</div>
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">

@@ -29,6 +29,16 @@ export default async function Queue() {
     admin.from("house_quota").select("yt_units").eq("day", day).maybeSingle(),
     admin.from("ig_connections").select("ig_username,healthy,cooldown_until,calls_this_hour"),
   ]);
+  // Outside intel: what managers who aren't in the house are scanning and pitching.
+  const { data: houseOrgs } = await admin.from("orgs").select("id").eq("is_house", true);
+  const houseIds = (houseOrgs || []).map((o) => o.id);
+  const { data: outsiders } = await admin.from("profiles").select("id,full_name,email,org_id,plan").neq("plan", "admin");
+  const outsideIds = (outsiders || []).filter((p) => !p.org_id || !houseIds.includes(p.org_id)).map((p) => p.id);
+  const who = new Map((outsiders || []).map((p) => [p.id, p.full_name || p.email]));
+  const [{ data: outsideScans }, { data: outsidePitches }] = outsideIds.length ? await Promise.all([
+    admin.from("creator_access").select("user_id,platform,handle,created_at").in("user_id", outsideIds).order("created_at", { ascending: false }).limit(40),
+    admin.from("outreach_log").select("user_id,creator_handle,contact_email,subject,status,created_at,brands(name,category)").in("user_id", outsideIds).order("created_at", { ascending: false }).limit(40),
+  ]) : [{ data: [] }, { data: [] }];
   const budget = Number(process.env.YT_DAILY_BUDGET || 9000);
   const used = quota?.yt_units ?? 0;
   return (
@@ -74,6 +84,47 @@ export default async function Queue() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-10 mb-3 flex items-baseline justify-between">
+        <div><div className="label mb-1">Outside the house</div><h2 className="h2 text-xl">What other managers are doing</h2></div>
+        <div className="font-mono text-[11px] text-dim">{outsideIds.length} outside account{outsideIds.length === 1 ? "" : "s"}</div>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="card overflow-x-auto">
+          <div className="border-b border-line px-4 py-3 text-sm font-medium">Creators they unlocked</div>
+          <table className="tbl">
+            <thead><tr><th>Creator</th><th>By</th><th>When</th></tr></thead>
+            <tbody>
+              {(outsideScans || []).map((a) => (
+                <tr key={a.user_id + a.platform + a.handle}>
+                  <td><Link href={`/c/${a.platform}/${a.handle}`} className="hover:text-accent">@{a.handle}</Link> <span className="num text-[10px] text-dim">{a.platform === "youtube" ? "YT" : "IG"}</span></td>
+                  <td className="text-muted">{who.get(a.user_id)}</td>
+                  <td className="num text-[11px] text-muted">{new Date(a.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))}
+              {!outsideScans?.length && <tr><td colSpan={3} className="py-6 text-center text-sm text-muted">Nothing yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="card overflow-x-auto">
+          <div className="border-b border-line px-4 py-3 text-sm font-medium">Brands they pitched</div>
+          <table className="tbl">
+            <thead><tr><th>Brand</th><th>For</th><th>By</th><th>Status</th><th>When</th></tr></thead>
+            <tbody>
+              {(outsidePitches || []).map((o: any, i) => (
+                <tr key={i}>
+                  <td className="font-medium">{o.brands?.name || "?"}{o.brands?.category && <span className="pill ml-2">{o.brands.category}</span>}</td>
+                  <td className="text-muted">{o.creator_handle ? "@" + o.creator_handle : ""}</td>
+                  <td className="text-muted">{who.get(o.user_id)}</td>
+                  <td className="num text-[11px]">{o.status}</td>
+                  <td className="num text-[11px] text-muted">{new Date(o.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))}
+              {!outsidePitches?.length && <tr><td colSpan={5} className="py-6 text-center text-sm text-muted">Nothing yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

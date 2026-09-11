@@ -1,15 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { currentProfile, supabaseAdmin } from "@/lib/supabase";
+import { currentAccess, supabaseAdmin } from "@/lib/supabase";
 
 // GET /api/contacts/:brandId
 // Order of trust: contacts already in the pool (imported from the Outreach Log,
 // or added by teammates) -> Hunter lookup (cached into the pool) -> nothing.
 // Also returns the org's pitch history for this brand and the exclusion flag.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ brandId: string }> }) {
-  const profile = await currentProfile();
+  const { profile, insider } = await currentAccess();
   if (!profile) return NextResponse.json({ error: "Sign in" }, { status: 401 });
   const { brandId } = await params;
   const admin = supabaseAdmin();
+  if (!insider) {
+    // outsiders only get contacts for brands that appear on a creator they unlocked
+    const { data: mine } = await admin.from("creator_access").select("platform,handle").eq("user_id", profile.id);
+    const keys = new Set((mine || []).map((m) => `${m.platform}:${m.handle.toLowerCase()}`));
+    const { data: sponsored } = keys.size ? await admin.from("partnerships").select("creators(platform,handle,external_id)").eq("brand_id", brandId).neq("status", "rejected").limit(500) : { data: [] };
+    const hit = (sponsored || []).some((r: any) => r.creators && (keys.has(`${r.creators.platform}:${String(r.creators.handle).toLowerCase()}`) || keys.has(`${r.creators.platform}:${String(r.creators.external_id || "").toLowerCase()}`)));
+    if (!hit) return NextResponse.json({ error: "Scan a creator this brand sponsors to unlock its contact." }, { status: 403 });
+  }
 
   const { data: brand } = await admin.from("brands").select("id,name,key,domain,website").eq("id", brandId).single();
   if (!brand) return NextResponse.json({ error: "Unknown brand" }, { status: 404 });
