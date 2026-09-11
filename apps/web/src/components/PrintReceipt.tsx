@@ -12,14 +12,14 @@ const LINES: { brand: string; tag: string; when: string; deals: number; repeat?:
 ];
 
 export function PrintReceipt({ indexDeals }: { indexDeals: number }) {
-  let d = 0;                       // running animation delay
-  const step = (ms: number) => { const v = d; d += ms; return { animationDelay: `${v}ms` }; };
+  const step = (_ms: number) => ({});   // lines ride the paper feed now; per-line delays unused
   const totalDeals = LINES.reduce((s, l) => s + l.deals, 0);
   const repeats = LINES.filter((l) => l.repeat).length;
 
   return (
     <div className="rc-wrap" aria-hidden>
-      <div className="rc-slot" />
+      <div className="rc-slot"><span className="rc-led" /></div>
+      <div className="rc-feed">
       <div className="rc-paper">
         <div className="rc-line rc-head" style={step(250)}>
           <span>sponsorprint</span>
@@ -55,6 +55,7 @@ export function PrintReceipt({ indexDeals }: { indexDeals: number }) {
           <span>public posts only</span>
         </div>
         <div className="rc-tear" />
+      </div>
       </div>
     </div>
   );
