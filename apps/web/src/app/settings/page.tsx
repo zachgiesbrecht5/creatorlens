@@ -63,29 +63,9 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="lg:col-span-2 space-y-6">
-        <form action={savePrompt} className="card p-6">
-          <h2 className="h2 text-xl">Your pitch style</h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted">This is the skill the drafter follows. Write it the way you would brief a new teammate: tone, structure, what to lead with, what never to say. The deal evidence is added automatically.</p>
-          <textarea name="pitch_prompt" rows={10} className="input-flat mt-5 font-mono text-xs leading-relaxed" defaultValue={profile.pitch_prompt || ""} placeholder={`Example:\nWarm and short, two paragraphs max. Open with the specific reason this creator fits (a past deal with them or a competitor). Second paragraph: one line on audience and format. Close with a single question. Never quote rates; ask for their budget range. No "I hope this finds you well".`} />
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="label">Sign-off phrase</label>
-              <input name="signature" className="input-flat mt-1" defaultValue={profile.signature || ""} placeholder="Best" />
-            </div>
-            <div>
-              <label className="label">Email signature (appended to every draft, exactly as written)</label>
-              <textarea name="email_signature" rows={5} className="input-flat mt-1 font-mono text-xs leading-relaxed" defaultValue={profile.email_signature || ""} placeholder={"Best,\nYour name\nFounder, Your Agency\nyouragency.com · 555-000-0000"} />
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-3">
-            <button className="btn-primary ml-auto">Save style</button>
-            {sp.saved && <span className="font-mono text-[11px] text-ok">Saved</span>}
-          </div>
-        </form>
-
         <div className="card p-6" id="roster">
           <h2 className="h2 text-xl">My creators</h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted">The creators you represent. Every pitch is written for one of these; the scanned creator on a brand wall is only the proof that the brand books this kind of talent.</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">Start here. Add the creators you represent; every pitch Sponsorprint writes is for one of them. The creator you scan on a brand wall is only the proof that the brand books this kind of talent.</p>
           {roster?.length ? (
             <div className="mt-4 divide-y divide-line">
               {roster.map((r) => (
@@ -113,6 +93,26 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             <div className="md:col-span-2 flex justify-end"><button className="btn-ghost">Add creator</button></div>
           </form>
         </div>
+
+        <form action={savePrompt} className="card p-6">
+          <h2 className="h2 text-xl">Your pitch style</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted">This is the skill the drafter follows. Write it the way you would brief a new teammate: tone, structure, what to lead with, what never to say. The deal evidence is added automatically.</p>
+          <textarea name="pitch_prompt" rows={10} className="input-flat mt-5 font-mono text-xs leading-relaxed" defaultValue={profile.pitch_prompt || ""} placeholder={`Example:\nWarm and short, two paragraphs max. Open with the specific reason this creator fits (a past deal with them or a competitor). Second paragraph: one line on audience and format. Close with a single question. Never quote rates; ask for their budget range. No "I hope this finds you well".`} />
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="label">Sign-off phrase</label>
+              <input name="signature" className="input-flat mt-1" defaultValue={profile.signature || ""} placeholder="Best" />
+            </div>
+            <div>
+              <label className="label">Email signature (appended to every draft, exactly as written)</label>
+              <textarea name="email_signature" rows={5} className="input-flat mt-1 font-mono text-xs leading-relaxed" defaultValue={profile.email_signature || ""} placeholder={"Best,\nYour name\nFounder, Your Agency\nyouragency.com · 555-000-0000"} />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <button className="btn-primary ml-auto">Save style</button>
+            {sp.saved && <span className="font-mono text-[11px] text-ok">Saved</span>}
+          </div>
+        </form>
 
         <div className="card p-6">
           <h2 className="h2 text-xl">Connections</h2>
