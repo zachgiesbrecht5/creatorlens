@@ -110,3 +110,30 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 .rail { position: relative; }
 .rail::before { content: ""; position: absolute; left: 0; right: 0; top: 7px; border-top: 1px dashed #cfd3d9; }
 .rail-dot { position: relative; z-index: 1; width: 15px; height: 15px; border-radius: 50%; background: #fff; border: 1.5px solid #0b0d12; }
+
+/* ── Print wall (creator page) ───────────────────────────── */
+.pw { position: relative; background: #fbfbfa; border: 1px solid #e4e6ea; border-top: 0; border-radius: 0 0 4px 4px; padding: 0 22px 12px;
+  box-shadow: 0 24px 40px -28px rgba(11,13,18,.35), 0 1px 0 rgba(11,13,18,.05); font-family: var(--font-mono), ui-monospace, monospace; }
+.pw::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 10px; background: linear-gradient(180deg, #1a1e26, #0b0d12); border-radius: 4px 4px 0 0; }
+.pw-head, .pw-line { display: grid; grid-template-columns: minmax(180px,1.4fr) minmax(0,2.2fr) 84px 52px 74px; gap: 16px; align-items: center; }
+.pw-head { padding: 22px 0 8px; color: #8b93a1; font-size: 10.5px; letter-spacing: .04em; border-bottom: 1px dashed #cfd3d9; }
+.pw-row { border-bottom: 1px solid rgba(11,13,18,.07); cursor: pointer; opacity: 0; animation: pw-in .28s ease-out forwards; }
+.pw-line { padding: 11px 0; }
+.pw-row:hover .pw-line { background: linear-gradient(90deg, rgba(47,91,255,.05), transparent 70%); }
+.pw-open { background: #fff; box-shadow: inset 3px 0 0 #2f5bff; margin: 0 -22px; padding: 0 22px; }
+.pw-dealscol { text-align: right; }
+.pw-confcol { text-align: right; }
+.pw-tag { font-style: normal; font-size: 9.5px; letter-spacing: .05em; color: #8b93a1; white-space: nowrap; }
+.pw-tag-repeat { color: #0e6b45; }
+.pw-drawer { padding: 4px 0 16px; }
+.pw-peek { padding: 0 0 8px; font-size: 10.5px; color: #8b93a1; }
+.pw-foot { display: flex; justify-content: space-between; padding: 14px 0 4px; color: #8b93a1; font-size: 10.5px; }
+@keyframes pw-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pw-row { animation: none; opacity: 1; } }
+@media (max-width: 720px) {
+  .pw { padding: 0 14px 10px; }
+  .pw-head { display: none; }
+  .pw-line { grid-template-columns: 1fr auto; grid-template-areas: "brand conf" "ev ev" "last deals"; gap: 6px 12px; }
+  .pw-brandcol { grid-area: brand; } .pw-evcol { grid-area: ev; } .pw-lastcol { grid-area: last; } .pw-dealscol { grid-area: deals; } .pw-confcol { grid-area: conf; }
+  .pw-open { margin: 0 -14px; padding: 0 14px; }
+}

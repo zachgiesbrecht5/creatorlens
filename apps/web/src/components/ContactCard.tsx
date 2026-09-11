@@ -73,8 +73,8 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
       )}
 
       {roster.length === 0 ? (
-        <div className="mt-3 font-mono text-[11px] text-muted">
-          Add the creators you represent in <Link href="/settings#roster" className="text-accent hover:underline">Settings</Link> to draft pitches.
+        <div className="mt-3 text-[12px] text-muted">
+          To pitch, add a creator you represent in <Link href="/settings#roster" className="text-accent hover:underline">Settings</Link>.
         </div>
       ) : (
         <div className="mt-3 flex flex-wrap items-center gap-2">
