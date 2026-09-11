@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 
 type Hit = { platform: "youtube" | "instagram"; handle: string; display_name: string; avatar_url: string; followers: number; cached: boolean };
 
-export function SearchBox({ signedIn }: { signedIn: boolean }) {
+export function SearchBox({ signedIn, cta = "Scan" }: { signedIn: boolean; cta?: string }) {
   const [q, setQ] = useState("");
   const [platform, setPlatform] = useState<"youtube" | "instagram">("youtube");
   const [hits, setHits] = useState<Hit[]>([]);
@@ -51,7 +51,7 @@ export function SearchBox({ signedIn }: { signedIn: boolean }) {
           onKeyDown={(e) => { if (e.key === "Enter" && q.trim()) scan(q.trim()); }}
         />
         <button className="btn-primary" disabled={busy || !q.trim()} onClick={() => scan(q.trim())}>
-          {busy ? "Queuing…" : "Scan"}
+          {busy ? "Queuing…" : cta}
         </button>
       </div>
       {err && <p className="mt-3 text-sm text-bad">{err}</p>}

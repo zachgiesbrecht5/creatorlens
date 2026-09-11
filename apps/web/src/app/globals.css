@@ -52,3 +52,46 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 .prose-sp ul { @apply list-disc pl-5; }
 .prose-sp a { @apply underline decoration-line2 underline-offset-2 hover:text-fg; }
 .prose-sp code { @apply rounded bg-surface2 px-1 font-mono text-[12px]; }
+
+/* ── Sponsor print (landing hero) ────────────────────────── */
+.rc-wrap { position: relative; width: 100%; max-width: 440px; margin-inline: auto; font-family: var(--font-mono), ui-monospace, monospace; }
+.rc-slot { position: relative; z-index: 2; height: 18px; border-radius: 6px; background: linear-gradient(#1a1e26, #0b0d12); box-shadow: 0 6px 18px -6px rgba(11,13,18,.5), inset 0 -1px 0 rgba(255,255,255,.08); }
+.rc-slot::after { content: ""; position: absolute; left: 14px; right: 14px; top: 7px; height: 4px; border-radius: 2px; background: #000; box-shadow: inset 0 1px 0 rgba(255,255,255,.06); }
+.rc-paper { position: relative; margin: 0 14px; padding: 18px 18px 10px; background: #fbfbfa; color: #0b0d12; font-size: 12px; line-height: 1.5;
+  box-shadow: 0 30px 50px -30px rgba(11,13,18,.45), 0 1px 0 rgba(11,13,18,.06); }
+.rc-paper::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent 0 22px, rgba(11,13,18,.025) 22px 23px); }
+.rc-line { display: flex; justify-content: space-between; gap: 12px; }
+.rc-head { color: #8b93a1; font-size: 10.5px; letter-spacing: .04em; }
+.rc-title { align-items: baseline; margin-top: 8px; }
+.rc-handle { font-family: var(--font-sans), Inter, sans-serif; font-weight: 600; font-size: 20px; letter-spacing: -.02em; }
+.rc-sub { color: #5b6472; font-size: 10.5px; text-align: right; }
+.rc-rule { height: 0; margin: 10px 0 6px; border-top: 1px dashed #cfd3d9; }
+.rc-cols, .rc-row { display: grid; grid-template-columns: 1.25fr 1.35fr .6fr .4fr; gap: 10px; }
+.rc-cols { color: #8b93a1; font-size: 10.5px; padding-bottom: 4px; }
+.rc-row { padding: 5px 0; border-top: 1px solid rgba(11,13,18,.05); }
+.rc-row:first-of-type { border-top: 0; }
+.rc-brand { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-brand em { font-style: normal; margin-left: 6px; font-size: 9.5px; color: #0e6b45; letter-spacing: .04em; }
+.rc-tag { color: #5b6472; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-when { color: #5b6472; }
+.rc-deals { text-align: right; font-variant-numeric: tabular-nums; }
+.rc-total { font-weight: 500; }
+.rc-money { color: #0e6b45; letter-spacing: .08em; }
+.rc-contact { margin-top: 10px; padding: 9px 10px; border-radius: 6px; background: #e9eeff; color: #1d3fd6; font-size: 11.5px; }
+.rc-draft { font-weight: 600; white-space: nowrap; }
+.rc-foot { margin-top: 12px; color: #8b93a1; font-size: 10.5px; }
+.rc-tear { position: absolute; left: 0; right: 0; bottom: -9px; height: 10px; background: #fbfbfa;
+  -webkit-mask: linear-gradient(-45deg, transparent 0 6px, #000 6px) 0 0 / 12px 100% repeat-x, linear-gradient(45deg, transparent 0 6px, #000 6px) 6px 0 / 12px 100% repeat-x;
+  mask: linear-gradient(-45deg, transparent 0 6px, #000 6px) 0 0 / 12px 100% repeat-x, linear-gradient(45deg, transparent 0 6px, #000 6px) 6px 0 / 12px 100% repeat-x;
+  -webkit-mask-composite: source-in; mask-composite: intersect; }
+
+/* print-out: each line arrives in order; the whole thing plays once on load */
+@keyframes rc-print { from { opacity: 0; transform: translateY(-6px); clip-path: inset(0 0 100% 0); } to { opacity: 1; transform: none; clip-path: inset(0 0 -2px 0); } }
+.rc-paper .rc-line, .rc-paper .rc-rule { opacity: 0; animation: rc-print .32s cubic-bezier(.2,.7,.2,1) forwards; }
+@media (prefers-reduced-motion: reduce) { .rc-paper .rc-line, .rc-paper .rc-rule { animation: none; opacity: 1; } }
+
+/* journey rail under the hero */
+.rail { position: relative; }
+.rail::before { content: ""; position: absolute; left: 0; right: 0; top: 7px; border-top: 1px dashed #cfd3d9; }
+.rail-dot { position: relative; z-index: 1; width: 15px; height: 15px; border-radius: 50%; background: #fff; border: 1.5px solid #0b0d12; }
