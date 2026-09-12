@@ -164,3 +164,8 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 .pw-stats b.ok { color: #0e6b45; }
 .pw-empty { padding: 34px 0 20px; text-align: center; color: #5b6472; font-size: 12px; }
 .pw-bio { color: #5b6472; font-size: 11px; padding: 8px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* landing hero: ink background so the print is the light source */
+.hero { background: #0b0d12; background-image: radial-gradient(60% 80% at 75% 45%, rgba(47,91,255,.14), transparent 60%), repeating-linear-gradient(0deg, transparent 0 39px, rgba(255,255,255,.035) 39px 40px); }
+.hero .rc-machine { filter: drop-shadow(0 30px 40px rgba(0,0,0,.6)); }
+.hero .rc-paper { box-shadow: 0 40px 70px -30px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.06); }

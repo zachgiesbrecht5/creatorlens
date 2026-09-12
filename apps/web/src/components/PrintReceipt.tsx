@@ -18,7 +18,9 @@ const LINES: { brand: string; tag: string; when: string; deals: number; repeat?:
 
 export function PrintReceipt({ indexDeals }: { indexDeals: number }) {
   const [run, setRun] = useState(0);   // bump to re-print
+  const [lcd, setLcd] = useState("PRINTING…");
   const feed = () => { playPrint(); setRun((r) => r + 1); };
+  useEffect(() => { setLcd("PRINTING…"); const t = setTimeout(() => setLcd("DONE ✓ TEAR"), 4700); return () => clearTimeout(t); }, [run]);
   // First load: browsers block sound until a gesture, so the first click or tap
   // anywhere on the page re-prints with sound.
   useEffect(() => { if (playPrint()) return; armOnGesture(() => setRun((r) => { playPrint(); return r + 1; })); }, []);
@@ -28,7 +30,7 @@ export function PrintReceipt({ indexDeals }: { indexDeals: number }) {
 
   return (
     <div className="rc-wrap">
-      <PrinterMachine key={`m-${run}`} lcd={undefined} lines={undefined} printing onFeed={feed} className="rc-machine-anim" />
+      <PrinterMachine key={`m-${run}`} lcd={lcd} printing={lcd === "PRINTING…"} onFeed={feed} className="rc-machine-anim" />
       <div className="rc-feed">
       <div className="rc-paper" key={`paper-${run}`}>
         <div className="rc-line rc-head" style={step(250)}>

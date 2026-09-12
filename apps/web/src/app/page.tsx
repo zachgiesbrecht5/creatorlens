@@ -26,17 +26,17 @@ export default async function Home() {
   return (
     <div>
       {/* Hero: the print is the product. Headline left, the machine on the right. */}
-      <section className="-mx-6 -mt-10 border-b border-line bg-surface px-6 pb-14 pt-14 md:pt-20">
+      <section className="hero -mx-6 -mt-10 px-6 pb-16 pt-14 md:pt-20">
         <div className="mx-auto grid max-w-6xl items-center gap-12 md:grid-cols-12">
           <div className="md:col-span-6">
-            <h1 className="h1 max-w-xl">Pull a creator&apos;s sponsor print.</h1>
-            <p className="mt-6 max-w-lg text-lg leading-relaxed text-muted">
+            <h1 className="h1 max-w-xl text-white">Pull a creator&apos;s sponsor print.</h1>
+            <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/70">
               Every brand that has paid them, the post that proves it, and the person to email. Twenty seconds from a handle to a pitch for your own talent.
             </p>
             <div className="mt-8 max-w-xl">
               <SearchBox signedIn={!!user} cta="Pull the print" />
             </div>
-            <p className="mt-4 text-[13px] text-dim">Public posts only, read through the official YouTube and Instagram APIs. Nothing is ever sent for you.</p>
+            <p className="mt-4 text-[13px] text-white/45">Public posts only, read through the official YouTube and Instagram APIs. Nothing is ever sent for you.</p>
           </div>
           <div className="md:col-span-6 md:pl-6">
             <PrintReceipt indexDeals={deals ?? 0} />
