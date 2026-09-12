@@ -89,17 +89,17 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
       <div className="mt-6 flex flex-wrap items-center gap-1.5">
         <Chip href={href({ cat: undefined })} active={!cat}>All</Chip>
         {cats.map(([c, n]) => <Chip key={c} href={href({ cat: c })} active={cat === c}>{c} <span className="num text-dim">{n}</span></Chip>)}
-        {insider && <div className="ml-auto flex rounded-md bg-surface2 p-0.5 font-mono text-[11px]">
+        {insider && <div className="ml-auto flex flex-wrap items-center rounded-lg bg-surface2 p-1 text-[14px] font-semibold tracking-tight">
           {seesAll && ([["", "all scans"], ["mine", "my scans"]] as const).map(([v, l]) => (
-            <Link key={"s" + l} href={href({ scope: v || undefined })} className={`rounded px-2.5 py-1 transition ${(scope || "") === v ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}>{l}</Link>
+            <Link key={"s" + l} href={href({ scope: v || undefined })} className={`rounded-md px-3.5 py-1.5 transition ${(scope || "") === v ? "bg-fg text-white shadow-card" : "text-muted hover:text-fg"}`}>{l}</Link>
           ))}
-          {seesAll && <span className="mx-1 w-px bg-line" />}
+          {seesAll && <span className="mx-1.5 h-5 w-px bg-line2" />}
           {seesAll && ([["", "table"], ["map", "map"]] as const).map(([v, l]) => (
-            <Link key={l} href={href({ view: v || undefined })} className={`rounded px-2.5 py-1 transition ${(view || "") === v ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}>{l}</Link>
+            <Link key={l} href={href({ view: v || undefined })} className={`rounded-md px-3.5 py-1.5 transition ${(view || "") === v ? "bg-fg text-white shadow-card" : "text-muted hover:text-fg"}`}>{l}</Link>
           ))}
-          {seesAll && <span className="mx-1 w-px bg-line" />}
+          {seesAll && <span className="mx-1.5 h-5 w-px bg-line2" />}
           {[["", "creators"], ["deals", "deals"], ["recent", "recent"]].map(([s, l]) => (
-            <Link key={l} href={href({ sort: s || undefined })} className={`rounded px-2.5 py-1 transition ${(sort || "") === s ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}>{l}</Link>
+            <Link key={l} href={href({ sort: s || undefined })} className={`rounded-md px-3.5 py-1.5 transition ${(sort || "") === s ? "bg-fg text-white shadow-card" : "text-muted hover:text-fg"}`}>{l}</Link>
           ))}
         </div>}
       </div>
