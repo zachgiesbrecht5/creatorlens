@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { PrinterMachine } from "@/components/PrinterMachine";
 import { ContactCard, type ContactInfo } from "./ContactCard";
 
 export type WallCard = {
@@ -15,7 +16,7 @@ export type RosterCreator = { id: string; name: string; handle: string | null; p
 
 type Creator = { id: string; handle: string; platform: string; displayName: string };
 
-export function BrandWall({ cards, creator, signedIn, roster }: { cards: WallCard[]; creator: Creator; signedIn: boolean; roster: RosterCreator[] }) {
+export function BrandWall({ cards, creator, signedIn, roster, header }: { cards: WallCard[]; creator: Creator; signedIn: boolean; roster: RosterCreator[]; header?: React.ReactNode }) {
   const [minLabel, setMinLabel] = useState<"High" | "Medium" | "Low">("Medium");
   const [hideMass, setHideMass] = useState(false);
   const [showDead, setShowDead] = useState(false);
@@ -42,7 +43,17 @@ export function BrandWall({ cards, creator, signedIn, roster }: { cards: WallCar
     setContacts((s) => ({ ...s, [brandId]: j }));
   }
 
-  if (!cards.length) return <div className="card mt-8 p-10 text-center text-sm text-muted">No brand deals detected yet. Either the scan is still running or this creator has no disclosed partnerships in the window.</div>;
+  const lcdIdle = `${cards.length} BRANDS ✓ TEAR`;
+  if (!cards.length) return (
+    <div className="mt-8">
+      <div className="pw-machine"><PrinterMachine lcd="NO DEALS FOUND" /></div>
+      <div className="pw">
+        {header}
+        <div className="pw-empty">No disclosed partnerships in the window. Either nothing was tagged, or the scan is still filling in.</div>
+        <div className="rc-tear" />
+      </div>
+    </div>
+  );
 
   const t = (d: string | null) => (d ? new Date(d).getTime() : 0);
   const sorted = [...shown].sort((a, b) =>
@@ -53,7 +64,7 @@ export function BrandWall({ cards, creator, signedIn, roster }: { cards: WallCar
 
   return (
     <div className="mt-8">
-      <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-muted">
+      <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-muted">
         <span><span className="num font-medium text-fg">{sorted.length}</span> brands</span>
         <span className="flex items-center gap-1">
           <span className="text-dim">sort</span>
@@ -74,8 +85,10 @@ export function BrandWall({ cards, creator, signedIn, roster }: { cards: WallCar
         {signedIn && roster.length === 0 && <span className="ml-auto">Add the creators you represent in <Link href="/settings#roster" className="text-accent hover:underline">Settings</Link> to draft pitches.</span>}
       </div>
 
-      {/* The print: one continuous sheet, newest deal at the top. */}
+      {/* The print: one continuous sheet out of the machine, newest deal at the top. */}
+      <div className="pw-machine"><PrinterMachine lcd={lcdIdle} /></div>
       <div className="pw">
+        {header}
         <div className="pw-head">
           <span className="pw-brandcol">brand</span>
           <span className="pw-evcol">evidence</span>
