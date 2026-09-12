@@ -95,7 +95,7 @@ export function BrandWall({ cards, creator, signedIn, roster, header }: { cards:
         {dead > 0 && <label className="flex items-center gap-1.5" title="Names we could not match to a live website; usually parsing noise"><input type="checkbox" className="accent-fg" checked={showDead} onChange={(e) => setShowDead(e.target.checked)} /> show {dead} unverified</label>}
         {self > 0 && <label className="flex items-center gap-1.5" title="Brands this creator owns. Not sponsors."><input type="checkbox" className="accent-fg" checked={showSelf} onChange={(e) => setShowSelf(e.target.checked)} /> show {self} creator-owned</label>}
         {!signedIn && <span className="ml-auto text-dim">Sign in to see contacts and draft pitches.</span>}
-        {signedIn && roster.length === 0 && <span className="ml-auto">Add the creators you represent in <Link href="/settings#roster" className="text-accent hover:underline">Settings</Link> to draft pitches.</span>}
+        {signedIn && roster.length === 0 && <span className="ml-auto">Add the creators you represent in <Link href="/creators" className="text-accent hover:underline">Settings</Link> to draft pitches.</span>}
       </div>
 
       {/* The print: one continuous sheet out of the machine, newest deal at the top. */}
@@ -143,7 +143,7 @@ export function BrandWall({ cards, creator, signedIn, roster, header }: { cards:
               </div>
               {signedIn && isOpen && (
                 <div className="pw-drawer" onClick={(e) => e.stopPropagation()}>
-                  <ContactCard brandId={c.brand_id} brand={c.brand} creator={creator} roster={roster} info={contacts[c.brand_id]} expanded onLoad={() => hover(c.brand_id)} />
+                  <ContactCard brandId={c.brand_id} brand={c.brand} creator={creator} roster={roster} info={contacts[c.brand_id]} expanded onLoad={() => refetch(c.brand_id)} />
                   <div className="mt-3 flex gap-3 font-mono text-[10px] text-dim">
                     <button className="hover:text-bad" title="Hide this brand for this creator (agency link, own merch, collab credit)" onClick={() => reject(c.brand_id, "pair")}>not a sponsor of @{creator.handle}</button>
                     <button className="hover:text-bad" title="Never a sponsor for anyone (music library, agency, vendor). Team accounts only." onClick={() => reject(c.brand_id, "brand")}>never a sponsor</button>

@@ -73,6 +73,11 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
           ) : (
             <span className="text-muted">No contact on file{info.domain ? ` for ${info.domain}` : ""}.</span>
           )}
+          {expanded && info.research !== undefined && (!info.research || info.research.status === "failed") && (
+            <button className="btn-ghost !px-2.5 !py-1 !text-[12px]" title="Have the research agent find who runs creator partnerships (parent company, agency, verified email). About 1 to 4 cents." onClick={async () => { const r = await fetch(`/api/contacts/${brandId}/research`, { method: "POST" }); if (r.ok) onLoad?.(); }}>
+              {info.research?.status === "failed" ? "Research again" : "Research this brand"}
+            </button>
+          )}
           {expanded && <input className="input-flat !w-48 !py-1" placeholder="paste an email" value={manual} onChange={(e) => setManual(e.target.value)} />}
         </div>
       )}
@@ -92,7 +97,7 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
 
       {roster.length === 0 ? (
         <div className="mt-3 text-[12px] text-muted">
-          To pitch, add a creator you represent in <Link href="/settings#roster" className="text-accent hover:underline">Settings</Link>.
+          To pitch, add a creator you represent in <Link href="/creators" className="text-accent hover:underline">Settings</Link>.
         </div>
       ) : (
         <div className="mt-3 flex flex-wrap items-center gap-2">

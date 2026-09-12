@@ -30,7 +30,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <NavLink href="/brands">Brands</NavLink>
                   <NavLink href="/scans">My scans</NavLink>
                   {profile.plan === "admin" && <NavLink href="/queue">Queue</NavLink>}
-                  <NavLink href="/settings#roster">My creators</NavLink>
+                  <NavLink href="/creators">My creators</NavLink>
                   <NavLink href="/settings">Settings</NavLink>
                   <span className="pill ml-3" title="Scan credits / draft credits">
                     {profile.plan === "trial" ? `${profile.scan_credits} scans · ${profile.draft_credits} drafts` : profile.plan}
