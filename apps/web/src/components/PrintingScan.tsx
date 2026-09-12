@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import { PrinterMachine } from "@/components/PrinterMachine";
+import { startWorkingLoop, playPrint } from "@/lib/print-sound";
 
 // While a scan runs: the printer types out what it's doing and feeds a blank
 // print, line by line. Watches the job over Realtime and reloads when done.
@@ -27,6 +28,14 @@ export function PrintingScan({ jobId, initialStatus, handle, platform }: { jobId
     }, 5000);
     return () => { sb.removeChannel(ch); clearInterval(poll); };
   }, [jobId, router]);
+
+  // printer noise while it works; a proper print-out when it lands
+  useEffect(() => {
+    if (status === "failed" || status === "done") return;
+    const stop = startWorkingLoop();
+    return stop;
+  }, [status]);
+  useEffect(() => { if (status === "done") playPrint(8, 1600); }, [status]);
 
   const failed = status === "failed";
   const src = platform === "youtube" ? "videos" : "posts";

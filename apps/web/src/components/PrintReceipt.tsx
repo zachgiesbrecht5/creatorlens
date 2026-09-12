@@ -1,6 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PrinterMachine } from "@/components/PrinterMachine";
+import { playPrint, armOnGesture } from "@/lib/print-sound";
 
 // The hero: a sponsor print coming out of the machine, one line at a time.
 // Pure CSS animation (see .rc-* in globals.css); honours prefers-reduced-motion.
@@ -15,46 +16,12 @@ const LINES: { brand: string; tag: string; when: string; deals: number; repeat?:
   { brand: "Saltmarsh", tag: "@saltmarsh.pantry", when: "Jan 2026", deals: 1 },
 ];
 
-// Thermal printer sound, synthesised (no audio file): a motor hum plus one
-// noise "chunk" per feed step, then a paper tear. Browsers only allow audio
-// after a user gesture, so it plays when someone presses FEED.
-function playPrintSound(steps = 16, feedMs = 4400) {
-  const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
-  if (!AC) return;
-  const ctx: AudioContext = new AC();
-  const t0 = ctx.currentTime + 0.05;
-  const master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination);
-  const noise = (start: number, dur: number, freq: number, q: number, vol: number) => {
-    const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
-    const src = ctx.createBufferSource(); src.buffer = buf;
-    const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = freq; f.Q.value = q;
-    const g = ctx.createGain(); g.gain.setValueAtTime(vol, start); g.gain.exponentialRampToValueAtTime(0.001, start + dur);
-    src.connect(f); f.connect(g); g.connect(master); src.start(start); src.stop(start + dur);
-  };
-  // motor hum under the whole feed
-  const hum = ctx.createOscillator(); hum.type = "sawtooth"; hum.frequency.value = 62;
-  const hf = ctx.createBiquadFilter(); hf.type = "lowpass"; hf.frequency.value = 220;
-  const hg = ctx.createGain(); hg.gain.setValueAtTime(0.0001, t0); hg.gain.exponentialRampToValueAtTime(0.08, t0 + 0.05);
-  hg.gain.setValueAtTime(0.08, t0 + feedMs / 1000 - 0.05); hg.gain.exponentialRampToValueAtTime(0.0001, t0 + feedMs / 1000 + 0.05);
-  hum.connect(hf); hf.connect(hg); hg.connect(master); hum.start(t0); hum.stop(t0 + feedMs / 1000 + 0.1);
-  // one chunk per line
-  for (let i = 0; i < steps; i++) {
-    const at = t0 + (i / steps) * (feedMs / 1000);
-    noise(at, 0.07, 2600 + Math.random() * 600, 1.2, 0.35);
-    noise(at + 0.02, 0.04, 900, 2, 0.2);
-  }
-  // tear
-  const tearAt = t0 + feedMs / 1000 + 0.25;
-  noise(tearAt, 0.22, 1800, 0.7, 0.6);
-  noise(tearAt + 0.05, 0.18, 4200, 0.9, 0.3);
-}
-
 export function PrintReceipt({ indexDeals }: { indexDeals: number }) {
   const [run, setRun] = useState(0);   // bump to re-print
-  const feed = () => { playPrintSound(); setRun((r) => r + 1); };
+  const feed = () => { playPrint(); setRun((r) => r + 1); };
+  // First load: browsers block sound until a gesture, so the first click or tap
+  // anywhere on the page re-prints with sound.
+  useEffect(() => { if (playPrint()) return; armOnGesture(() => setRun((r) => { playPrint(); return r + 1; })); }, []);
   const step = (_ms: number) => ({});   // lines ride the paper feed now; per-line delays unused
   const totalDeals = LINES.reduce((s, l) => s + l.deals, 0);
   const repeats = LINES.filter((l) => l.repeat).length;

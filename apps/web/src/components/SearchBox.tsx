@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { unlockAudio, playChunk } from "@/lib/print-sound";
 
 type Hit = { platform: "youtube" | "instagram"; handle: string; display_name: string; avatar_url: string; followers: number; cached: boolean };
 
@@ -23,6 +24,7 @@ export function SearchBox({ signedIn, cta = "Scan" }: { signedIn: boolean; cta?:
   }, [q]);
 
   async function scan(handle: string, p = platform) {
+    unlockAudio(); playChunk();
     setErr("");
     if (!signedIn) { router.push(`/login?next=${encodeURIComponent(`/c/${p}/${handle.replace(/^@/, "")}`)}`); return; }
     setBusy(true);
