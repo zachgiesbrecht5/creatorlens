@@ -1,8 +1,12 @@
-// Receipt-printer sounds, synthesised in the browser (no audio files).
-// A thermal printer is a stepper motor stepping paper a hair at a time, so the
-// sound is a fast train of tiny clicks ("zzzt") per line, not a hum. Each line
-// gets a short burst of clicks plus a faint typewriter-style tick; the end is
-// a paper tear. Browsers only start audio after a user gesture.
+// Point-of-sale receipt printer sound, synthesised in the browser.
+// A supermarket printer doesn't click line by line; it makes one continuous
+// high buzz ("brrrrrrt") for the length of the print while the paper hisses
+// out, then the cutter goes clack. That's what this makes:
+//   - a narrow pulse train (~210 Hz) shaped through a 2.4 kHz bandpass = the buzz
+//   - a hiss band that rides on the same pulse = paper through the mechanism
+//   - a small wobble so it isn't a perfect tone
+//   - two short cutter clacks at the end
+// Browsers only start audio after a user gesture.
 
 let ctx: AudioContext | null = null;
 function ac(): AudioContext | null {
@@ -13,76 +17,100 @@ function ac(): AudioContext | null {
   return ctx;
 }
 
-// one click: a 3ms noise impulse through a high bandpass, plus a tiny body thump
-function click(c: AudioContext, out: AudioNode, at: number, vol: number, freq = 4200) {
-  const len = Math.floor(c.sampleRate * 0.004);
+let pulseWave: PeriodicWave | null = null;
+function pulse(c: AudioContext) {
+  // narrow pulse = rich harmonics; that's the "electric" edge of the buzz
+  if (pulseWave) return pulseWave;
+  const n = 40, re = new Float32Array(n), im = new Float32Array(n);
+  for (let k = 1; k < n; k++) { const duty = 0.18; im[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * duty); }
+  pulseWave = c.createPeriodicWave(re, im);
+  return pulseWave;
+}
+
+/** The buzz for `dur` seconds starting at `at`. Returns the master gain so callers can stop it early. */
+function buzz(c: AudioContext, at: number, dur: number, vol = 0.5) {
+  const master = c.createGain(); master.gain.value = vol; master.connect(c.destination);
+  // motor tone
+  const o = c.createOscillator(); o.setPeriodicWave(pulse(c)); o.frequency.value = 210;
+  const wob = c.createOscillator(); wob.type = "sine"; wob.frequency.value = 27;
+  const wobG = c.createGain(); wobG.gain.value = 4; wob.connect(wobG); wobG.connect(o.frequency);
+  const bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 2400; bp.Q.value = 1.1;
+  const hp = c.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 700;
+  const tg = c.createGain();
+  tg.gain.setValueAtTime(0.0001, at); tg.gain.exponentialRampToValueAtTime(0.9, at + 0.06);
+  tg.gain.setValueAtTime(0.9, at + dur - 0.05); tg.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  o.connect(bp); bp.connect(hp); hp.connect(tg); tg.connect(master);
+  // paper hiss, gated by the same pulse rate so it chatters with the motor
+  const len = Math.floor(c.sampleRate * (dur + 0.1));
   const buf = c.createBuffer(1, len, c.sampleRate);
   const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+  for (let i = 0; i < len; i++) { const t = i / c.sampleRate; const gate = 0.55 + 0.45 * Math.max(0, Math.sin(t * 210 * 2 * Math.PI)); d[i] = (Math.random() * 2 - 1) * gate; }
   const src = c.createBufferSource(); src.buffer = buf;
-  const f = c.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = freq + Math.random() * 800; f.Q.value = 2.5;
-  const g = c.createGain(); g.gain.value = vol;
-  src.connect(f); f.connect(g); g.connect(out); src.start(at); src.stop(at + 0.01);
-  // body
-  const o = c.createOscillator(); o.type = "triangle"; o.frequency.setValueAtTime(190, at); o.frequency.exponentialRampToValueAtTime(90, at + 0.03);
-  const og = c.createGain(); og.gain.setValueAtTime(vol * 0.35, at); og.gain.exponentialRampToValueAtTime(0.0001, at + 0.035);
-  o.connect(og); og.connect(out); o.start(at); o.stop(at + 0.04);
+  const nb = c.createBiquadFilter(); nb.type = "bandpass"; nb.frequency.value = 4800; nb.Q.value = 0.9;
+  const ng = c.createGain();
+  ng.gain.setValueAtTime(0.0001, at); ng.gain.exponentialRampToValueAtTime(0.28, at + 0.08);
+  ng.gain.setValueAtTime(0.28, at + dur - 0.05); ng.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  src.connect(nb); nb.connect(ng); ng.connect(master);
+  o.start(at); wob.start(at); src.start(at);
+  o.stop(at + dur + 0.05); wob.stop(at + dur + 0.05); src.stop(at + dur + 0.05);
+  return master;
 }
 
-// a line being printed: 10 to 14 stepper clicks 7ms apart = "zzzt"
-function lineBurst(c: AudioContext, out: AudioNode, at: number, vol = 0.5) {
-  const n = 10 + Math.floor(Math.random() * 5);
-  for (let i = 0; i < n; i++) click(c, out, at + i * 0.007, vol * (0.7 + Math.random() * 0.3), 3800);
+/** The cutter: two short clacks. */
+function cutter(c: AudioContext, at: number) {
+  const master = c.createGain(); master.gain.value = 0.7; master.connect(c.destination);
+  for (const [dt, f] of [[0, 1500], [0.07, 900]] as const) {
+    const len = Math.floor(c.sampleRate * 0.03);
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    const src = c.createBufferSource(); src.buffer = buf;
+    const bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = f; bp.Q.value = 1.5;
+    src.connect(bp); bp.connect(master); src.start(at + dt); src.stop(at + dt + 0.04);
+    const o = c.createOscillator(); o.type = "square"; o.frequency.setValueAtTime(140, at + dt); o.frequency.exponentialRampToValueAtTime(60, at + dt + 0.04);
+    const g = c.createGain(); g.gain.setValueAtTime(0.25, at + dt); g.gain.exponentialRampToValueAtTime(0.0001, at + dt + 0.05);
+    o.connect(g); g.connect(master); o.start(at + dt); o.stop(at + dt + 0.06);
+  }
 }
 
-function tear(c: AudioContext, out: AudioNode, at: number) {
-  const dur = 0.28;
-  const len = Math.floor(c.sampleRate * dur);
-  const buf = c.createBuffer(1, len, c.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) { const p = i / len; d[i] = (Math.random() * 2 - 1) * (p < 0.15 ? p / 0.15 : 1 - (p - 0.15) / 0.85); }
-  const src = c.createBufferSource(); src.buffer = buf;
-  const f = c.createBiquadFilter(); f.type = "bandpass"; f.frequency.setValueAtTime(1200, at); f.frequency.exponentialRampToValueAtTime(5200, at + dur); f.Q.value = 0.8;
-  const g = c.createGain(); g.gain.value = 0.55;
-  src.connect(f); f.connect(g); g.connect(out); src.start(at); src.stop(at + dur);
-  // the serrated edge: a few crisp clicks as it rips
-  for (let i = 0; i < 6; i++) click(c, out, at + 0.04 + i * 0.035, 0.35, 5200);
-}
-
-function master(c: AudioContext, vol = 0.6) { const g = c.createGain(); g.gain.value = vol; g.connect(c.destination); return g; }
-
-/** One full print: a line burst per step, then the tear. Returns false if audio is blocked. */
-export function playPrint(steps = 16, feedMs = 4400): boolean {
+/** One full print: continuous buzz for the feed, then the cutter. Returns false if audio is blocked. */
+export function playPrint(_steps = 16, feedMs = 4400): boolean {
   const c = ac(); if (!c) return false;
   if (c.state === "suspended") { c.resume().catch(() => {}); }
   if (c.state !== "running") return false;
-  const out = master(c);
   const t0 = c.currentTime + 0.05;
-  for (let i = 0; i < steps; i++) lineBurst(c, out, t0 + (i / steps) * (feedMs / 1000));
-  tear(c, out, t0 + feedMs / 1000 + 0.25);
+  buzz(c, t0, feedMs / 1000);
+  cutter(c, t0 + feedMs / 1000 + 0.15);
   return true;
 }
 
-/** A single line. */
+/** A short burst (one line's worth). */
 export function playChunk(): boolean {
   const c = ac(); if (!c || c.state !== "running") return false;
-  lineBurst(c, master(c), c.currentTime + 0.01);
+  buzz(c, c.currentTime + 0.01, 0.22, 0.45);
   return true;
 }
 
-/** Working loop for the scanning state: a line every 350 to 800ms, like a printer that's thinking between lines. */
+/** Working loop for the scanning state: the printer feeds in short runs, pauses, feeds again. */
 export function startWorkingLoop(): () => void {
   const c = ac(); if (!c) return () => {};
-  let stopped = false; let timer: any;
+  let stopped = false; let timer: any; let current: GainNode | null = null;
   const begin = () => {
     if (stopped || c.state !== "running") return;
-    const out = master(c, 0.45);
-    const tick = () => { if (stopped) return; lineBurst(c, out, c.currentTime + 0.01, 0.45); timer = setTimeout(tick, 350 + Math.random() * 450); };
-    timer = setTimeout(tick, 300);
+    const run = () => {
+      if (stopped) return;
+      const dur = 0.5 + Math.random() * 0.9;
+      current = buzz(c, c.currentTime + 0.01, dur, 0.4);
+      timer = setTimeout(run, (dur + 0.4 + Math.random() * 0.8) * 1000);
+    };
+    run();
   };
   if (c.state === "running") begin();
   else armOnGesture(() => { c.resume().then(begin).catch(() => {}); });
-  return () => { stopped = true; clearTimeout(timer); };
+  return () => {
+    stopped = true; clearTimeout(timer);
+    if (current) { try { current.gain.setTargetAtTime(0.0001, c.currentTime, 0.05); } catch { /* fine */ } }
+  };
 }
 
 /** Run `fn` on the first user gesture (or immediately if audio is already allowed). */
