@@ -54,14 +54,27 @@ export async function POST(req: NextRequest) {
   const msg = await client.messages.create({
     model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
     max_tokens: 900,
-    system: `You write brand-partnership pitch emails for a talent manager (the sender) who represents creatorBeingPitched. The sender does NOT represent proofCreator; proofCreator's deal with this brand is only evidence that the brand invests in creators of this kind. Never imply the sender manages proofCreator and never ask to "rebook" them. Lead with why creatorBeingPitched fits this brand, using pitchAngle and niche; reference the brand's recent creator work (proofCreator, other bookings) as social proof in one clause at most. Follow the sender's STYLE GUIDE exactly; it overrides everything else about tone and structure. Use only the FACTS given; never invent numbers, past deals, or names. Never quote a rate. Keep it under 170 words. Do NOT add a sign-off or signature; the sender's signature is appended automatically. Subject line: "<creator name> for <brand>" plus the campaign angle in a few words, capitalised like a normal email subject, under 60 characters (e.g. "Andy Yen for J.Crew's fall home campaign"), never all lowercase. Output strictly as JSON: {"subject": string, "body": string}. Plain text body, no markdown.`,
+    system: `You write brand-partnership pitch emails for a talent manager (the sender) who represents creatorBeingPitched. The sender does NOT represent proofCreator; proofCreator's deal with this brand is only evidence that the brand invests in creators of this kind. Never imply the sender manages proofCreator and never ask to "rebook" them. Lead with why creatorBeingPitched fits this brand, using pitchAngle and niche; reference the brand's recent creator work (proofCreator, other bookings) as social proof in one clause at most. Follow the sender's STYLE GUIDE exactly; it overrides everything else about tone and structure. Use only the FACTS given; never invent numbers, past deals, or names. Never quote a rate. Keep it under 170 words. The body MUST start with a greeting on its own line: "Hi <recipient first name>," when recipient.name is known, otherwise "Hi <brand> team,". Then a blank line, then the pitch. Do NOT add a sign-off or signature; those are appended automatically. Output strictly as JSON: {"subject": string, "body": string}. Plain text body, no markdown.`,
     messages: [{ role: "user", content: `STYLE GUIDE:\n${style}\n\nFACTS:\n${JSON.stringify(facts, null, 2)}` }],
   });
   const text = msg.content.map((c) => (c.type === "text" ? c.text : "")).join("");
   let parsed: { subject: string; body: string };
   try { parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)); } catch { return NextResponse.json({ error: "Model returned an unreadable draft; try again" }, { status: 502 }); }
-  const sig = (profile.email_signature || "").trim() || [profile.signature ? `${profile.signature},` : "Best,", profile.full_name || "", org?.name || ""].filter(Boolean).join("\n");
-  parsed.body = parsed.body.trimEnd() + "\n\n" + sig;
+  // Subject is always "<creator> x <brand>", nothing clever.
+  parsed.subject = `${mine.name} x ${brand.name}`;
+  // Greeting guard: if the model skipped it, add one.
+  const firstName = (contact?.name || "").trim().split(/\s+/)[0] || "";
+  if (!/^\s*(hi|hey|hello|dear)\b/i.test(parsed.body)) parsed.body = `Hi ${firstName || brand.name + " team"},\n\n` + parsed.body.trimStart();
+  // Strip any sign-off the model added anyway, then append the user's own.
+  parsed.body = parsed.body.replace(/\n+\s*(best|thanks|cheers|regards|rooting for you|talk soon)[,!.]?\s*(\n.*)?$/i, "").trimEnd();
+  const signOff = (profile.signature || "Best").replace(/,\s*$/, "") + ",";
+  // In the Gmail compose window Gmail inserts the user's real (formatted) signature itself,
+  // so we only add the sign-off line there. A Gmail API draft gets no automatic signature,
+  // so we append the plain-text one from Settings.
+  const plainSig = (profile.email_signature || "").trim() || [profile.full_name || "", org?.name || ""].filter(Boolean).join("\n");
+  const bodyForCompose = parsed.body + "\n\n" + signOff;
+  const bodyForApi = parsed.body + "\n\n" + signOff + "\n" + plainSig;
+  parsed.body = bodyForApi;
 
   // a pasted address becomes a private contact for this user only (never shared)
   if (!contactId && toEmail) {
@@ -84,7 +97,7 @@ export async function POST(req: NextRequest) {
     }
   }
   await logDraft(null);
-  return NextResponse.json({ ok: true, mode: "compose", link: gmailComposeUrl({ to: toEmail, subject: parsed.subject, body: parsed.body }), subject: parsed.subject, body: parsed.body });
+  return NextResponse.json({ ok: true, mode: "compose", link: gmailComposeUrl({ to: toEmail, subject: parsed.subject, body: bodyForCompose }), subject: parsed.subject, body: bodyForCompose });
 }
 
 // Prefilled Gmail compose window. No API, no OAuth scope, works for any Google
