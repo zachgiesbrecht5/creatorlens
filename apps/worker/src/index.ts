@@ -288,13 +288,15 @@ async function checkBrandSites(limit = 4) {
   return (data || []).length;
 }
 
+import { runResearch } from "./research";
+
 async function tick() {
   const { data: jobs, error: pollErr } = await sb.from("scan_jobs").select("*")
     .in("status", ["queued", "rate_limited"]).lte("run_after", new Date().toISOString())
     .order("priority").order("created_at").limit(1);
   if (pollErr) { log("poll failed:", pollErr.message, "(check SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)"); return; }
   const job = jobs?.[0];
-  if (!job) { if (!(await checkBrandSites())) await classifyBackfill(sb); return; }
+  if (!job) { if (!(await runResearch(sb))) { if (!(await checkBrandSites())) await classifyBackfill(sb); } return; }
   try {
     await runJob(job);
   } catch (e: any) {

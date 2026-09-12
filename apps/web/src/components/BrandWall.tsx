@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { PrinterMachine } from "@/components/PrinterMachine";
 import { ContactCard, type ContactInfo } from "./ContactCard";
@@ -35,12 +35,25 @@ export function BrandWall({ cards, creator, signedIn, roster, header }: { cards:
     await fetch("/api/reject", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ brandId, creatorId: creator.id, scope }) });
   }
 
+  // re-poll a card while the research agent is working on it
+  const pollers = useRef<Record<string, any>>({});
+  function schedule(brandId: string) {
+    if (pollers.current[brandId]) return;
+    pollers.current[brandId] = setTimeout(async () => { delete pollers.current[brandId]; await refetch(brandId); }, 8000);
+  }
+  async function refetch(brandId: string) {
+    const r = await fetch(`/api/contacts/${brandId}`); if (!r.ok) return;
+    const j: ContactInfo = await r.json();
+    setContacts((c) => ({ ...c, [brandId]: j }));
+    if (j.research && (j.research.status === "queued" || j.research.status === "running")) schedule(brandId);
+  }
   async function hover(brandId: string) {
     if (!signedIn || contacts[brandId]) return;
     setContacts((s) => ({ ...s, [brandId]: "loading" }));
     const r = await fetch(`/api/contacts/${brandId}`);
-    const j = r.ok ? await r.json() : { contacts: [], history: [], excluded: false };
+    const j: ContactInfo = r.ok ? await r.json() : { contacts: [], history: [], excluded: false };
     setContacts((s) => ({ ...s, [brandId]: j }));
+    if (j.research && (j.research.status === "queued" || j.research.status === "running")) schedule(brandId);
   }
 
   const lcdIdle = `${cards.length} BRANDS ✓ TEAR`;

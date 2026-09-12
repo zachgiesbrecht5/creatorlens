@@ -42,7 +42,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
   };
   const relevant = (title: string | null) => titleScore(title || "") > 0;
 
-  let { data: contacts } = await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at,house_only,found_by").eq("brand_id", brandId)
+  let { data: contacts } = await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at,house_only,found_by,source_url,confidence").eq("brand_id", brandId)
     .order("verified", { ascending: false }).order("last_replied_at", { ascending: false, nullsFirst: false });
   const auto = (c: { source: string }) => c.source === "hunter" || c.source === "apollo";
   // Provenance wall. Outsiders only ever see third-party lookups (never Rootfor's
@@ -58,7 +58,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
     if (!people.length && process.env.APOLLO_API_KEY && siteDomain) people = (await apollo(siteDomain)).filter((p) => acceptable(p.email) && relevant(p.title));
     if (people.length) {
       await admin.from("contacts").upsert(people.map((p: any) => ({ brand_id: brandId, name: p.name, email: p.email, title: p.title, source: p.source || "hunter", verified: p.confidence >= 90 })), { onConflict: "brand_id,email" });
-      contacts = ((await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at,house_only,found_by").eq("brand_id", brandId)).data || []).filter(visible).filter((c) => !auto(c) || (acceptable(c.email || "") && relevant(c.title)));
+      contacts = ((await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at,house_only,found_by,source_url,confidence").eq("brand_id", brandId)).data || []).filter(visible).filter((c) => !auto(c) || (acceptable(c.email || "") && relevant(c.title)));
     }
   }
   brand.domain = siteDomain || brand.domain;
@@ -67,7 +67,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
   const { data: history } = await admin.from("outreach_log").select("status,created_at,creator_handle,user_id,profiles(full_name)").eq("brand_id", brandId).or(orgFilter).order("created_at", { ascending: false }).limit(5);
   const { data: excl } = insider && profile.org_id ? await admin.from("exclusions").select("id").eq("org_id", profile.org_id).eq("brand_key", brand.key).maybeSingle() : { data: null };
 
+  // Agent research (house only): if nothing usable was found, queue a research
+  // job once; the card polls and shows the answer when the worker lands it.
+  let research: { status: string; summary: string | null; parent_company: string | null; agency: string | null; agency_url: string | null } | null = null;
+  if (insider) {
+    const { data: r } = await admin.from("contact_research").select("status,summary,parent_company,agency,agency_url").eq("brand_id", brandId).maybeSingle();
+    if (r) research = r;
+    else if (!(contacts || []).length) {
+      await admin.from("contact_research").upsert({ brand_id: brandId, requested_by: profile.id, status: "queued" }, { onConflict: "brand_id", ignoreDuplicates: true });
+      research = { status: "queued", summary: null, parent_company: null, agency: null, agency_url: null };
+    }
+  }
+
   return NextResponse.json({
+    research,
     contacts: (contacts || []).map(({ house_only: _h, found_by: _f, last_replied_at, ...c }) => ({ ...c, last_replied_at: insider ? last_replied_at : null })),
     history: (history || []).map((h: any) => ({ status: h.status, created_at: h.created_at, creator_handle: h.creator_handle, by: h.profiles?.full_name || null })),
     excluded: !!excl,

@@ -4,7 +4,8 @@ import Link from "next/link";
 import type { RosterCreator } from "./BrandWall";
 
 export type ContactInfo = {
-  contacts: { id: string; name: string | null; email: string | null; title: string | null; source: string; verified: boolean }[];
+  contacts: { id: string; name: string | null; email: string | null; title: string | null; source: string; verified: boolean; source_url?: string | null; confidence?: number | null }[];
+  research?: { status: string; summary: string | null; parent_company: string | null; agency: string | null; agency_url: string | null } | null;
   history: { status: string; created_at: string; creator_handle: string | null; by: string | null }[];
   excluded: boolean;
   domain?: string | null;
@@ -59,13 +60,30 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
           {contact.title && <span className="text-muted">{contact.title}</span>}
           <a href={`mailto:${contact.email}`} className="num text-[12px] text-muted underline decoration-line underline-offset-2 hover:text-accent">{contact.email}</a>
           {contact.verified && <span className="font-mono text-[10px] text-ok" title="Verified deliverable">✓</span>}
+          {contact.source === "agent" && (
+            <span className="font-mono text-[10px] text-dim" title={`Found by research${contact.confidence != null ? `, confidence ${Math.round(contact.confidence * 100)}%` : ""}`}>
+              researched{contact.source_url && <> · <a href={contact.source_url} target="_blank" rel="noreferrer" className="hover:text-accent">source ↗</a></>}
+            </span>
+          )}
         </div>
       ) : (
-        <div className="flex items-center gap-2">
-          <span className="text-muted">No contact on file{info.domain ? ` for ${info.domain}` : ""}.</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {info.research && (info.research.status === "queued" || info.research.status === "running") ? (
+            <span className="text-muted"><span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent align-middle" />Researching who runs creator partnerships here. Usually about a minute.</span>
+          ) : (
+            <span className="text-muted">No contact on file{info.domain ? ` for ${info.domain}` : ""}.</span>
+          )}
           {expanded && <input className="input-flat !w-48 !py-1" placeholder="paste an email" value={manual} onChange={(e) => setManual(e.target.value)} />}
         </div>
       )}
+      {info.research?.status === "done" && (info.research.summary || info.research.agency) && (
+        <div className="mt-2 rounded-md border border-line bg-surface2/60 px-3 py-2 text-[12px] leading-relaxed text-muted">
+          {info.research.summary}
+          {info.research.agency && <> Creator work appears to run through <b className="text-fg">{info.research.agency}</b>{info.research.agency_url && <> (<a href={info.research.agency_url} target="_blank" rel="noreferrer" className="hover:text-accent">site ↗</a>)</>}.</>}
+          {info.research.parent_company && <span className="num ml-1 text-[10px] text-dim">· parent: {info.research.parent_company}</span>}
+        </div>
+      )}
+      {info.research?.status === "failed" && <div className="mt-2 text-[11px] text-dim">Research didn&apos;t turn up anyone we could verify.</div>}
       {expanded && info.contacts.length > 1 && (
         <select className="input-flat mt-2 !py-1" value={contact?.id} onChange={(e) => setPicked(e.target.value)}>
           {info.contacts.map((c) => <option key={c.id} value={c.id}>{c.name || c.email} {c.title ? `(${c.title})` : ""}</option>)}
