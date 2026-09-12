@@ -42,10 +42,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
   };
   const relevant = (title: string | null) => titleScore(title || "") > 0;
 
-  let { data: contacts } = await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at").eq("brand_id", brandId)
+  let { data: contacts } = await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at,house_only,found_by").eq("brand_id", brandId)
     .order("verified", { ascending: false }).order("last_replied_at", { ascending: false, nullsFirst: false });
   const auto = (c: { source: string }) => c.source === "hunter" || c.source === "apollo";
-  contacts = (contacts || []).filter((c) => !auto(c) || (acceptable(c.email || "") && relevant(c.title)));
+  // Provenance wall. Outsiders only ever see third-party lookups (never Rootfor's
+  // own tracker/relationship contacts) plus emails they pasted themselves.
+  const visible = (c: { source: string; house_only: boolean; found_by: string | null }) =>
+    insider || (!c.house_only && auto(c)) || (c.source === "manual" && c.found_by === profile.id);
+  contacts = (contacts || []).filter(visible).filter((c) => !auto(c) || (acceptable(c.email || "") && relevant(c.title)));
 
   if (!contacts.length) {
     let people: any[] = [];
@@ -54,17 +58,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
     if (!people.length && process.env.APOLLO_API_KEY && siteDomain) people = (await apollo(siteDomain)).filter((p) => acceptable(p.email) && relevant(p.title));
     if (people.length) {
       await admin.from("contacts").upsert(people.map((p: any) => ({ brand_id: brandId, name: p.name, email: p.email, title: p.title, source: p.source || "hunter", verified: p.confidence >= 90 })), { onConflict: "brand_id,email" });
-      contacts = ((await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at").eq("brand_id", brandId)).data || []).filter((c) => !auto(c) || (acceptable(c.email || "") && relevant(c.title)));
+      contacts = ((await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at,house_only,found_by").eq("brand_id", brandId)).data || []).filter(visible).filter((c) => !auto(c) || (acceptable(c.email || "") && relevant(c.title)));
     }
   }
   brand.domain = siteDomain || brand.domain;
 
-  const orgFilter = profile.org_id ? `org_id.eq.${profile.org_id},user_id.eq.${profile.id}` : `user_id.eq.${profile.id}`;
+  const orgFilter = insider && profile.org_id ? `org_id.eq.${profile.org_id},user_id.eq.${profile.id}` : `user_id.eq.${profile.id}`;
   const { data: history } = await admin.from("outreach_log").select("status,created_at,creator_handle,user_id,profiles(full_name)").eq("brand_id", brandId).or(orgFilter).order("created_at", { ascending: false }).limit(5);
-  const { data: excl } = profile.org_id ? await admin.from("exclusions").select("id").eq("org_id", profile.org_id).eq("brand_key", brand.key).maybeSingle() : { data: null };
+  const { data: excl } = insider && profile.org_id ? await admin.from("exclusions").select("id").eq("org_id", profile.org_id).eq("brand_key", brand.key).maybeSingle() : { data: null };
 
   return NextResponse.json({
-    contacts: contacts || [],
+    contacts: (contacts || []).map(({ house_only: _h, found_by: _f, last_replied_at, ...c }) => ({ ...c, last_replied_at: insider ? last_replied_at : null })),
     history: (history || []).map((h: any) => ({ status: h.status, created_at: h.created_at, creator_handle: h.creator_handle, by: h.profiles?.full_name || null })),
     excluded: !!excl,
     domain: brand.domain,

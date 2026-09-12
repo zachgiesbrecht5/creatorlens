@@ -63,6 +63,10 @@ export async function POST(req: NextRequest) {
   const sig = (profile.email_signature || "").trim() || [profile.signature ? `${profile.signature},` : "Best,", profile.full_name || "", org?.name || ""].filter(Boolean).join("\n");
   parsed.body = parsed.body.trimEnd() + "\n\n" + sig;
 
+  // a pasted address becomes a private contact for this user only (never shared)
+  if (!contactId && toEmail) {
+    await admin.from("contacts").upsert({ brand_id: brandId, email: toEmail.toLowerCase(), source: "manual", found_by: profile.id, house_only: false }, { onConflict: "brand_id,email", ignoreDuplicates: true });
+  }
   const logDraft = async (gmailDraftId: string | null) => {
     await admin.from("drafts").insert({ user_id: profile.id, creator_id: creatorId, brand_id: brandId, contact_id: contactId || null, subject: parsed.subject, body: parsed.body, gmail_draft_id: gmailDraftId, model: msg.model });
     await admin.from("outreach_log").insert({ org_id: profile.org_id, user_id: profile.id, brand_id: brandId, creator_handle: mine.handle || mine.name, contact_email: toEmail, subject: parsed.subject, status: "drafted", gmail_draft_id: gmailDraftId });
