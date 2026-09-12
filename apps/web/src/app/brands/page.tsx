@@ -25,7 +25,9 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
   // Counts, recency, and the reverse view stay in the house.
 
   // category counts for the filter row (cheap: brands table only)
-  const { data: catRows } = await admin.from("brands").select("category").eq("is_junk", false).eq("is_self_brand", false).neq("site_status", "dead").not("category", "is", null);
+  let catQ = admin.from("brands").select("category").eq("is_junk", false).eq("is_self_brand", false).neq("site_status", "dead").not("category", "is", null);
+  if (myBrandIds) catQ = catQ.in("id", myBrandIds.length ? myBrandIds : ["00000000-0000-0000-0000-000000000000"]);   // same scope as the table
+  const { data: catRows } = await catQ;
   const counts = new Map<string, number>();
   for (const r of catRows || []) counts.set(r.category!, (counts.get(r.category!) || 0) + 1);
   const cats = [...counts.entries()].sort((a, b) => b[1] - a[1]);
@@ -124,7 +126,7 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
                 <td className="num text-[11px] text-dim">{b.website ? <a href={b.website} target="_blank" rel="noreferrer" className="hover:text-accent">{b.website.replace(/^https?:\/\/(www\.)?/, "")} ↗</a> : b.site_status === "unknown" ? "checking…" : ""}</td>
               </tr>
             ))}
-            {!data?.length && <tr><td colSpan={insider ? 8 : 5} className="py-10 text-center text-sm text-muted">Nothing here yet.</td></tr>}
+            {!data?.length && <tr><td colSpan={insider ? 8 : 5} className="py-10 text-center text-sm text-muted">{mineOnly && !(myBrandIds?.length) ? <>No prints yet. <Link href="/" className="text-accent hover:underline">Pull a creator&apos;s print</Link> and the brands they work with will show up here.</> : "Nothing matches."}</td></tr>}
           </tbody>
         </table>
         {!user && (data?.length || 0) > PREVIEW && (
