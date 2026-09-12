@@ -22,7 +22,7 @@ export function BookingMap({ deals }: { deals: Deal[] }) {
   const tMin = Math.min(...pts.map((p) => p.t)), tMax = Math.max(...pts.map((p) => p.t));
   const span = Math.max(tMax - tMin, 1000 * 60 * 60 * 24 * 60);
   const fMin = Math.min(...pts.map((p) => p.f)), fMax = Math.max(...pts.map((p) => p.f));
-  const lMin = Math.log10(fMin) - 0.2, lMax = Math.log10(fMax) + 0.2;
+  const lMin = Math.log10(fMin) - 0.25, lMax = Math.log10(fMax) + 0.45;
   const x = (t: number) => PAD.l + ((t - tMin) / span) * (W - PAD.l - PAD.r);
   const y = (f: number) => H - PAD.b - ((Math.log10(f) - lMin) / (lMax - lMin)) * (H - PAD.t - PAD.b);
 

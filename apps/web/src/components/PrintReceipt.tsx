@@ -3,12 +3,12 @@
 // Everything on it is fictional: the point is the shape of the thing you get.
 
 const LINES: { brand: string; tag: string; when: string; deals: number; repeat?: boolean }[] = [
-  { brand: "Hearthline", tag: "#hearthlinepartner", when: "Aug 2026", deals: 3, repeat: true },
-  { brand: "Fieldnote Coffee", tag: "@fieldnote.coffee", when: "Jul 2026", deals: 1 },
+  { brand: "Hearthline", tag: "#hearthlineptnr", when: "Aug 2026", deals: 3, repeat: true },
+  { brand: "Fieldnote", tag: "@fieldnote.coffee", when: "Jul 2026", deals: 1 },
   { brand: "Loom & Ladle", tag: "#loomandladle #ad", when: "Jun 2026", deals: 2, repeat: true },
   { brand: "Northbay Knives", tag: "paid partnership", when: "May 2026", deals: 1 },
-  { brand: "Brightstem", tag: "#brightstemambassador", when: "Mar 2026", deals: 1 },
-  { brand: "Saltmarsh Pantry", tag: "@saltmarsh.pantry", when: "Jan 2026", deals: 1 },
+  { brand: "Brightstem", tag: "#brightstem #ad", when: "Mar 2026", deals: 1 },
+  { brand: "Saltmarsh", tag: "@saltmarsh.pantry", when: "Jan 2026", deals: 1 },
 ];
 
 export function PrintReceipt({ indexDeals }: { indexDeals: number }) {
@@ -55,7 +55,7 @@ export function PrintReceipt({ indexDeals }: { indexDeals: number }) {
         </div>
         <div className="rc-line rc-title" style={step(220)}>
           <span className="rc-handle">@priyacooks</span>
-          <span className="rc-sub">Instagram · 312K · scanned just now</span>
+          <span className="rc-sub">Instagram · 312K · just now</span>
         </div>
         <div className="rc-rule" style={step(180)} />
         <div className="rc-line rc-cols" style={step(120)}>
