@@ -31,8 +31,8 @@ export async function POST(req: NextRequest) {
     contactId ? admin.from("contacts").select("name,title").eq("id", contactId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   if (!brand || !creator) return NextResponse.json({ error: "Missing brand or creator" }, { status: 404 });
-  const { insider } = await currentAccess();
-  if (!(await canSeeCreator(profile.id, insider, creator as any))) return NextResponse.json({ error: "Scan this creator first to draft from their deals." }, { status: 403 });
+  const { admin: seesAll } = await currentAccess();
+  if (!(await canSeeCreator(profile.id, seesAll, creator as any))) return NextResponse.json({ error: "Scan this creator first to draft from their deals." }, { status: 403 });
 
   const { data: ok } = await admin.rpc("spend_credit", { p_user: profile.id, p_kind: "draft", p_reason: "draft", p_ref: `${brand.name}:${mine.handle || mine.name}` });
   if (!ok) return NextResponse.json({ error: "Out of draft credits" }, { status: 402 });

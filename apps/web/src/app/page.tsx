@@ -7,7 +7,7 @@ import { fmt } from "@/lib/fmt";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const { profile: user, insider } = await currentAccess();
+  const { profile: user, admin: seesAll } = await currentAccess();
   const admin = supabaseAdmin();
   const [{ count: creators }, { count: brands }, { count: deals }] = await Promise.all([
     admin.from("creators").select("*", { count: "exact", head: true }),
@@ -16,7 +16,7 @@ export default async function Home() {
   ]);
   // Recently scanned: the whole index for the house, only your own unlocks otherwise.
   let recent: { platform: string; handle: string; display_name: string | null; avatar_url: string | null; followers: number | null }[] = [];
-  if (insider) {
+  if (seesAll) {
     recent = (await admin.from("creators").select("platform,handle,display_name,avatar_url,followers").order("last_scanned_at", { ascending: false }).limit(12)).data || [];
   } else if (user) {
     const { data: mine } = await admin.from("creator_access").select("platform,handle").eq("user_id", user.id).order("created_at", { ascending: false }).limit(24);
@@ -47,7 +47,7 @@ export default async function Home() {
       {recent && recent.length > 0 && (
         <section className="mt-10">
           <div className="mb-3 flex items-baseline justify-between">
-            <div className="text-sm font-medium">{insider ? "Recently printed" : "Your prints"}</div>
+            <div className="text-sm font-medium">{seesAll ? "Recently printed" : "Your prints"}</div>
             <div className="text-[12px] text-dim">tap one to open it</div>
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">

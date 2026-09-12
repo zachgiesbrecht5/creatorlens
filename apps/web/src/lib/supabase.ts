@@ -42,18 +42,34 @@ export async function currentProfile() {
  * House scope. Insiders (members of the house org, or plan=admin) see the whole
  * shared index; everyone else sees only creators they unlocked by scanning.
  */
+/**
+ *  insider = member of the house org: gets the team's contacts, pitch history,
+ *            exclusions, research. Scans are still their own.
+ *  admin   = the owners (plan = admin): see every scan from every user, the
+ *            full leaderboard and brand pages, and the outside-manager intel.
+ */
 export async function currentAccess() {
   const profile = await currentProfile();
-  if (!profile) return { profile: null, insider: false };
-  if (profile.plan === "admin") return { profile, insider: true };
-  if (!profile.org_id) return { profile, insider: false };
+  if (!profile) return { profile: null, insider: false, admin: false };
+  if (profile.plan === "admin") return { profile, insider: true, admin: true };
+  if (!profile.org_id) return { profile, insider: false, admin: false };
   const { data: org } = await supabaseAdmin().from("orgs").select("is_house").eq("id", profile.org_id).maybeSingle();
-  return { profile, insider: !!org?.is_house };
+  return { profile, insider: !!org?.is_house, admin: false };
 }
 
-/** Has this user unlocked this creator (scanned it themselves)? Insiders always yes. */
-export async function canSeeCreator(userId: string | null, insider: boolean, creator: { platform: string; handle: string; external_id?: string | null }) {
-  if (insider) return true;
+/** Creator ids this user has unlocked by scanning (for scoping lists). */
+export async function unlockedCreatorIds(userId: string) {
+  const admin = supabaseAdmin();
+  const { data: mine } = await admin.from("creator_access").select("platform,handle").eq("user_id", userId);
+  if (!mine?.length) return [] as string[];
+  const keys = new Set(mine.map((m) => `${m.platform}:${m.handle.toLowerCase()}`));
+  const { data: cs } = await admin.from("creators").select("id,platform,handle,external_id").in("platform", [...new Set(mine.map((m) => m.platform))]);
+  return (cs || []).filter((c) => keys.has(`${c.platform}:${String(c.handle).toLowerCase()}`) || keys.has(`${c.platform}:${String(c.external_id || "").toLowerCase()}`)).map((c) => c.id);
+}
+
+/** Has this user unlocked this creator (scanned it themselves)? Admins always yes. */
+export async function canSeeCreator(userId: string | null, seesAll: boolean, creator: { platform: string; handle: string; external_id?: string | null }) {
+  if (seesAll) return true;
   if (!userId) return false;
   const admin = supabaseAdmin();
   const handles = [creator.handle.toLowerCase(), (creator.external_id || "").toLowerCase()].filter(Boolean);

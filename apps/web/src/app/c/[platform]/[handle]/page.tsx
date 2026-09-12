@@ -32,8 +32,8 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
     );
   }
 
-  const { insider } = await currentAccess();
-  const unlocked = await canSeeCreator(user?.id || null, insider, creator);
+  const { admin: seesAll } = await currentAccess();
+  const unlocked = await canSeeCreator(user?.id || null, seesAll, creator);
   const { data: wall } = await admin.from("brand_wall").select("*").eq("creator_id", creator.id).order("deals", { ascending: false }).order("best_score", { ascending: false });
   const cards = ((wall || []) as WallCard[]).filter((c) => !c.is_junk);
   const { data: roster } = user ? await admin.from("roster_creators").select("id,name,handle,platform,followers").eq("user_id", user.id).order("name") : { data: [] };

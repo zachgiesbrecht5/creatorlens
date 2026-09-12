@@ -7,7 +7,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const MODEL = process.env.ANTHROPIC_RESEARCH_MODEL || "claude-sonnet-4-6";
+const MODEL = process.env.ANTHROPIC_RESEARCH_MODEL || "claude-haiku-4-5";
+const FALLBACK_MODEL = process.env.ANTHROPIC_RESEARCH_FALLBACK_MODEL || "claude-sonnet-4-6";
 const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "PASTE_ME" ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[research]", ...a);
 
@@ -48,15 +49,20 @@ Reply ONLY with JSON: {"parent_company": string|null, "email_domain": string|nul
 
   const user = `Brand: ${brand.name}\nWebsite: ${brand.website || brand.domain || "unknown"}\nCategory: ${brand.category || "unknown"}\nSite description: ${(brand.site_description || "").slice(0, 200)}\nRecent creator deals we've seen: ${dealCtx || "none"}\n\nWho should a talent manager email about a paid creator partnership for ${brand.name}, and is there an agency handling their influencer work?`;
 
-  const msg = await client!.messages.create({
-    model: MODEL, max_tokens: 2500, temperature: 0, system,
-    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 8 } as any],
-    messages: [{ role: "user", content: user }],
-  });
-  const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
-  const m = text.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error("no JSON from model");
-  const f = JSON.parse(m[0]) as Finding & { email_domain?: string | null };
+  // cheap model first (5 searches); if it finds nobody, one pass with the stronger model
+  const ask = async (model: string, maxUses: number) => {
+    const msg = await client!.messages.create({
+      model, max_tokens: 2500, temperature: 0, system,
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: maxUses } as any],
+      messages: [{ role: "user", content: user }],
+    });
+    const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
+    const m = text.match(/\{[\s\S]*\}/);
+    return m ? (JSON.parse(m[0]) as Finding & { email_domain?: string | null }) : null;
+  };
+  let f = await ask(MODEL, 5);
+  if (!f || !(f.people || []).length) { log("escalating to", FALLBACK_MODEL, "for", brand.name); f = (await ask(FALLBACK_MODEL, 8)) || f; }
+  if (!f) throw new Error("no JSON from model");
 
   let filed = 0;
   for (const p of (f.people || []).slice(0, 5)) {

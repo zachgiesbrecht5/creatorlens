@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { supabaseAdmin, currentAccess } from "@/lib/supabase";
+import { supabaseAdmin, currentAccess, unlockedCreatorIds } from "@/lib/supabase";
 import { fmt } from "@/lib/fmt";
 import { Verticals } from "@/components/Verticals";
 import { BookingMap, type Deal } from "@/components/BookingMap";
@@ -11,14 +11,19 @@ export const dynamic = "force-dynamic";
 // intel for "who does Brand X work with" and for competitor pitches.
 export default async function BrandPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { insider } = await currentAccess();
+  const { profile, insider, admin: seesAll } = await currentAccess();
   if (!insider) redirect("/brands");   // reverse view (every creator a brand booked, contacts) is house-only
+  const scope = seesAll ? null : await unlockedCreatorIds(profile!.id);   // team members: only creators they scanned
   const admin = supabaseAdmin();
   const { data: brand } = await admin.from("brands").select("*").eq("id", id).single();
   if (!brand) return <p>Brand not found.</p>;
-  const { data: rows } = await admin.from("brand_wall").select("*, creators(handle,display_name,platform,followers,avatar_url,category)").eq("brand_id", id).order("deals", { ascending: false });
+  let rowsQ = admin.from("brand_wall").select("*, creators(handle,display_name,platform,followers,avatar_url,category)").eq("brand_id", id).order("deals", { ascending: false });
+  if (scope) rowsQ = rowsQ.in("creator_id", scope.length ? scope : ["00000000-0000-0000-0000-000000000000"]);
+  const { data: rows } = await rowsQ;
   // every deal, for the timeline
-  const { data: dealRows } = await admin.from("partnerships").select("published_at,platform,confidence_label,content_url,creator_id,creators(id,handle,display_name,followers,category,avatar_url)").eq("brand_id", id).neq("status", "rejected").not("published_at", "is", null).order("published_at", { ascending: true }).limit(500);
+  let dealsQ = admin.from("partnerships").select("published_at,platform,confidence_label,content_url,creator_id,creators(id,handle,display_name,followers,category,avatar_url)").eq("brand_id", id).neq("status", "rejected").not("published_at", "is", null).order("published_at", { ascending: true }).limit(500);
+  if (scope) dealsQ = dealsQ.in("creator_id", scope.length ? scope : ["00000000-0000-0000-0000-000000000000"]);
+  const { data: dealRows } = await dealsQ;
   const repeatIds = new Set((rows || []).filter((r: any) => r.repeat_partner).map((r: any) => r.creator_id));
   const deals: Deal[] = (dealRows || []).filter((d: any) => d.creators).map((d: any) => ({ published_at: d.published_at, platform: d.platform, confidence_label: d.confidence_label, content_url: d.content_url, repeat: repeatIds.has(d.creator_id), creator: d.creators }));
   const pc = (brand.platform_counts || {}) as Record<string, number>;

@@ -36,7 +36,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
     const [local, d] = email.toLowerCase().split("@");
     if (!d || !local) return false;
     if (GENERIC_INBOX.test(local)) return false;                  // info@, support@ ... go to spam
-    if (siteDomain) return rootOf(d) === rootOf(siteDomain) && d.split(".").length <= 3;
+    if (siteDomain) { const par = parentOf(siteDomain); return (rootOf(d) === rootOf(siteDomain) || (!!par && rootOf(d) === rootOf(par))) && d.split(".").length <= 3; }
     // no verified site yet: exact brand key on a mainstream TLD only
     return rootOf(d).replace(/[^a-z0-9]/g, "") === brand.key && /\.(com|ca|co|io|net|org|shop|us|uk|co\.uk)$/.test(d);
   };
@@ -55,6 +55,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
     let people: any[] = [];
     if (process.env.HUNTER_API_KEY) people = (await hunter(brand.name, siteDomain)).people;
     people = people.filter((p) => acceptable(p.email) && relevant(p.title));
+    // house brand of a big group: look at the parent, keep only people whose title mentions this brand
+    const parent = parentOf(siteDomain);
+    if (!people.length && parent && process.env.HUNTER_API_KEY) {
+      const key = brand.name.toLowerCase().split(/\s+/)[0];
+      const all = (await hunter(brand.name, parent)).people;
+      people = all.filter((p) => relevant(p.title) && (String(p.title || "").toLowerCase().includes(key) || /influencer|creator|partnership/i.test(String(p.title || ""))));
+      if (people.length) people = people.map((p) => ({ ...p, title: `${p.title} · ${parent}` }));
+    }
     if (!people.length && process.env.APOLLO_API_KEY && siteDomain) people = (await apollo(siteDomain)).filter((p) => acceptable(p.email) && relevant(p.title));
     if (people.length) {
       await admin.from("contacts").upsert(people.map((p: any) => ({ brand_id: brandId, name: p.name, email: p.email, title: p.title, source: p.source || "hunter", verified: p.confidence >= 90 })), { onConflict: "brand_id,email" });
@@ -73,14 +81,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
   if (insider) {
     const { data: r } = await admin.from("contact_research").select("status,summary,parent_company,agency,agency_url").eq("brand_id", brandId).maybeSingle();
     if (r) research = r;
-    else if (!(contacts || []).length) {
-      await admin.from("contact_research").upsert({ brand_id: brandId, requested_by: profile.id, status: "queued" }, { onConflict: "brand_id", ignoreDuplicates: true });
-      research = { status: "queued", summary: null, parent_company: null, agency: null, agency_url: null };
-    }
+    // (research is queued explicitly via POST /api/contacts/[brandId]/research, not on hover)
   }
 
   return NextResponse.json({
-    research,
+    research: insider ? research : undefined,
     contacts: (contacts || []).map(({ house_only: _h, found_by: _f, last_replied_at, ...c }) => ({ ...c, last_replied_at: insider ? last_replied_at : null })),
     history: (history || []).map((h: any) => ({ status: h.status, created_at: h.created_at, creator_handle: h.creator_handle, by: h.profiles?.full_name || null })),
     excluded: !!excl,
@@ -140,6 +145,29 @@ async function apollo(domain: string) {
   }
   return out;
 }
+
+// House brands of the big groups: staff email lives at the parent. Cheap first
+// pass before any agent research. Domain -> parent domain.
+const PARENTS: Record<string, string> = {
+  // Procter & Gamble
+  "swiffer.com": "pg.com", "tide.com": "pg.com", "gillette.com": "pg.com", "olay.com": "pg.com", "pampers.com": "pg.com", "oralb.com": "pg.com", "crest.com": "pg.com", "febreze.com": "pg.com", "dawn-dish.com": "pg.com", "bounty-towels.com": "pg.com", "headandshoulders.com": "pg.com", "oldspice.com": "pg.com", "pantene.com": "pg.com", "always.com": "pg.com", "cascadeclean.com": "pg.com", "mrclean.com": "pg.com", "venus.com": "pg.com",
+  // Unilever
+  "dove.com": "unilever.com", "hellmanns.com": "unilever.com", "axe.com": "unilever.com", "vaseline.com": "unilever.com", "tresemme.com": "unilever.com", "degreedeodorant.com": "unilever.com", "knorr.com": "unilever.com", "liquidiv.com": "unilever.com", "dermalogica.com": "unilever.com", "sheamoisture.com": "unilever.com", "benjerry.com": "unilever.com",
+  "breyers.com": "magnumicecream.com", "talenti.com": "magnumicecream.com", "magnumicecream.com": "magnumicecream.com",
+  // Nestlé / PepsiCo / Coca-Cola / Mars / Kraft Heinz / General Mills
+  "nescafe.com": "nestle.com", "kitkat.com": "nestle.com", "purina.com": "nestle.com", "gerber.com": "nestle.com", "coffeemate.com": "nestle.com",
+  "gatorade.com": "pepsico.com", "doritos.com": "pepsico.com", "lays.com": "pepsico.com", "quakeroats.com": "pepsico.com", "mtndew.com": "pepsico.com", "cheetos.com": "pepsico.com", "pepsi.com": "pepsico.com", "bubly.com": "pepsico.com",
+  "sprite.com": "coca-colacompany.com", "fanta.com": "coca-colacompany.com", "smartwater.com": "coca-colacompany.com", "vitaminwater.com": "coca-colacompany.com", "bodyarmor.com": "coca-colacompany.com", "coca-cola.com": "coca-colacompany.com",
+  "mms.com": "mars.com", "snickers.com": "mars.com", "pedigree.com": "mars.com", "royalcanin.com": "mars.com",
+  "heinz.com": "kraftheinz.com", "kraftmacandcheese.com": "kraftheinz.com", "oscarmayer.com": "kraftheinz.com", "philadelphia.com": "kraftheinz.com",
+  "cheerios.com": "generalmills.com", "pillsbury.com": "generalmills.com", "naturevalley.com": "generalmills.com", "bettycrocker.com": "generalmills.com", "annies.com": "generalmills.com",
+  // L'Oréal / Estée Lauder / J&J / Colgate / Kenvue
+  "maybelline.com": "loreal.com", "lorealparisusa.com": "loreal.com", "garnierusa.com": "loreal.com", "cerave.com": "loreal.com", "laroche-posay.us": "loreal.com", "nyxcosmetics.com": "loreal.com", "kiehls.com": "loreal.com", "lancome-usa.com": "loreal.com",
+  "clinique.com": "esteelauder.com", "maccosmetics.com": "esteelauder.com", "toofaced.com": "esteelauder.com", "theordinary.com": "deciem.com",
+  "neutrogena.com": "kenvue.com", "aveeno.com": "kenvue.com", "listerine.com": "kenvue.com", "tylenol.com": "kenvue.com", "bandaid.com": "kenvue.com",
+  "colgate.com": "colpal.com", "hillspet.com": "colpal.com",
+};
+const parentOf = (domain: string | null) => (domain ? PARENTS[domain.replace(/^www\./, "").toLowerCase()] || null : null);
 
 // Hunter.io domain search. A plain search returns ten arbitrary people, which
 // at a large company is engineers and sales, so we ask by department and

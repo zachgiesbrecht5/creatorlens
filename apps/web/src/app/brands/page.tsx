@@ -1,15 +1,25 @@
 import Link from "next/link";
-import { supabaseAdmin, currentAccess } from "@/lib/supabase";
+import { supabaseAdmin, currentAccess, unlockedCreatorIds } from "@/lib/supabase";
 import { Verticals } from "@/components/Verticals";
+import { BrandMap, type MapBrand } from "@/components/BrandMap";
 
 export const dynamic = "force-dynamic";
 
 // Brand leaderboard: who is spending across every creator anyone has scanned,
 // filed by what the brand sells, with the creator verticals it actually books.
-export default async function Brands({ searchParams }: { searchParams: Promise<{ q?: string; cat?: string; sort?: string }> }) {
-  const { q, cat, sort } = await searchParams;
+export default async function Brands({ searchParams }: { searchParams: Promise<{ q?: string; cat?: string; sort?: string; view?: string; scope?: string }> }) {
+  const { q, cat, sort, view, scope } = await searchParams;
   const admin = supabaseAdmin();
-  const { profile: user, insider } = await currentAccess();
+  const { profile: user, insider, admin: seesAll } = await currentAccess();
+  // Whose scans: admins see the whole index (or just their own with ?scope=mine);
+  // everyone else only ever sees brands from creators they scanned themselves.
+  const mineOnly = !seesAll || scope === "mine";
+  const myCreatorIds = user && mineOnly ? await unlockedCreatorIds(user.id) : null;
+  let myBrandIds: string[] | null = null;
+  if (myCreatorIds) {
+    const { data: pr } = myCreatorIds.length ? await admin.from("partnerships").select("brand_id").in("creator_id", myCreatorIds).neq("status", "rejected") : { data: [] };
+    myBrandIds = [...new Set((pr || []).map((r) => r.brand_id))];
+  }
   const PREVIEW = 10;  // signed-out visitors see the top rows, the rest is frosted
   // Outsiders (signed in, not house): brand names, category and verticals only.
   // Counts, recency, and the reverse view stay in the house.
@@ -25,16 +35,41 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
     .eq("is_junk", false).eq("is_self_brand", false).neq("site_status", "dead").limit(300);
   if (q) query = query.ilike("name", `%${q}%`);
   if (cat) query = query.eq("category", cat);
+  if (myBrandIds) query = query.in("id", myBrandIds.length ? myBrandIds : ["00000000-0000-0000-0000-000000000000"]);
   query = sort === "recent" ? query.order("last_seen", { ascending: false, nullsFirst: false })
     : sort === "deals" ? query.order("deal_count", { ascending: false })
     : query.order("creator_count", { ascending: false }).order("deal_count", { ascending: false });
   const { data } = await query;
   const href = (p: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries({ q, cat, sort, ...p })) if (v) sp.set(k, v);
+    for (const [k, v] of Object.entries({ q, cat, sort, view, scope, ...p })) if (v) sp.set(k, v);
     const s = sp.toString();
     return "/brands" + (s ? "?" + s : "");
   };
+
+  // Map view (house): per-brand signals from every deal, computed here.
+  let mapBrands: MapBrand[] = [];
+  if (seesAll && view === "map") {
+    const ids = (data || []).map((b) => b.id);
+    const { data: rows } = ids.length ? await admin.from("partnerships").select("brand_id,platform,published_at,creator_id,creators(followers)").in("brand_id", ids).neq("status", "rejected").not("published_at", "is", null).limit(5000) : { data: [] };
+    const by = new Map<string, any[]>();
+    for (const r of rows || []) { const a = by.get(r.brand_id) || []; a.push(r); by.set(r.brand_id, a); }
+    mapBrands = (data || []).map((b) => {
+      const rs = by.get(b.id) || [];
+      const fl = rs.map((r: any) => r.creators?.followers).filter((n: any) => n > 0).sort((a: number, c: number) => a - c);
+      const perCreator = new Map<string, number[]>();
+      for (const r of rs) { const a = perCreator.get(r.creator_id) || []; a.push(new Date(r.published_at).getTime()); perCreator.set(r.creator_id, a); }
+      const repeat = [...perCreator.values()].filter((ts) => ts.length >= 2 && Math.max(...ts) - Math.min(...ts) >= 30 * 864e5).length;
+      const times = rs.map((r: any) => new Date(r.published_at).getTime());
+      return {
+        id: b.id, name: b.name, domain: b.domain, category: b.category, deals: rs.length, creators: perCreator.size,
+        last_seen: times.length ? new Date(Math.max(...times)).toISOString() : null, first_seen: times.length ? new Date(Math.min(...times)).toISOString() : null,
+        median_followers: fl.length ? fl[Math.floor(fl.length / 2)] : null, repeat_creators: repeat,
+        yt: rs.filter((r: any) => r.platform === "youtube").length, ig: rs.filter((r: any) => r.platform === "instagram").length,
+        verticals: b.verticals, is_mass: !!b.is_mass_sponsor, is_affiliate: !!b.is_affiliate,
+      };
+    });
+  }
 
   return (
     <div>
@@ -55,13 +90,23 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
         <Chip href={href({ cat: undefined })} active={!cat}>All</Chip>
         {cats.map(([c, n]) => <Chip key={c} href={href({ cat: c })} active={cat === c}>{c} <span className="num text-dim">{n}</span></Chip>)}
         {insider && <div className="ml-auto flex rounded-md bg-surface2 p-0.5 font-mono text-[11px]">
+          {seesAll && ([["", "all scans"], ["mine", "my scans"]] as const).map(([v, l]) => (
+            <Link key={"s" + l} href={href({ scope: v || undefined })} className={`rounded px-2.5 py-1 transition ${(scope || "") === v ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}>{l}</Link>
+          ))}
+          {seesAll && <span className="mx-1 w-px bg-line" />}
+          {seesAll && ([["", "table"], ["map", "map"]] as const).map(([v, l]) => (
+            <Link key={l} href={href({ view: v || undefined })} className={`rounded px-2.5 py-1 transition ${(view || "") === v ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}>{l}</Link>
+          ))}
+          {seesAll && <span className="mx-1 w-px bg-line" />}
           {[["", "creators"], ["deals", "deals"], ["recent", "recent"]].map(([s, l]) => (
             <Link key={l} href={href({ sort: s || undefined })} className={`rounded px-2.5 py-1 transition ${(sort || "") === s ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}>{l}</Link>
           ))}
         </div>}
       </div>
 
-      <div className="card mt-4 overflow-x-auto">
+      {seesAll && view === "map" && <BrandMap brands={mapBrands} />}
+
+      <div className="card mt-4 overflow-x-auto" style={seesAll && view === "map" ? { display: "none" } : undefined}>
         <table className="tbl">
           <thead>
             <tr><th>Brand</th><th>Category</th><th title="Creator verticals with 2+ distinct creators booked">Books</th><th title="Where the deals were found">Platform</th>{insider && <><th className="text-right">Creators</th><th className="text-right">Deals</th><th>Last seen</th></>}<th>Site</th></tr>
