@@ -10,6 +10,7 @@ import { startWorkingLoop, playPrint } from "@/lib/print-sound";
 export function PrintingScan({ jobId, initialStatus, handle, platform }: { jobId: string; initialStatus: string; handle: string; platform: string }) {
   const [status, setStatus] = useState(initialStatus);
   const [error, setError] = useState<string | null>(null);
+  const [ahead, setAhead] = useState<number | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -21,10 +22,13 @@ export function PrintingScan({ jobId, initialStatus, handle, platform }: { jobId
         if (s === "failed") setError((payload.new as any).error);
         if (s === "done") setTimeout(() => router.refresh(), 400);
       }).subscribe();
+    const pos = async () => { const { data } = await sb.rpc("queue_position", { p_job: jobId }); if (typeof data === "number") setAhead(data); };
+    pos();
     const poll = setInterval(async () => {
       const { data } = await sb.from("scan_jobs").select("status,error").eq("id", jobId).single();
       if (data?.status === "done") { clearInterval(poll); router.refresh(); }
       if (data?.status === "failed") { clearInterval(poll); setStatus("failed"); setError(data.error); }
+      if (data?.status === "queued") pos(); else setAhead(0);
     }, 5000);
     return () => { sb.removeChannel(ch); clearInterval(poll); };
   }, [jobId, router]);
@@ -40,7 +44,7 @@ export function PrintingScan({ jobId, initialStatus, handle, platform }: { jobId
   const failed = status === "failed";
   const src = platform === "youtube" ? "videos" : "posts";
   const lines = failed ? [`ERROR: ${String(error || "scan failed").slice(0, 26)}`]
-    : status === "queued" ? [`QUEUED @${handle}`, "WARMING UP…"]
+    : status === "queued" ? (ahead && ahead > 0 ? [`IN LINE: ${ahead} AHEAD`, `QUEUED @${handle}`] : [`QUEUED @${handle}`, "WARMING UP…"])
     : status === "rate_limited" ? ["PLATFORM LIMIT. WAITING…", "RETRYING SOON"]
     : status === "done" ? ["DONE ✓ LOADING…"]
     : [`READING ${src}…`, "FINDING SPONSORS…", "CHECKING BRANDS…", "LOOKING UP CONTACTS…", "ALMOST THERE…"];
@@ -58,7 +62,7 @@ export function PrintingScan({ jobId, initialStatus, handle, platform }: { jobId
             <div key={i} className="rc-line rc-row rc-ghost" style={{ animationDelay: `${i * 180}ms` }}><span /><span /><span /><span /></div>
           ))}
           <div className="rc-rule" />
-          <div className="rc-line rc-foot"><span>{failed ? "print failed" : status === "rate_limited" ? "waiting on the platform, you can leave this page" : "usually 10 to 40 seconds"}</span><span>public posts only</span></div>
+          <div className="rc-line rc-foot"><span>{failed ? "print failed" : status === "rate_limited" ? "waiting on the platform, you can leave this page" : ahead && ahead > 0 ? `${ahead} print${ahead === 1 ? "" : "s"} ahead of you · about ${Math.ceil(ahead / 4) * 0.5 + 0.5} min` : "usually 10 to 40 seconds"}</span><span>public posts only</span></div>
           <div className="rc-tear" />
         </div>
       </div>

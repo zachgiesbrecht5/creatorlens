@@ -20,6 +20,9 @@ const sb = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
 const YT_API_KEY = env("YT_API_KEY");
 const YT_DAILY_BUDGET = Number(env("YT_DAILY_BUDGET", "9000"));
 const POLL_MS = 3000;
+const CONCURRENCY = Math.max(1, Number(process.env.WORKER_CONCURRENCY || 4));   // scans in flight at once
+const WORKER_ID = `${process.env.RAILWAY_REPLICA_ID || process.env.HOSTNAME || "worker"}-${Math.random().toString(36).slice(2, 6)}`;
+let inFlight = 0;
 
 const brandKey = (name: string) => name.toLowerCase().replace(/^@/, "").replace(/[^a-z0-9]/g, "");
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
@@ -134,7 +137,7 @@ async function persist(job: any, result: ScanResult) {
 
 // ── Job loop ───────────────────────────────────────────────────
 async function runJob(job: any) {
-  await sb.from("scan_jobs").update({ status: "running", started_at: new Date().toISOString(), attempts: job.attempts + 1 }).eq("id", job.id);
+  // (status/started_at/attempts are set by claim_scan_jobs)
   await ensureLearnedAliases();
   let result: ScanResult;
   if (job.platform === "youtube") {
@@ -292,17 +295,26 @@ import { runResearch } from "./research";
 import { heartbeat, alert, nightly } from "./observe";
 
 let lastNightly = "";
+let lastReap = 0;
 async function tick() {
-  try { await heartbeat(sb, { queue: "tick" }); } catch { /* ignore */ }
+  try { await heartbeat(sb, { worker: WORKER_ID, inFlight, concurrency: CONCURRENCY }); } catch { /* ignore */ }
   const today = new Date().toISOString().slice(0, 10);
   if (lastNightly !== today && new Date().getUTCHours() >= 8) { lastNightly = today; nightly(sb).catch((e) => alert(sb, "nightly failed", { error: String(e?.message || e) })); }
+  if (Date.now() - lastReap > 5 * 60000) { lastReap = Date.now(); sb.rpc("requeue_stuck_jobs").then(({ data }) => { if (data) log("requeued stuck jobs:", data); }); }
 
-  const { data: jobs, error: pollErr } = await sb.from("scan_jobs").select("*")
-    .in("status", ["queued", "rate_limited"]).lte("run_after", new Date().toISOString())
-    .order("priority").order("created_at").limit(1);
-  if (pollErr) { log("poll failed:", pollErr.message, "(check SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)"); return; }
-  const job = jobs?.[0];
-  if (!job) { if (!(await runResearch(sb))) { if (!(await checkBrandSites())) await classifyBackfill(sb); } return; }
+  // Claim up to (CONCURRENCY - inFlight) jobs atomically and run them in parallel.
+  const room = CONCURRENCY - inFlight;
+  if (room <= 0) return;
+  const { data: jobs, error: pollErr } = await sb.rpc("claim_scan_jobs", { p_limit: room, p_worker: WORKER_ID });
+  if (pollErr) { log("claim failed:", pollErr.message, "(check SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)"); return; }
+  if (!jobs?.length) {
+    if (inFlight === 0) { if (!(await runResearch(sb))) { if (!(await checkBrandSites())) await classifyBackfill(sb); } }
+    return;
+  }
+  for (const job of jobs) { inFlight++; runOne(job).finally(() => { inFlight--; }); }
+}
+
+async function runOne(job: any) {
   try {
     await runJob(job);
   } catch (e: any) {
