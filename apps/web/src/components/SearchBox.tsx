@@ -31,6 +31,7 @@ export function SearchBox({ signedIn, cta = "Scan" }: { signedIn: boolean; cta?:
     const r = await fetch("/api/scan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ platform: p, handle }) });
     const j = await r.json();
     setBusy(false);
+    if (r.status === 402) { window.location.href = "/pricing"; return; }
     if (!r.ok) { setErr(j.error || "Scan failed"); return; }
     router.push(`/c/${p}/${j.handle}`);
   }

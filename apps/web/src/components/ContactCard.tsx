@@ -6,6 +6,8 @@ import type { RosterCreator } from "./BrandWall";
 export type ContactInfo = {
   contacts: { id: string; name: string | null; email: string | null; title: string | null; source: string; verified: boolean; source_url?: string | null; confidence?: number | null }[];
   research?: { status: string; summary: string | null; parent_company: string | null; agency: string | null; agency_url: string | null } | null;
+  research_credits?: number | null;
+  locked?: boolean;
   history: { status: string; created_at: string; creator_handle: string | null; by: string | null }[];
   excluded: boolean;
   domain?: string | null;
@@ -34,7 +36,7 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
     setDrafting(true); setResult(null);
     const r = await fetch("/api/draft", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ brandId, creatorId: creator.id, rosterCreatorId: rosterId, contactId: contact?.id, toEmail: contact?.email || manual }),
+      body: JSON.stringify({ brandId, creatorId: creator.id, rosterCreatorId: rosterId, contactId: contact?.id, toEmail: (contact?.email && !contact.email.startsWith("no-email:") ? contact.email : "") || manual }),
     });
     const j = await r.json();
     setDrafting(false);
@@ -43,6 +45,7 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
       setResult({ ok: true, msg: w ? "Opened in Gmail. Review, then send or close (Gmail keeps the draft)." : "Pop-up blocked.", link: w ? undefined : j.link });
       return;
     }
+    if (r.status === 402) { setResult({ ok: false, msg: "You're out of pitch drafts on the free plan.", link: "/pricing" }); return; }
     setResult(r.ok ? { ok: true, msg: "Draft is in your Gmail Drafts folder.", link: j.link } : { ok: false, msg: j.error || "Draft failed" });
   }
 
@@ -56,13 +59,20 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
       )}
       {contact ? (
         <div className="flex flex-wrap items-baseline gap-x-2">
+          {expanded && contact.email?.startsWith("no-email:") && <input className="input-flat order-last !w-48 !py-1" placeholder="paste their email" value={manual} onChange={(e) => setManual(e.target.value)} />}
           <span className="font-medium">{contact.name || "Partnerships"}</span>
           {contact.title && <span className="text-muted">{contact.title}</span>}
-          <a href={`mailto:${contact.email}`} className="num text-[12px] text-muted underline decoration-line underline-offset-2 hover:text-accent">{contact.email}</a>
+          {info.locked ? (
+            <span className="num text-[12px] text-muted">{contact.email} <a href="/pricing" className="ml-1 rounded bg-fg px-2 py-0.5 font-sans text-[11px] font-semibold text-white no-underline hover:bg-black">Reveal with Pro</a></span>
+          ) : contact.email && !contact.email.startsWith("no-email:") ? (
+            <a href={`mailto:${contact.email}`} className="num text-[12px] text-muted underline decoration-line underline-offset-2 hover:text-accent">{contact.email}</a>
+          ) : (
+            <span className="num text-[12px] text-dim">no verified email; reach them via the source</span>
+          )}
           {contact.verified && <span className="font-mono text-[10px] text-ok" title="Verified deliverable">✓</span>}
           {contact.source === "agent" && (
             <span className="font-mono text-[10px] text-dim" title={`Found by research${contact.confidence != null ? `, confidence ${Math.round(contact.confidence * 100)}%` : ""}`}>
-              researched{contact.source_url && <> · <a href={contact.source_url} target="_blank" rel="noreferrer" className="hover:text-accent">source ↗</a></>}
+              {contact.verified ? "researched" : "suggested, unverified"}{contact.source_url && <> · <a href={contact.source_url} target="_blank" rel="noreferrer" className="hover:text-accent">source ↗</a></>}
             </span>
           )}
         </div>
@@ -74,8 +84,10 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
             <span className="text-muted">No contact on file{info.domain ? ` for ${info.domain}` : ""}.</span>
           )}
           {expanded && info.research !== undefined && (!info.research || info.research.status === "failed") && (
-            <button className="btn-ghost !px-2.5 !py-1 !text-[12px]" title="Have the research agent find who runs creator partnerships (parent company, agency, verified email). About 1 to 4 cents." onClick={async () => { const r = await fetch(`/api/contacts/${brandId}/research`, { method: "POST" }); if (r.ok) onLoad?.(); }}>
-              {info.research?.status === "failed" ? "Research again" : "Research this brand"}
+            <button className="btn-dark !px-4 !py-2 !text-[14px] !font-semibold" disabled={info.research_credits === 0}
+              title={info.research_credits == null ? "Have the research agent find who runs creator partnerships: parent company, agency, and a verified or suggested email." : `${info.research_credits} research credit${info.research_credits === 1 ? "" : "s"} left in the beta`}
+              onClick={async () => { const r = await fetch(`/api/contacts/${brandId}/research`, { method: "POST" }); const j = await r.json().catch(() => ({})); if (r.ok) onLoad?.(); else alert(j.error || "Research unavailable"); }}>
+              {info.research?.status === "failed" ? "Research again" : "Research this brand"}{info.research_credits != null && <span className="ml-2 font-mono text-[11px] font-normal opacity-70">{info.research_credits} left</span>}
             </button>
           )}
           {expanded && <input className="input-flat !w-48 !py-1" placeholder="paste an email" value={manual} onChange={(e) => setManual(e.target.value)} />}

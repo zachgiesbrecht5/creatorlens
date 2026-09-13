@@ -100,7 +100,7 @@ export default async function Home() {
           <div className="text-lg font-semibold tracking-tight">Free while in beta.</div>
           <p className="mt-2 text-[15px] leading-relaxed text-muted">Sign in with Google, get 5 prints and 3 drafts to start, and keep going at no charge if you tell us what worked. Paid plans are coming; beta users keep a founding discount for good.</p>
         </div>
-        {!user && <Link href="/login" className="btn-dark">Pull your first print</Link>}
+        <div className="flex gap-2">{!user && <Link href="/login" className="btn-dark">Pull your first print</Link>}<Link href="/pricing" className="btn-ghost">See plans</Link></div>
       </section>
     </div>
   );

@@ -22,6 +22,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
   const { data: brand } = await admin.from("brands").select("id,name,key,domain,website").eq("id", brandId).single();
   if (!brand) return NextResponse.json({ error: "Unknown brand" }, { status: 404 });
 
+  // Soft paywall: free accounts get a few contact reveals, then emails are hidden
+  // behind an upgrade. Paid plans and the house are unlimited. A reveal is only
+  // charged once per brand per user (re-opening a card you already revealed is free).
+  const paidPlan = insider || profile.plan === "pro" || profile.plan === "agency";
+  let locked = false;
+  if (!paidPlan) {
+    const { data: seen } = await admin.from("credit_ledger").select("id").eq("user_id", profile.id).eq("kind", "reveal").eq("ref", brandId).limit(1);
+    if (!seen?.length) {
+      const { data: ok } = await admin.rpc("spend_credit", { p_user: profile.id, p_kind: "reveal", p_reason: "reveal", p_ref: brandId });
+      locked = !ok;
+    }
+  }
+
   // The brand's verified website (resolved by the worker) is the source of truth
   // for which email domains are acceptable. Without it we fall back to the
   // stored domain, and finally to a name-based lookup that must still look like
@@ -48,7 +61,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
   // Provenance wall. Outsiders only ever see third-party lookups (never Rootfor's
   // own tracker/relationship contacts) plus emails they pasted themselves.
   const visible = (c: { source: string; house_only: boolean; found_by: string | null }) =>
-    insider || (!c.house_only && auto(c)) || (c.source === "manual" && c.found_by === profile.id);
+    insider || (!c.house_only && auto(c)) || ((c.source === "manual" || c.source === "agent") && c.found_by === profile.id);
   contacts = (contacts || []).filter(visible).filter((c) => !auto(c) || (acceptable(c.email || "") && relevant(c.title)));
 
   if (!contacts.length) {
@@ -78,15 +91,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
   // Agent research (house only): if nothing usable was found, queue a research
   // job once; the card polls and shows the answer when the worker lands it.
   let research: { status: string; summary: string | null; parent_company: string | null; agency: string | null; agency_url: string | null } | null = null;
-  if (insider) {
-    const { data: r } = await admin.from("contact_research").select("status,summary,parent_company,agency,agency_url").eq("brand_id", brandId).maybeSingle();
-    if (r) research = r;
+  {
+    const { data: r } = await admin.from("contact_research").select("status,summary,parent_company,agency,agency_url,requested_by").eq("brand_id", brandId).maybeSingle();
+    if (r && (insider || r.requested_by === profile.id)) research = r;
     // (research is queued explicitly via POST /api/contacts/[brandId]/research, not on hover)
   }
 
+  const mask = (e: string | null) => (e ? e.replace(/^(.).*(@.*)$/, "$1•••$2") : e);
   return NextResponse.json({
-    research: insider ? research : undefined,
-    contacts: (contacts || []).map(({ house_only: _h, found_by: _f, last_replied_at, ...c }) => ({ ...c, last_replied_at: insider ? last_replied_at : null })),
+    locked,
+    research,
+    research_credits: insider ? null : profile.research_credits ?? 0,
+    contacts: (contacts || []).map(({ house_only: _h, found_by: _f, last_replied_at, ...c }) => ({ ...c, email: locked ? mask(c.email) : c.email, last_replied_at: insider ? last_replied_at : null })),
     history: (history || []).map((h: any) => ({ status: h.status, created_at: h.created_at, creator_handle: h.creator_handle, by: h.profiles?.full_name || null })),
     excluded: !!excl,
     domain: brand.domain,

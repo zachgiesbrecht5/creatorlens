@@ -1,4 +1,5 @@
 import { GoogleButton } from "@/components/GoogleButton";
+import { ManagePlan } from "@/components/ManagePlan";
 import { redirect } from "next/navigation";
 import { currentProfile, supabaseAdmin, supabaseServer } from "@/lib/supabase";
 
@@ -17,7 +18,7 @@ async function savePrompt(formData: FormData) {
   redirect("/settings?saved=1");
 }
 
-export default async function Settings({ searchParams }: { searchParams: Promise<{ saved?: string; ig?: string }> }) {
+export default async function Settings({ searchParams }: { searchParams: Promise<{ saved?: string; ig?: string; upgraded?: string }> }) {
   const sp = await searchParams;
   const profile = await currentProfile();
   if (!profile) redirect("/login?next=/settings");
@@ -70,13 +71,20 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       <div className="space-y-6">
         <div className="card p-6">
           <h2 className="h2 text-xl">Plan</h2>
-          <p className="mt-1"><span className="pill-accent">{profile.plan}</span></p>
-          {profile.plan === "trial" && (
+          <p className="mt-1 flex items-center gap-2"><span className="pill-accent">{profile.plan === "trial" ? "free" : profile.plan}</span>{profile.plan_status && profile.plan_status !== "active" && <span className="pill-warn">{profile.plan_status}</span>}{profile.plan_renews_at && <span className="num text-[11px] text-dim">renews {new Date(profile.plan_renews_at).toLocaleDateString()}</span>}</p>
+          {sp.upgraded && <p className="mt-2 text-sm text-ok">You&apos;re upgraded. Credits refill every billing cycle.</p>}
+          {(profile.plan === "trial" || profile.plan === "pro") && (
             <div className="mt-3 grid grid-cols-2 gap-3 text-center">
-              <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.scan_credits}</div><div className="label">scans left</div></div>
+              {profile.plan === "trial" && <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.scan_credits}</div><div className="label">prints left</div></div>}
+              {profile.plan === "trial" && <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.reveal_credits}</div><div className="label">reveals left</div></div>}
               <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.draft_credits}</div><div className="label">drafts left</div></div>
+              <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.research_credits}</div><div className="label">research left</div></div>
             </div>
           )}
+          <div className="mt-4 flex gap-2">
+            {(profile.plan === "trial") && <a href="/pricing" className="btn-dark">Upgrade</a>}
+            {profile.stripe_customer_id && <ManagePlan />}
+          </div>
           <h3 className="mt-6 text-sm font-medium">Invite a teammate</h3>
           <p className="mt-1 text-xs text-muted">You both get 10 scans when they sign up.</p>
           <input readOnly className="input-flat mt-2 font-mono text-[11px]" value={inviteUrl} />
