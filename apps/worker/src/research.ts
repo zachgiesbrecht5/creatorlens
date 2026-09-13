@@ -6,6 +6,7 @@
 // email through Hunter. Everything filed carries the URL it came from.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { alert } from "./observe";
 
 const MODEL = process.env.ANTHROPIC_RESEARCH_MODEL || "claude-haiku-4-5";
 const FALLBACK_MODEL = process.env.ANTHROPIC_RESEARCH_FALLBACK_MODEL || "claude-sonnet-4-6";
@@ -26,6 +27,7 @@ export async function runResearch(sb: SupabaseClient, limit = 1): Promise<number
       log("done", job.brand_id, n, "contacts");
     } catch (e: any) {
       log("failed", job.brand_id, e?.message);
+      await alert(sb, "research failed", { brand_id: job.brand_id, error: String(e?.message || e).slice(0, 300) });
       await sb.from("contact_research").update({ status: "failed", error: String(e?.message || e).slice(0, 400), finished_at: new Date().toISOString() }).eq("id", job.id);
     }
   }
@@ -64,21 +66,54 @@ Reply ONLY with JSON: {"parent_company": string|null, "email_domain": string|nul
   if (!f || !(f.people || []).length) { log("escalating to", FALLBACK_MODEL, "for", brand.name); f = (await ask(FALLBACK_MODEL, 8)) || f; }
   if (!f) throw new Error("no JSON from model");
 
+  // who asked (so they can see what their credit bought)
+  const { data: jobRow } = await sb.from("contact_research").select("requested_by").eq("id", jobId).single();
+  const requestedBy = jobRow?.requested_by || null;
+  const key = process.env.HUNTER_API_KEY;
+  const patternCache = new Map<string, string | null>();
+  // the domain's email pattern from Hunter (e.g. "{first}.{last}"), cached per domain
+  const patternFor = async (domain: string) => {
+    if (patternCache.has(domain)) return patternCache.get(domain)!;
+    const r = key ? await fetch(`https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&limit=1&api_key=${key}`).then((r) => r.json()).catch(() => null) : null;
+    const p = r?.data?.pattern ? String(r.data.pattern) : null;
+    patternCache.set(domain, p); return p;
+  };
+  const fromPattern = (pattern: string, first: string, last: string, domain: string) => {
+    const f = first.toLowerCase().replace(/[^a-z]/g, ""), l = last.toLowerCase().replace(/[^a-z]/g, "");
+    const local = pattern.replace("{first}", f).replace("{last}", l).replace("{f}", f.slice(0, 1)).replace("{l}", l.slice(0, 1));
+    return /\{/.test(local) || !local ? null : `${local}@${domain}`;
+  };
+
   let filed = 0;
   for (const p of (f.people || []).slice(0, 5)) {
     if (!p.name || !p.source_url) continue;
     const domain = (p.email_domain || f.email_domain || brand.domain || "").replace(/^www\./, "").toLowerCase();
+    const [first, ...rest] = p.name.trim().split(/\s+/); const last = rest.pop() || "";
     let email: string | null = null; let verified = false; let conf = Math.min(1, Math.max(0, Number(p.confidence) || 0.4));
-    if (domain && process.env.HUNTER_API_KEY) {
-      const [first, ...rest] = p.name.trim().split(/\s+/); const last = rest.pop() || "";
-      const r = await fetch(`https://api.hunter.io/v2/email-finder?domain=${encodeURIComponent(domain)}&first_name=${encodeURIComponent(first)}&last_name=${encodeURIComponent(last)}&api_key=${process.env.HUNTER_API_KEY}`).then((r) => r.json()).catch(() => null);
+    let how = "";
+    if (domain && key && first && last) {
+      // 1. Hunter email finder (their own sources)
+      const r = await fetch(`https://api.hunter.io/v2/email-finder?domain=${encodeURIComponent(domain)}&first_name=${encodeURIComponent(first)}&last_name=${encodeURIComponent(last)}&api_key=${key}`).then((r) => r.json()).catch(() => null);
       const e = r?.data?.email; const score = Number(r?.data?.score || 0);
-      if (e && score >= 50) { email = String(e).toLowerCase(); verified = score >= 85; conf = Math.min(1, conf * (0.6 + score / 250)); }
+      if (e && score >= 50) { email = String(e).toLowerCase(); verified = score >= 85; conf = Math.min(1, conf * (0.6 + score / 250)); how = `hunter finder ${score}`; }
+      // 2. otherwise build the address from the domain's known pattern and run it through the verifier
+      if (!email) {
+        const pat = await patternFor(domain);
+        const guess = pat ? fromPattern(pat, first, last, domain) : `${first.toLowerCase()}.${last.toLowerCase()}@${domain}`;
+        if (guess) {
+          const v = await fetch(`https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(guess)}&api_key=${key}`).then((r) => r.json()).catch(() => null);
+          const status = String(v?.data?.status || v?.data?.result || "unknown");
+          if (status === "valid" || status === "deliverable") { email = guess; verified = true; conf = Math.min(1, conf * 0.95); how = "pattern, verified"; }
+          else if (status === "accept_all" || status === "risky" || status === "unknown") { email = guess; verified = false; conf = Math.min(1, conf * 0.6); how = `pattern (${pat || "first.last"}), ${status}`; }
+          // "invalid" / "undeliverable": leave email null
+        }
+      }
     }
-    if (!email) continue;   // no address we can stand behind: keep the person out of the contact list
+    // even with no usable address, keep the person: name + title + where we found them is still a lead
+    const title = `${p.title}${p.company && p.company.toLowerCase() !== brand.name.toLowerCase() ? ` · ${p.company}` : ""}${how ? ` (${how})` : ""}`;
     await sb.from("contacts").upsert({
-      brand_id: brandId, email, name: p.name, title: `${p.title}${p.company && p.company.toLowerCase() !== brand.name.toLowerCase() ? ` · ${p.company}` : ""}`,
-      source: "agent", verified, house_only: true, source_url: p.source_url, confidence: conf,
+      brand_id: brandId, email: email || `no-email:${brandId}:${p.name.toLowerCase().replace(/[^a-z]/g, "")}`, name: p.name, title,
+      source: "agent", verified, house_only: false, found_by: requestedBy, source_url: p.source_url, confidence: conf,
     }, { onConflict: "brand_id,email" });
     filed++;
   }

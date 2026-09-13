@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentProfile, supabaseAdmin } from "@/lib/supabase";
 import { stripe, PRICES } from "@/lib/stripe";
+import { track } from "@/lib/track";
 
 // POST { plan: "pro"|"agency", interval: "monthly"|"yearly" } -> Stripe Checkout URL
 export async function POST(req: Request) {
@@ -28,5 +29,6 @@ export async function POST(req: Request) {
     subscription_data: { metadata: { user_id: profile.id } },
     client_reference_id: profile.id,
   });
+  track(profile.id, "checkout_started", { plan, interval: interval || "monthly" });
   return NextResponse.json({ url: session.url });
 }

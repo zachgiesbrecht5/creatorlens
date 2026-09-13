@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SearchBox } from "@/components/SearchBox";
 import { PrintReceipt } from "@/components/PrintReceipt";
+import { FirstRun } from "@/components/FirstRun";
 import { supabaseAdmin, currentAccess } from "@/lib/supabase";
 import { fmt } from "@/lib/fmt";
 
@@ -14,6 +15,17 @@ export default async function Home() {
     admin.from("brands").select("*", { count: "exact", head: true }),
     admin.from("partnerships").select("*", { count: "exact", head: true }),
   ]);
+  // First-run checklist: printed? roster? drafted? Hidden once all three are done.
+  let firstRun: { printed: boolean; roster: boolean; drafted: boolean } | null = null;
+  if (user) {
+    const [{ count: prints }, { count: roster }, { count: drafts }] = await Promise.all([
+      admin.from("creator_access").select("*", { count: "exact", head: true }).eq("user_id", user.id),
+      admin.from("roster_creators").select("*", { count: "exact", head: true }).eq("user_id", user.id),
+      admin.from("drafts").select("*", { count: "exact", head: true }).eq("user_id", user.id),
+    ]);
+    const f = { printed: (prints || 0) > 0, roster: (roster || 0) > 0, drafted: (drafts || 0) > 0 };
+    if (!(f.printed && f.roster && f.drafted)) firstRun = f;
+  }
   // Recently scanned: the whole index for the house, only your own unlocks otherwise.
   let recent: { platform: string; handle: string; display_name: string | null; avatar_url: string | null; followers: number | null }[] = [];
   if (seesAll) {
@@ -43,6 +55,8 @@ export default async function Home() {
           </div>
         </div>
       </section>
+
+      {firstRun && <FirstRun {...firstRun} />}
 
       {recent && recent.length > 0 && (
         <section className="mt-10">

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { supabaseAdmin } from "@/lib/supabase";
 import { stripe, planForPrice } from "@/lib/stripe";
+import { track, alert } from "@/lib/track";
 
 // Stripe -> profiles. Point the Stripe webhook at /api/billing/webhook with:
 //   checkout.session.completed, customer.subscription.updated,
@@ -11,7 +12,7 @@ export async function POST(req: Request) {
   const raw = await req.text();
   let event: Stripe.Event;
   try { event = stripe().webhooks.constructEvent(raw, sig, process.env.STRIPE_WEBHOOK_SECRET || ""); }
-  catch (e: any) { return NextResponse.json({ error: `bad signature: ${e.message}` }, { status: 400 }); }
+  catch (e: any) { alert("stripe webhook bad signature", { error: e.message }); return NextResponse.json({ error: `bad signature: ${e.message}` }, { status: 400 }); }
   const admin = supabaseAdmin();
 
   const userFor = async (customer: string | Stripe.Customer | Stripe.DeletedCustomer | null) => {
@@ -32,6 +33,7 @@ export async function POST(req: Request) {
       ...(keepHouse ? {} : { plan: live && plan ? plan : "trial" }),
     }).eq("id", u.id);
     if (live && plan && !keepHouse) await admin.rpc("refill_plan_credits", { p_user: u.id, p_plan: plan });
+    if (!keepHouse) track(u.id, live && plan ? "upgraded" : "downgraded", { plan: plan || u.plan, status: sub.status });
   };
 
   switch (event.type) {

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { currentAccess, supabaseAdmin } from "@/lib/supabase";
+import { track } from "@/lib/track";
 
 // GET /api/contacts/:brandId
 // Order of trust: contacts already in the pool (imported from the Outreach Log,
@@ -32,6 +33,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
     if (!seen?.length) {
       const { data: ok } = await admin.rpc("spend_credit", { p_user: profile.id, p_kind: "reveal", p_reason: "reveal", p_ref: brandId });
       locked = !ok;
+      track(profile.id, locked ? "reveal_locked" : "reveal", { brand: brand.name });
     }
   }
 

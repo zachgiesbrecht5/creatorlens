@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { currentProfile, currentAccess, canSeeCreator, supabaseAdmin } from "@/lib/supabase";
+import { track, alert } from "@/lib/track";
 import { googleAccessToken, createGmailDraft } from "@/lib/gmail";
 
 // POST { brandId, creatorId, rosterCreatorId, contactId?, toEmail }
@@ -35,18 +36,23 @@ export async function POST(req: NextRequest) {
   if (!(await canSeeCreator(profile.id, seesAll, creator as any))) return NextResponse.json({ error: "Scan this creator first to draft from their deals." }, { status: 403 });
 
   const { data: ok } = await admin.rpc("spend_credit", { p_user: profile.id, p_kind: "draft", p_reason: "draft", p_ref: `${brand.name}:${mine.handle || mine.name}` });
-  if (!ok) return NextResponse.json({ error: "Out of draft credits" }, { status: 402 });
+  if (!ok) { track(profile.id, "draft_locked", { brand: brand.name }); return NextResponse.json({ error: "Out of draft credits" }, { status: 402 }); }
 
   const { data: org } = profile.org_id ? await admin.from("orgs").select("name,shared_prompt").eq("id", profile.org_id).single() : { data: null };
   const style = profile.pitch_prompt || org?.shared_prompt || DEFAULT_STYLE;
-  const otherCreators = (others || []).map((o: any) => o.creators).filter(Boolean).map((c: any) => `@${c.handle} (${c.followers} followers)`);
+  // Proof points: display names only, never handles in prose, at most two.
+  const nice = (c: any) => (c?.display_name && !/^@|^[a-z0-9_.]+$/.test(c.display_name) ? c.display_name : c?.display_name || c?.handle || "").replace(/^@/, "").trim();
+  const fmtK = (n: number | null) => (n ? (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n)) : null);
+  const proofPoints = [{ name: nice(creator), followers: fmtK(creator.followers), category: creator.category },
+    ...(others || []).map((o: any) => o.creators).filter(Boolean).map((c: any) => ({ name: nice(c), followers: fmtK(c.followers), category: null }))]
+    .filter((p) => p.name).slice(0, 2);
 
   const facts = {
     sender: { name: profile.full_name, email: gc?.email || profile.email || null, org: org?.name || null, signOff: profile.signature || null },
     creatorBeingPitched: { name: mine.name, handle: mine.handle, platform: mine.platform, followers: mine.followers, niche: mine.niche, pitchAngle: mine.pitch_angle, mediaKit: mine.media_kit_url },
     recipient: { email: toEmail, name: contact?.name || null, title: contact?.title || null },
-    brand: { name: brand.name, domain: brand.domain, dealsInOurData: brand.deal_count, creatorsBooked: brand.creator_count, otherCreatorsBooked: otherCreators },
-    proofCreator: { note: "NOT represented by the sender. This creator's deal with the brand is evidence the brand books this kind of creator.", handle: creator.handle, name: creator.display_name, platform: creator.platform, followers: creator.followers, category: creator.category },
+    brand: { name: brand.name, domain: brand.domain, dealsInOurData: brand.deal_count, creatorsBooked: brand.creator_count },
+    proofPoints: { note: "Creators this brand has ALREADY booked (public posts). NOT represented by the sender. Use at most one of these, by name, as social proof.", creators: proofPoints },
     brandDealsWithProofCreator: (evidence || []).map((e) => ({ title: e.content_title, url: e.content_url, date: e.published_at?.slice(0, 10), views: e.views, evidence: e.evidence, confidence: e.confidence_label })),
   };
 
@@ -54,7 +60,7 @@ export async function POST(req: NextRequest) {
   const msg = await client.messages.create({
     model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
     max_tokens: 900,
-    system: `You write brand-partnership pitch emails for a talent manager (the sender) who represents creatorBeingPitched. The sender does NOT represent proofCreator; proofCreator's deal with this brand is only evidence that the brand invests in creators of this kind. Never imply the sender manages proofCreator and never ask to "rebook" them. Lead with why creatorBeingPitched fits this brand, using pitchAngle and niche; reference the brand's recent creator work (proofCreator, other bookings) as social proof in one clause at most. Follow the sender's STYLE GUIDE exactly; it overrides everything else about tone and structure. Use only the FACTS given; never invent numbers, past deals, or names. Never quote a rate. Keep it under 170 words. The body MUST start with a greeting on its own line: "Hi <recipient first name>," when recipient.name is known, otherwise "Hi <brand> team,". Then a blank line, then the pitch. Do NOT add a sign-off or signature; those are appended automatically. Output strictly as JSON: {"subject": string, "body": string}. Plain text body, no markdown.`,
+    system: `You write brand-partnership pitch emails for a talent manager (the sender) who represents creatorBeingPitched. The sender does NOT represent proofCreator; proofCreator's deal with this brand is only evidence that the brand invests in creators of this kind. Never imply the sender manages proofCreator and never ask to "rebook" them. Lead with why creatorBeingPitched fits this brand, using pitchAngle and niche. Social proof: mention that the brand has worked with creators like <proofPoints name> in ONE clause at most, using the display name exactly as given; never write an @handle, a lowercase username, or a URL in the prose, and never describe the proof creator's content or family. Follow the sender's STYLE GUIDE exactly; it overrides everything else about tone and structure. Use only the FACTS given; never invent numbers, past deals, or names. Never quote a rate. Keep it under 170 words. The body MUST start with a greeting on its own line: "Hi <recipient first name>," when recipient.name is known, otherwise "Hi <brand> team,". Then a blank line, then the pitch. Do NOT add a sign-off or signature; those are appended automatically. Output strictly as JSON: {"subject": string, "body": string}. Plain text body, no markdown.`,
     messages: [{ role: "user", content: `STYLE GUIDE:\n${style}\n\nFACTS:\n${JSON.stringify(facts, null, 2)}` }],
   });
   const text = msg.content.map((c) => (c.type === "text" ? c.text : "")).join("");
@@ -62,6 +68,8 @@ export async function POST(req: NextRequest) {
   try { parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)); } catch { return NextResponse.json({ error: "Model returned an unreadable draft; try again" }, { status: 502 }); }
   // Subject is always "<creator> x <brand>", nothing clever.
   parsed.subject = `${mine.name} x ${brand.name}`;
+  // No handles in prose, ever.
+  parsed.body = parsed.body.replace(/@([a-z0-9_.]{3,})/gi, (_m, h) => (h.toLowerCase() === String(creator.handle).toLowerCase() ? nice(creator) : h));
   // Greeting guard: if the model skipped it, add one.
   const firstName = (contact?.name || "").trim().split(/\s+/)[0] || "";
   if (!/^\s*(hi|hey|hello|dear)\b/i.test(parsed.body)) parsed.body = `Hi ${firstName || brand.name + " team"},\n\n` + parsed.body.trimStart();
@@ -80,6 +88,7 @@ export async function POST(req: NextRequest) {
   if (!contactId && toEmail) {
     await admin.from("contacts").upsert({ brand_id: brandId, email: toEmail.toLowerCase(), source: "manual", found_by: profile.id, house_only: false }, { onConflict: "brand_id,email", ignoreDuplicates: true });
   }
+  track(profile.id, "draft", { brand: brand.name, creator: mine.handle || mine.name, mode: gc ? "gmail" : "compose" });
   const logDraft = async (gmailDraftId: string | null) => {
     await admin.from("drafts").insert({ user_id: profile.id, creator_id: creatorId, brand_id: brandId, contact_id: contactId || null, subject: parsed.subject, body: parsed.body, gmail_draft_id: gmailDraftId, model: msg.model });
     await admin.from("outreach_log").insert({ org_id: profile.org_id, user_id: profile.id, brand_id: brandId, creator_handle: mine.handle || mine.name, contact_email: toEmail, subject: parsed.subject, status: "drafted", gmail_draft_id: gmailDraftId });
@@ -94,6 +103,7 @@ export async function POST(req: NextRequest) {
     } catch (e: any) {
       // expired/revoked token (7-day expiry while the Google app is in Testing): fall through to compose
       console.warn("gmail draft failed, falling back to compose:", e?.message);
+      alert("gmail draft failed, fell back to compose", { user: profile.email, error: String(e?.message || e).slice(0, 200) });
     }
   }
   await logDraft(null);

@@ -289,8 +289,14 @@ async function checkBrandSites(limit = 4) {
 }
 
 import { runResearch } from "./research";
+import { heartbeat, alert, nightly } from "./observe";
 
+let lastNightly = "";
 async function tick() {
+  try { await heartbeat(sb, { queue: "tick" }); } catch { /* ignore */ }
+  const today = new Date().toISOString().slice(0, 10);
+  if (lastNightly !== today && new Date().getUTCHours() >= 8) { lastNightly = today; nightly(sb).catch((e) => alert(sb, "nightly failed", { error: String(e?.message || e) })); }
+
   const { data: jobs, error: pollErr } = await sb.from("scan_jobs").select("*")
     .in("status", ["queued", "rate_limited"]).lte("run_after", new Date().toISOString())
     .order("priority").order("created_at").limit(1);
@@ -309,6 +315,7 @@ async function tick() {
       // refund the credit on hard failure
       if (job.user_id) await sb.rpc("grant_credits", { p_user: job.user_id, p_kind: "scan", p_n: 1, p_reason: "refund:" + job.id });
       log(`failed ${job.handle}: ${e?.message}`);
+      await alert(sb, `scan failed: @${job.handle}`, { platform: job.platform, error: String(e?.message || e).slice(0, 300), attempts: job.attempts });
     }
   }
 }
@@ -316,7 +323,7 @@ async function tick() {
 log("worker up; polling every", POLL_MS, "ms");
 (async function loop() {
   for (;;) {
-    try { await tick(); } catch (e) { log("tick error", e); }
+    try { await tick(); } catch (e: any) { log("tick error", e); await alert(sb, "tick error", { error: String(e?.message || e).slice(0, 300) }).catch(() => {}); }
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 })();

@@ -39,10 +39,62 @@ export default async function Queue() {
     admin.from("creator_access").select("user_id,platform,handle,created_at").in("user_id", outsideIds).order("created_at", { ascending: false }).limit(40),
     admin.from("outreach_log").select("user_id,creator_handle,contact_email,subject,status,created_at,brands(name,category)").in("user_id", outsideIds).order("created_at", { ascending: false }).limit(40),
   ]) : [{ data: [] }, { data: [] }];
+  // Health + funnel
+  const since = (d: number) => new Date(Date.now() - d * 864e5).toISOString();
+  const [{ data: hb }, { data: alerts }, { data: ev7 }, { data: ev30 }, { data: snaps }] = await Promise.all([
+    admin.from("heartbeats").select("last_seen,detail").eq("source", "worker").maybeSingle(),
+    admin.from("alerts").select("id,source,message,detail,created_at").eq("acked", false).order("created_at", { ascending: false }).limit(20),
+    admin.from("events").select("name,user_id").gte("created_at", since(7)),
+    admin.from("events").select("name,user_id").gte("created_at", since(30)),
+    admin.from("snapshots").select("day,counts").order("day", { ascending: false }).limit(2),
+  ]);
+  const workerAge = hb?.last_seen ? (Date.now() - new Date(hb.last_seen).getTime()) / 60000 : null;
+  const funnel = (rows: { name: string; user_id: string | null }[] | null) => {
+    const by: Record<string, Set<string>> = {};
+    for (const r of rows || []) { (by[r.name] ||= new Set()).add(r.user_id || "anon"); }
+    const u = (n: string) => by[n]?.size || 0;
+    return { signup: u("signup"), print: u("print") + u("print_cached"), reveal: u("reveal"), draft: u("draft"), locked: u("reveal_locked") + u("draft_locked") + u("print_locked"), checkout: u("checkout_started"), upgraded: u("upgraded") };
+  };
+  const f7 = funnel(ev7), f30 = funnel(ev30);
   const budget = Number(process.env.YT_DAILY_BUDGET || 9000);
   const used = quota?.yt_units ?? 0;
   return (
     <div>
+
+      {/* Health */}
+      <div className="mb-6 grid gap-3 md:grid-cols-4">
+        <div className={`card p-4 ${workerAge == null || workerAge > 10 ? "border-bad/40" : ""}`}>
+          <div className="label">worker</div>
+          <div className="mt-1 text-lg font-semibold">{workerAge == null ? "never seen" : workerAge < 2 ? "alive" : `${Math.round(workerAge)} min ago`}</div>
+          {(workerAge == null || workerAge > 10) && <div className="text-[11px] text-bad">no heartbeat; check Railway</div>}
+        </div>
+        <div className={`card p-4 ${alerts?.length ? "border-warn/40" : ""}`}>
+          <div className="label">alerts</div>
+          <div className="mt-1 text-lg font-semibold">{alerts?.length || 0}</div>
+          <div className="text-[11px] text-muted">{alerts?.[0] ? `${alerts[0].source}: ${alerts[0].message}` : "nothing broken"}</div>
+        </div>
+        <div className="card p-4">
+          <div className="label">last snapshot</div>
+          <div className="mt-1 text-lg font-semibold">{snaps?.[0]?.day || "none yet"}</div>
+          <div className="num text-[11px] text-muted">{snaps?.[0] ? Object.entries(snaps[0].counts as Record<string, number>).slice(0, 4).map(([k, v]) => `${k} ${v}`).join(" · ") : "runs nightly after 08:00 UTC"}</div>
+        </div>
+        <div className="card p-4">
+          <div className="label">funnel · 7d / 30d (people)</div>
+          <div className="num mt-1 grid grid-cols-2 gap-x-3 text-[11px] leading-5">
+            <span>signups <b>{f7.signup}</b> / {f30.signup}</span><span>printed <b>{f7.print}</b> / {f30.print}</span>
+            <span>revealed <b>{f7.reveal}</b> / {f30.reveal}</span><span>drafted <b>{f7.draft}</b> / {f30.draft}</span>
+            <span>hit a wall <b>{f7.locked}</b> / {f30.locked}</span><span>checkout <b>{f7.checkout}</b> / {f30.checkout}</span>
+            <span>upgraded <b className="text-ok">{f7.upgraded}</b> / {f30.upgraded}</span>
+          </div>
+        </div>
+      </div>
+      {alerts && alerts.length > 0 && (
+        <div className="card mb-6 overflow-x-auto">
+          <table className="tbl"><thead><tr><th>When</th><th>Source</th><th>What</th><th>Detail</th></tr></thead>
+            <tbody>{alerts.map((a) => <tr key={a.id}><td className="num text-[11px] text-muted">{new Date(a.created_at).toLocaleString()}</td><td>{a.source}</td><td className="font-medium">{a.message}</td><td className="num max-w-md truncate text-[11px] text-muted" title={JSON.stringify(a.detail)}>{JSON.stringify(a.detail)}</td></tr>)}</tbody>
+          </table>
+        </div>
+      )}
       <div className="label mb-1.5">Team</div>
       <h1 className="h2">Scan queue</h1>
       <div className="mt-6 grid gap-4 md:grid-cols-2">
