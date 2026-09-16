@@ -22,6 +22,12 @@ export default function Privacy() {
         <li><strong>Usage.</strong> Standard server logs (IP address, browser, pages requested) kept for security and debugging.</li>
       </ul>
 
+      <h2 id="youtube">YouTube API Services</h2>
+      <p>Sponsorprint uses <strong>YouTube API Services</strong> to read public YouTube data. By using Sponsorprint you agree to be bound by the <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">YouTube Terms of Service</a>, and you acknowledge the <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">Google Privacy Policy</a>.</p>
+      <p>What we access: public channel metadata (title, handle, thumbnail, subscriber count), the public uploads list, and public video metadata (title, description, publish date, view count) for channels our users look up. We do not access private data, subscriptions, watch history, comments or anything requiring your YouTube login; Sponsorprint never asks for YouTube OAuth permissions.</p>
+      <p>What we store: the channel fields above and, for each video where a sponsorship disclosure is detected, the video title, link, publish date and the short caption excerpt that contains the disclosure. Stored YouTube data is refreshed or deleted within 30 days; it is not shared with third parties, not sold, and not used to build profiles of YouTube viewers.</p>
+      <p>Revocation and deletion: because we do not use YouTube OAuth, there is nothing to revoke in your Google account. To have YouTube-derived data about a channel you control removed from Sponsorprint, email <a href="mailto:privacy@sponsorprint.com">privacy@sponsorprint.com</a> and we will delete it within 7 days. See also <a href="/data-deletion">sponsorprint.com/data-deletion</a>.</p>
+
       <h2>How we use your Gmail access</h2>
       <p>Sponsorprint requests one Gmail permission, <code>gmail.compose</code>, which allows it to create draft messages in your Gmail account. We use it for exactly one thing: when you click "Draft" on a brand, we write a draft email into your Drafts folder. We do not read your inbox, we do not read existing drafts or sent mail, and we never send email on your behalf. Every draft stays unsent until you open it in Gmail and choose to send it yourself.</p>
       <p>Your Google OAuth token is stored encrypted and is used only to create drafts. You can revoke this access at any time at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noreferrer">myaccount.google.com/permissions</a>, and drafting stops working immediately when you do.</p>
@@ -35,6 +41,9 @@ export default function Privacy() {
 
       <h2>Sharing</h2>
       <p>We do not sell personal information. We use service providers to run the product: Supabase (database and sign-in), Railway (hosting), Anthropic (the model that writes draft text from the facts you and the scan provide), and Google and Meta (the platform APIs above). Each receives only what it needs to perform its service. We disclose information if required by law.</p>
+
+      <h2>Deleting your data</h2>
+      <p>Instructions for removing Instagram, Facebook or Google access and for deleting your whole account are at <a href="/data-deletion">sponsorprint.com/data-deletion</a>. Removing Sponsorprint from your Facebook apps deletes the connection on our side automatically.</p>
 
       <h2>Retention and deletion</h2>
       <p>Account data is kept while your account is active. Email <a href="mailto:privacy@sponsorprint.com">privacy@sponsorprint.com</a> from your sign-in address and we will delete your account, your OAuth tokens, your style guide, roster and drafts within 30 days. Public creator scan data is not personal to you and remains in the index.</p>

@@ -31,6 +31,9 @@ export default function Terms() {
       <h2>Liability</h2>
       <p>The service is provided as is. To the extent permitted by law we are not liable for indirect or consequential damages arising from its use. Our total liability is limited to the amount you paid us in the prior 12 months, which during beta is zero.</p>
 
+      <h2>YouTube API Services</h2>
+      <p>Sponsorprint uses YouTube API Services to read public YouTube data. By using Sponsorprint you also agree to the <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">YouTube Terms of Service</a>. YouTube data shown in Sponsorprint belongs to YouTube and the channel owners; you may not scrape, resell or redistribute it. Our handling of YouTube data is described in the <a href="/privacy#youtube">privacy policy</a>, which also links the Google Privacy Policy.</p>
+
       <h2>Privacy</h2>
       <p>Our <Link href="/privacy">Privacy Policy</Link> explains what we collect and how Gmail and Instagram access are used.</p>
 

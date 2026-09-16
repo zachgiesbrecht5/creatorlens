@@ -78,9 +78,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
       people = all.filter((p) => relevant(p.title) && (String(p.title || "").toLowerCase().includes(key) || /influencer|creator|partnership/i.test(String(p.title || ""))));
       if (people.length) people = people.map((p) => ({ ...p, title: `${p.title} · ${parent}` }));
     }
-    if (!people.length && process.env.APOLLO_API_KEY && siteDomain) people = (await apollo(siteDomain)).filter((p) => acceptable(p.email) && relevant(p.title));
+    // Apollo (LinkedIn-derived people search by title) when Hunter didn't surface anyone who actually books creators
+    const bestScore = Math.max(0, ...people.map((p) => titleScore(p.title || "")));
+    if (bestScore < 2 && process.env.APOLLO_API_KEY && siteDomain) {
+      const ap = (await apollo(siteDomain)).filter((p) => acceptable(p.email) && relevant(p.title));
+      people = [...ap, ...people];
+    }
     if (people.length) {
-      await admin.from("contacts").upsert(people.map((p: any) => ({ brand_id: brandId, name: p.name, email: p.email, title: p.title, source: p.source || "hunter", verified: p.confidence >= 90 })), { onConflict: "brand_id,email" });
+      await admin.from("contacts").upsert(people.map((p: any) => ({ brand_id: brandId, name: p.name, email: p.email, title: p.title, source: p.source || "hunter", verified: p.confidence >= 90, source_url: p.source_url || null })), { onConflict: "brand_id,email" });
       contacts = ((await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at,house_only,found_by,source_url,confidence").eq("brand_id", brandId)).data || []).filter(visible).filter((c) => !auto(c) || (acceptable(c.email || "") && relevant(c.title)));
     }
   }
@@ -117,7 +122,7 @@ const GENERIC_INBOX = /^(info|contact|hello|hi|support|help|customerservice|cust
 // sales reps, talent managers at agencies); we never show 0.
 function titleScore(t: string): number {
   const x = t.toLowerCase();
-  if (/engineer|developer|finance|account(ing|ant)|legal|counsel|licens|compliance|hr\b|human resources|recruit|talent manager|talent agent|customer (service|success|support)|logistics|supply|operations|warehouse|sales (rep|associate|executive)|account executive|performance marketing|growth marketing|paid (media|social)|seo|sem\b|email marketing|crm|data|analyst|it\b|security|product manager|designer|copywriter|intern/.test(x)) return 0;
+  if (/engineer|developer|finance|account(ing|ant)|legal|counsel|licens|compliance|hr\b|human resources|recruit|talent manager|talent agent|customer (service|success|support)|logistics|supply|operations|warehouse|quality|\bqa\b|sales\b|account executive|business development|performance marketing|growth marketing|paid (media|social)|seo|sem\b|email marketing|crm|data|analyst|it\b|security|product manager|designer|copywriter|intern|r&d|research|manufactur|procurement|retail|wholesale|distribution|store|e-?commerce|merchandis|category manager|controller|cfo|coo|cto|chief (financial|operating|technology|revenue)/.test(x)) return 0;
   if (/influencer|creator|partnership|collab|ambassador|talent|sponsorship/.test(x)) return 3;
   if (/brand|marketing|social|community|\bpr\b|public relations|communications|content|campaign|digital/.test(x)) return 2;
   if (/founder|ceo|cmo|owner|president|managing director/.test(x)) return 1;
@@ -147,19 +152,20 @@ async function apollo(domain: string) {
   const key = process.env.APOLLO_API_KEY!;
   const search = await fetch("https://api.apollo.io/api/v1/mixed_people/search", {
     method: "POST", headers: { "content-type": "application/json", "x-api-key": key },
-    body: JSON.stringify({ q_organization_domains: domain, person_titles: ["influencer marketing", "partnerships", "creator partnerships", "brand marketing", "social media", "marketing"], page: 1, per_page: 5 }),
+    body: JSON.stringify({ q_organization_domains: domain, person_titles: ["influencer marketing", "influencer", "creator partnerships", "creator marketing", "partnerships", "brand partnerships", "social media", "community", "brand marketing", "marketing manager", "marketing director", "head of marketing", "communications", "public relations"], person_seniorities: ["manager", "director", "head", "vp", "senior", "entry"], page: 1, per_page: 10 }),
   }).catch(() => null);
   if (!search || !search.ok) return [] as any[];
   const j: any = await search.json();
   const out: any[] = [];
-  for (const p of (j.people || []).slice(0, 2)) {
+  const ranked = (j.people || []).sort((a: any, b: any) => titleScore(b.title || "") - titleScore(a.title || "")).slice(0, 3);
+  for (const p of ranked) {
     const m = await fetch("https://api.apollo.io/api/v1/people/match", {
       method: "POST", headers: { "content-type": "application/json", "x-api-key": key },
       body: JSON.stringify({ id: p.id, reveal_personal_emails: false }),
     }).catch(() => null);
     const mj: any = m && m.ok ? await m.json() : null;
     const email = mj?.person?.email;
-    if (email) out.push({ name: p.name, email, title: p.title, confidence: mj.person.email_status === "verified" ? 95 : 70, source: "apollo" });
+    if (email) out.push({ name: p.name, email, title: p.title, confidence: mj.person.email_status === "verified" ? 95 : 70, source: "apollo", source_url: p.linkedin_url || null });
   }
   return out;
 }

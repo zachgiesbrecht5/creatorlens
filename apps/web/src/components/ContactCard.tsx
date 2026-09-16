@@ -70,6 +70,7 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
             <span className="num text-[12px] text-dim">no verified email; reach them via the source</span>
           )}
           {contact.verified && <span className="font-mono text-[10px] text-ok" title="Verified deliverable">✓</span>}
+          {contact.source === "apollo" && contact.source_url && <a href={contact.source_url} target="_blank" rel="noreferrer" className="font-mono text-[10px] text-dim hover:text-accent">linkedin ↗</a>}
           {contact.source === "agent" && (
             <span className="font-mono text-[10px] text-dim" title={`Found by research${contact.confidence != null ? `, confidence ${Math.round(contact.confidence * 100)}%` : ""}`}>
               {contact.verified ? "researched" : "suggested, unverified"}{contact.source_url && <> · <a href={contact.source_url} target="_blank" rel="noreferrer" className="hover:text-accent">source ↗</a></>}
