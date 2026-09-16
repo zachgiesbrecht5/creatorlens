@@ -1,15 +1,28 @@
-// Sponsorprint wordmark. The mark is three offset arcs: a fingerprint read as
-// a signal, which is what the product does (a creator's sponsorship print).
-export function Logo({ size = 18, wordmark = true }: { size?: number; wordmark?: boolean }) {
+// Sponsorprint mark: a paw print whose pad is a receipt with a torn edge.
+// "Print" twice over: the creator (paw) and the sponsor print (receipt). The
+// blue line is the deal line, the same blue as "Draft pitch" on every print.
+export function PawMark({ size = 24, tile = "#0b0d12", ink = "#fbfbfa", className }: { size?: number; tile?: string | null; ink?: string; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 120 120" aria-hidden className={className}>
+      {tile && <rect width="120" height="120" rx="28" fill={tile} />}
+      <g fill={ink}>
+        <ellipse cx="38" cy="40" rx="9" ry="12" transform="rotate(-18 38 40)" />
+        <ellipse cx="82" cy="40" rx="9" ry="12" transform="rotate(18 82 40)" />
+        <ellipse cx="54" cy="26" rx="8" ry="11" transform="rotate(-6 54 26)" />
+        <ellipse cx="66" cy="26" rx="8" ry="11" transform="rotate(6 66 26)" />
+        <path d="M40 60 h40 v34 l-4 4 l-4 -4 l-4 4 l-4 -4 l-4 4 l-4 -4 l-4 4 l-4 -4 l-4 4 l-4 -4 z" />
+      </g>
+      <g stroke={tile || "#0b0d12"} strokeWidth="2.6" strokeLinecap="round" fill="none"><path d="M48 70 h24" /><path d="M48 78 h16" /></g>
+      <path d="M48 86 h24" stroke="#2f5bff" strokeWidth="2.8" strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
+
+export function Logo({ size = 24, wordmark = true }: { size?: number; wordmark?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2">
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
-        <rect width="24" height="24" rx="6" fill="#0b0d12" />
-        <path d="M6.5 15.5c0-3.6 2.4-6.5 5.5-6.5s5.5 2.9 5.5 6.5" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />
-        <path d="M9.2 16.5c0-2 1.3-3.6 2.8-3.6s2.8 1.6 2.8 3.6" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" />
-        <path d="M12 17.5v-1.2" stroke="#2f5bff" strokeWidth="1.9" strokeLinecap="round" />
-      </svg>
-      {wordmark && <span className="text-[15px] font-semibold tracking-[-0.02em]">sponsorprint</span>}
+      <PawMark size={size} className="shrink-0" />
+      {wordmark && <span className="text-[15px] font-semibold tracking-[-0.02em]">sponsor<span className="font-medium">print</span></span>}
     </span>
   );
 }

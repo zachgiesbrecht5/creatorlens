@@ -6,7 +6,9 @@ import { Logo } from "@/components/Logo";
 
 export const metadata: Metadata = {
   title: "Sponsorprint",
-  description: "Scan any creator. See every brand they've worked with. Pitch in one click.",
+  description: "Pull a creator's sponsor print: every brand that has paid them, the post that proves it, and the person to email.",
+  icons: { icon: [{ url: "/favicon.ico" }, { url: "/icon.svg", type: "image/svg+xml" }, { url: "/favicon-32.png", sizes: "32x32", type: "image/png" }], apple: "/apple-touch-icon.png" },
+  openGraph: { title: "Sponsorprint", description: "Every brand a creator has been paid by. Printed in twenty seconds.", images: ["/icon-512.png"] },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
