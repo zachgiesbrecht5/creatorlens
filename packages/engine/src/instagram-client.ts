@@ -51,6 +51,21 @@ export function isValidIgUsername(u: string): boolean {
   return /^[a-z0-9._]{1,30}$/.test(u.trim().replace(/^@/, "").toLowerCase());
 }
 
+/** Profile only (no posts): one cheap call, for search previews. Null if not a professional account. */
+export async function lookupIgProfile(token: IgToken, username: string): Promise<{ username: string; name: string; followers: number; avatar: string | null } | null> {
+  const clean = username.trim().replace(/^@/, "").toLowerCase();
+  if (!isValidIgUsername(clean)) return null;
+  try {
+    const json = await graph(token, `fields=${encodeURIComponent(`business_discovery.username(${clean}){username,name,followers_count,profile_picture_url}`)}`);
+    const bd = json.business_discovery;
+    if (!bd) return null;
+    return { username: bd.username, name: bd.name || bd.username, followers: bd.followers_count || 0, avatar: bd.profile_picture_url || null };
+  } catch (e) {
+    if (e instanceof IgRateLimitError) throw e;
+    return null;   // private / personal / nonexistent
+  }
+}
+
 /** Profile + up to maxPosts recent posts via business_discovery. */
 export async function fetchIgCreator(token: IgToken, username: string, maxPosts = 100, pageSize = 50): Promise<{ profile: IgProfile; posts: IgPost[] }> {
   const clean = username.trim().replace(/^@/, "").toLowerCase();
