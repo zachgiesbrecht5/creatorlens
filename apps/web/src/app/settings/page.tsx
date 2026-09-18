@@ -1,7 +1,7 @@
 import { GoogleButton } from "@/components/GoogleButton";
 import { ManagePlan } from "@/components/ManagePlan";
 import { redirect } from "next/navigation";
-import { currentProfile, supabaseAdmin, supabaseServer } from "@/lib/supabase";
+import { currentProfile, currentAccess, supabaseAdmin, supabaseServer } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const profile = await currentProfile();
   if (!profile) redirect("/login?next=/settings");
+  const { insider } = await currentAccess();
   const admin = supabaseAdmin();
   const [{ data: ig }, { data: gc }, { data: ledger }] = await Promise.all([
     admin.from("ig_connections").select("ig_username,healthy,cooldown_until,created_at").eq("user_id", profile.id),
@@ -43,7 +44,12 @@ export default async function Settings({ searchParams }: { searchParams: Promise
               <input name="signature" className="input-flat mt-1" defaultValue={profile.signature || ""} placeholder="Best" />
             </div>
             <div>
-              <label className="label">Email signature (appended to every draft, exactly as written)</label>
+              <label className="label">Fallback signature (plain text)</label>
+              {profile.signature_html ? (
+                <p className="mb-1 text-[12px] text-ok">Your real Gmail signature is imported and used on drafts in your Drafts folder. Reconnect Gmail in Connections to refresh it.</p>
+              ) : (
+                <p className="mb-1 text-[12px] text-muted">Connect Gmail (Connections, below) and we import your actual Gmail signature. This plain-text block is only used until then.</p>
+              )}
               <textarea name="email_signature" rows={5} className="input-flat mt-1 font-mono text-xs leading-relaxed" defaultValue={profile.email_signature || ""} placeholder={"Best,\nYour name\nFounder, Your Agency\nyouragency.com · 555-000-0000"} />
             </div>
           </div>
@@ -59,9 +65,14 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             <Row title="Gmail drafts" ok={!!gc}
               detail={gc ? `Connected as ${gc.email}. Pitches land silently in your Drafts folder. Drafts only; nothing is ever sent.` : "Optional. Without it, each pitch opens as a prefilled Gmail compose window for you to review. Connecting places drafts straight into your Drafts folder instead; Google shows an \"unverified app\" notice while Sponsorprint is in beta, and the connection needs renewing every 7 days."}
               action={<GoogleButton next="/settings" gmail label={gc ? "Reconnect" : "Connect Gmail"} className="btn-ghost" />} />
-            <Row title="Instagram" ok={!!ig?.length}
-              detail={ig?.length ? `Connected: ${ig.map((c) => "@" + c.ig_username).join(", ")}. ${ig.some((c) => c.cooldown_until && new Date(c.cooldown_until) > new Date()) ? "Cooling down after a rate limit." : "Healthy."}` : "Connect your Instagram Business or Creator account. It adds scanning capacity for everyone and unlocks Instagram scans for you."}
-              action={<a href="/api/ig/connect" className="btn-ghost">{ig?.length ? "Add another" : "Connect Instagram"}</a>} />
+            {insider ? (
+              <Row title="Instagram" ok={!!ig?.length}
+                detail={ig?.length ? `Connected: ${ig.map((c) => "@" + c.ig_username).join(", ")}. ${ig.some((c) => c.cooldown_until && new Date(c.cooldown_until) > new Date()) ? "Cooling down after a rate limit." : "Healthy."}` : "Connect your Instagram Business or Creator account. It adds scanning capacity for everyone."}
+                action={<a href="/api/ig/connect" className="btn-ghost">{ig?.length ? "Add another" : "Connect Instagram"}</a>} />
+            ) : (
+              <Row title="Instagram" ok
+                detail="Instagram scans run on Sponsorprint's own connection; nothing to set up. Connecting your own Business account to add capacity is coming after Meta's app review." />
+            )}
             {sp.ig === "ok" && <p className="pt-3 font-mono text-[11px] text-ok">Instagram connected.</p>}
             {sp.ig && sp.ig !== "ok" && <p className="pt-3 font-mono text-[11px] text-bad">{decodeURIComponent(sp.ig)}</p>}
           </div>

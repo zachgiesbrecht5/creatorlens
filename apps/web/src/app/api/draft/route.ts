@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { currentProfile, currentAccess, canSeeCreator, supabaseAdmin } from "@/lib/supabase";
 import { track, alert } from "@/lib/track";
-import { googleAccessToken, createGmailDraft } from "@/lib/gmail";
+import { googleAccessToken, createGmailDraft, bodyToHtml } from "@/lib/gmail";
 
 // POST { brandId, creatorId, rosterCreatorId, contactId?, toEmail }
 // creatorId       = the scanned creator whose deal with this brand is the PROOF
@@ -10,6 +10,15 @@ import { googleAccessToken, createGmailDraft } from "@/lib/gmail";
 // 1. gather evidence (brand x scanned creator, who else the brand books)
 // 2. write the pitch for the roster creator with the user's pitch_prompt as style guide
 // 3. append the user's email signature verbatim, create a Gmail draft, log it
+// Public profile URL for a roster creator, so the brand can click through.
+function profileUrlFor(platform: string | null, handle: string | null): string | null {
+  const h = (handle || "").replace(/^@/, "").trim();
+  if (!h) return null;
+  if (platform === "youtube") return `https://www.youtube.com/@${h}`;
+  if (platform === "tiktok") return `https://www.tiktok.com/@${h}`;
+  return `https://www.instagram.com/${h}/`;
+}
+
 export async function POST(req: NextRequest) {
   const profile = await currentProfile();
   if (!profile) return NextResponse.json({ error: "Sign in" }, { status: 401 });
@@ -49,7 +58,7 @@ export async function POST(req: NextRequest) {
 
   const facts = {
     sender: { name: profile.full_name, email: gc?.email || profile.email || null, org: org?.name || null, signOff: profile.signature || null },
-    creatorBeingPitched: { name: mine.name, handle: mine.handle, platform: mine.platform, followers: mine.followers, niche: mine.niche, pitchAngle: mine.pitch_angle, mediaKit: mine.media_kit_url },
+    creatorBeingPitched: { name: mine.name, handle: mine.handle, platform: mine.platform, followers: mine.followers, niche: mine.niche, pitchAngle: mine.pitch_angle, mediaKit: mine.media_kit_url, profileUrl: profileUrlFor(mine.platform, mine.handle) },
     recipient: { email: toEmail, name: contact?.name || null, title: contact?.title || null },
     brand: { name: brand.name, domain: brand.domain, dealsInOurData: brand.deal_count, creatorsBooked: brand.creator_count },
     proofPoints: { note: "Creators this brand has ALREADY booked (public posts). NOT represented by the sender. Use at most one of these, by name, as social proof.", creators: proofPoints },
@@ -60,7 +69,7 @@ export async function POST(req: NextRequest) {
   const msg = await client.messages.create({
     model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
     max_tokens: 900,
-    system: `You write brand-partnership pitch emails for a talent manager (the sender) who represents creatorBeingPitched. The sender does NOT represent proofCreator; proofCreator's deal with this brand is only evidence that the brand invests in creators of this kind. Never imply the sender manages proofCreator and never ask to "rebook" them. Lead with why creatorBeingPitched fits this brand, using pitchAngle and niche. Social proof: mention that the brand has worked with creators like <proofPoints name> in ONE clause at most, using the display name exactly as given; never write an @handle, a lowercase username, or a URL in the prose, and never describe the proof creator's content or family. Follow the sender's STYLE GUIDE exactly; it overrides everything else about tone and structure. Use only the FACTS given; never invent numbers, past deals, or names. Never quote a rate. Keep it under 170 words. The body MUST start with a greeting on its own line: "Hi <recipient first name>," when recipient.name is known, otherwise "Hi <brand> team,". Then a blank line, then the pitch. Do NOT add a sign-off or signature; those are appended automatically. Output strictly as JSON: {"subject": string, "body": string}. Plain text body, no markdown.`,
+    system: `You write brand-partnership pitch emails for a talent manager (the sender) who represents creatorBeingPitched. The sender does NOT represent proofCreator; proofCreator's deal with this brand is only evidence that the brand invests in creators of this kind. Never imply the sender manages proofCreator and never ask to "rebook" them. Lead with why creatorBeingPitched fits this brand, using pitchAngle and niche. Social proof: mention that the brand has worked with creators like <proofPoints name> in ONE clause at most, using the display name exactly as given; never write an @handle, a lowercase username, or a URL in the prose, and never describe the proof creator's content or family. Follow the sender's STYLE GUIDE exactly; it overrides everything else about tone and structure. Use only the FACTS given; never invent numbers, past deals, or names. Never quote a rate. Keep it under 170 words. The body MUST start with a greeting on its own line: "Hi <recipient first name>," when recipient.name is known, otherwise "Hi <brand> team,". Then a blank line, then the pitch: at most three short paragraphs and 120 words total. Paragraph 1: one concrete idea for what creatorBeingPitched would make for this brand (from pitchAngle). Paragraph 2: who the creator is in one or two lines, ending with their profile link on its own line in the form "Profile: <profileUrl>" (and "Media kit: <mediaKit>" on the next line if mediaKit is present). Paragraph 3: one clause of social proof (proofPoints, by display name) and one question asking about their plans or budget range. No bullet points, no hype words, no exclamation marks. Do NOT add a sign-off or signature; those are appended automatically. Output strictly as JSON: {"subject": string, "body": string}. Plain text body, no markdown.`,
     messages: [{ role: "user", content: `STYLE GUIDE:\n${style}\n\nFACTS:\n${JSON.stringify(facts, null, 2)}` }],
   });
   const text = msg.content.map((c) => (c.type === "text" ? c.text : "")).join("");
@@ -68,6 +77,9 @@ export async function POST(req: NextRequest) {
   try { parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)); } catch { return NextResponse.json({ error: "Model returned an unreadable draft; try again" }, { status: 502 }); }
   // Subject is always "<creator> x <brand>", nothing clever.
   parsed.subject = `${mine.name} x ${brand.name}`;
+  // Profile link guard: the brand must be able to click through to the creator.
+  const purl = profileUrlFor(mine.platform, mine.handle);
+  if (purl && !parsed.body.includes(purl)) parsed.body = parsed.body.trimEnd() + `\n\nProfile: ${purl}${mine.media_kit_url ? `\nMedia kit: ${mine.media_kit_url}` : ""}`;
   // No handles in prose, ever.
   parsed.body = parsed.body.replace(/@([a-z0-9_.]{3,})/gi, (_m, h) => (h.toLowerCase() === String(creator.handle).toLowerCase() ? nice(creator) : h));
   // Greeting guard: if the model skipped it, add one.
@@ -81,7 +93,9 @@ export async function POST(req: NextRequest) {
   // so we append the plain-text one from Settings.
   const plainSig = (profile.email_signature || "").trim() || [profile.full_name || "", org?.name || ""].filter(Boolean).join("\n");
   const bodyForCompose = parsed.body + "\n\n" + signOff;
-  const bodyForApi = parsed.body + "\n\n" + signOff + "\n" + plainSig;
+  // API drafts: the user's REAL Gmail signature (HTML, imported when they connected Gmail); plain-text block only as a fallback
+  const bodyForApi = parsed.body + "\n\n" + signOff + (profile.signature_html ? "" : "\n" + plainSig);
+  const htmlForApi = bodyToHtml(parsed.body + "\n\n" + signOff, profile.signature_html || null);
   parsed.body = bodyForApi;
 
   // a pasted address becomes a private contact for this user only (never shared)
@@ -97,7 +111,7 @@ export async function POST(req: NextRequest) {
   if (gc) {
     try {
       const token = await googleAccessToken(gc.refresh_token);
-      const d = await createGmailDraft(token, { to: toEmail, subject: parsed.subject, body: parsed.body });
+      const d = await createGmailDraft(token, { to: toEmail, subject: parsed.subject, body: parsed.body, html: htmlForApi });
       await logDraft(d.id);
       return NextResponse.json({ ok: true, mode: "gmail", link: d.link, subject: parsed.subject });
     } catch (e: any) {

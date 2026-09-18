@@ -19,16 +19,37 @@ function b64url(s: string) {
   return Buffer.from(s, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-export async function createGmailDraft(accessToken: string, opts: { to: string; subject: string; body: string; from?: string }) {
+/** The user's default Gmail signature (HTML) via the sendAs settings. Needs gmail.settings.basic. */
+export async function fetchGmailSignature(accessToken: string): Promise<{ email: string; signature: string } | null> {
+  const r = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs", { headers: { authorization: `Bearer ${accessToken}` } });
+  if (!r.ok) return null;
+  const j: any = await r.json();
+  const list: any[] = j.sendAs || [];
+  const primary = list.find((a) => a.isDefault) || list.find((a) => a.isPrimary) || list[0];
+  if (!primary) return null;
+  return { email: primary.sendAsEmail, signature: primary.signature || "" };
+}
+
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/** Plain text pitch -> simple HTML paragraphs, then the user's real signature HTML underneath. */
+export function bodyToHtml(body: string, signatureHtml?: string | null) {
+  const paras = body.trim().split(/\n{2,}/).map((p) => `<p style="margin:0 0 1em 0">${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222">${paras}${signatureHtml ? `<div>${signatureHtml}</div>` : ""}</div>`;
+}
+
+export async function createGmailDraft(accessToken: string, opts: { to: string; subject: string; body: string; from?: string; html?: string }) {
+  const boundary = "sp_" + Math.random().toString(36).slice(2);
   const mime = [
     opts.from ? `From: ${opts.from}` : null,
     `To: ${opts.to}`,
     `Subject: =?UTF-8?B?${Buffer.from(opts.subject, "utf8").toString("base64")}?=`,
     "MIME-Version: 1.0",
-    "Content-Type: text/plain; charset=UTF-8",
-    "Content-Transfer-Encoding: 8bit",
-    "",
-    opts.body,
+    ...(opts.html ? [
+      `Content-Type: multipart/alternative; boundary="${boundary}"`, "",
+      `--${boundary}`, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: 8bit", "", opts.body, "",
+      `--${boundary}`, "Content-Type: text/html; charset=UTF-8", "Content-Transfer-Encoding: 8bit", "", opts.html, "",
+      `--${boundary}--`,
+    ] : ["Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: 8bit", "", opts.body]),
   ].filter((l) => l !== null).join("\r\n");
   const r = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
     method: "POST",

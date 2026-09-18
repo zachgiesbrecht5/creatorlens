@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { supabaseServer, supabaseAdmin } from "@/lib/supabase";
+import { googleAccessToken, fetchGmailSignature } from "@/lib/gmail";
 import { redirectTo } from "@/lib/origin";
 
 // Google OAuth return. Stores the Gmail refresh token (if the user granted the
@@ -19,10 +20,16 @@ export async function GET(req: NextRequest) {
     await admin.from("google_connections").upsert({
       user_id: user.id,
       refresh_token: data.session.provider_refresh_token,
-      scopes: ["https://www.googleapis.com/auth/gmail.compose"],
+      scopes: ["https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.settings.basic"],
       email: user.email,
       updated_at: new Date().toISOString(),
     });
+    // pull their real Gmail signature so drafts look like their normal mail
+    try {
+      const at = await googleAccessToken(data.session.provider_refresh_token);
+      const sig = await fetchGmailSignature(at);
+      if (sig) await admin.from("profiles").update({ signature_html: sig.signature, signature_imported_at: new Date().toISOString() }).eq("id", user.id);
+    } catch (e: any) { console.warn("signature import failed", e?.message); }
   }
   const ref = req.cookies.get("cl_ref")?.value;
   if (ref) await admin.rpc("apply_referral", { p_new_user: user.id, p_code: ref });
