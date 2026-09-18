@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Sign in first" }, { status: 401 });
   const body = await req.json().catch(() => ({}));
   const platform = body.platform === "instagram" ? "instagram" : "youtube";
+  const force = body.force === true;   // re-print: skip the freshness cache
   let handle = String(body.handle || "").trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?(youtube\.com|instagram\.com)\//, "").replace(/\/.*$/, "");
   if (!handle) return NextResponse.json({ error: "Enter a handle" }, { status: 400 });
   const admin = supabaseAdmin();
@@ -30,12 +31,12 @@ export async function POST(req: NextRequest) {
     if (!ch) return NextResponse.json({ error: "Channel not found. Try the @handle from the channel URL." }, { status: 404 });
     handle = (ch.handle || ch.id).replace(/^@/, "");
     const { data: cached } = await admin.from("creators").select("id,last_scanned_at").eq("platform", "youtube").eq("external_id", ch.id).maybeSingle();
-    if (cached?.last_scanned_at && isFresh(cached.last_scanned_at)) { await grantCreatorAccess(user.id, "youtube", handle); await grantCreatorAccess(user.id, "youtube", ch.id); track(user.id, "print_cached", { platform: "youtube", handle }); return NextResponse.json({ handle, cached: true }); }
+    if (!force && cached?.last_scanned_at && isFresh(cached.last_scanned_at)) { await grantCreatorAccess(user.id, "youtube", handle); await grantCreatorAccess(user.id, "youtube", ch.id); track(user.id, "print_cached", { platform: "youtube", handle }); return NextResponse.json({ handle, cached: true }); }
   } else {
     handle = handle.toLowerCase();
     if (!isValidIgUsername(handle)) return NextResponse.json({ error: "That is not a valid Instagram username" }, { status: 400 });
     const { data: cached } = await admin.from("creators").select("id,last_scanned_at").eq("platform", "instagram").eq("handle", handle).maybeSingle();
-    if (cached?.last_scanned_at && isFresh(cached.last_scanned_at)) { await grantCreatorAccess(user.id, "instagram", handle); track(user.id, "print_cached", { platform: "instagram", handle }); return NextResponse.json({ handle, cached: true }); }
+    if (!force && cached?.last_scanned_at && isFresh(cached.last_scanned_at)) { await grantCreatorAccess(user.id, "instagram", handle); track(user.id, "print_cached", { platform: "instagram", handle }); return NextResponse.json({ handle, cached: true }); }
   }
 
   // Already queued by anyone? Piggyback, no charge.

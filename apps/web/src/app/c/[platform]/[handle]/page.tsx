@@ -2,6 +2,8 @@ import Link from "next/link";
 import { supabaseAdmin, currentUser, currentAccess, canSeeCreator } from "@/lib/supabase";
 import { UnlockCreator } from "@/components/UnlockCreator";
 import { PrinterMachine } from "@/components/PrinterMachine";
+import type { TL } from "@/components/PrintTimeline";
+import { Reprint } from "@/components/Reprint";
 import { BrandWall, type WallCard, type RosterCreator } from "@/components/BrandWall";
 import { PrintingScan } from "@/components/PrintingScan";
 import { fmt } from "@/lib/fmt";
@@ -36,6 +38,16 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
   const unlocked = await canSeeCreator(user?.id || null, seesAll, creator);
   const { data: wall } = await admin.from("brand_wall").select("*").eq("creator_id", creator.id).order("deals", { ascending: false }).order("best_score", { ascending: false });
   const cards = ((wall || []) as WallCard[]).filter((c) => !c.is_junk);
+  // the map: every dated deal by brand, plus the "why then" lines
+  const [{ data: dealMonths }, { data: insights }] = await Promise.all([
+    admin.from("partnerships").select("brand_id,published_at").eq("creator_id", creator.id).neq("status", "rejected").not("published_at", "is", null).limit(1000),
+    admin.from("deal_insights").select("brand_id,why,season").eq("creator_id", creator.id),
+  ]);
+  const whyBy = new Map((insights || []).map((i) => [i.brand_id, i]));
+  const monthsBy = new Map<string, Set<string>>();
+  for (const d of dealMonths || []) { const m = String(d.published_at).slice(0, 7); (monthsBy.get(d.brand_id) || monthsBy.set(d.brand_id, new Set()).get(d.brand_id)!).add(m); }
+  const timeline: TL[] = cards.filter((c) => !c.is_self_brand && c.site_status !== "dead").map((c) => ({ brand_id: c.brand_id, brand: c.brand, category: c.category, months: [...(monthsBy.get(c.brand_id) || [])], why: whyBy.get(c.brand_id)?.why || null, season: whyBy.get(c.brand_id)?.season || null, repeat: !!c.repeat_partner, deals: Number(c.deals) }));
+  const whyMap: Record<string, { why: string; season: string | null }> = Object.fromEntries((insights || []).map((i) => [i.brand_id, { why: i.why, season: i.season }]));
   const { data: roster } = user ? await admin.from("roster_creators").select("id,name,handle,platform,followers").eq("user_id", user.id).order("name") : { data: [] };
   const highMed = cards.filter((c) => c.best_label !== "Low");
   const repeat = highMed.filter((c) => c.repeat_partner).length;
@@ -53,6 +65,7 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
               <a className="hover:text-accent" href={p === "youtube" ? `https://youtube.com/@${creator.handle}` : `https://instagram.com/${creator.handle}`} target="_blank" rel="noreferrer">open profile ↗</a>
               <span>{fmt(creator.followers)} {p === "youtube" ? "subscribers" : "followers"}</span>
               <span>printed {creator.last_scanned_at ? new Date(creator.last_scanned_at).toLocaleDateString() : "never"}</span>
+              {user && !active && <Reprint platform={p} handle={creator.handle} />}
             </div>
           </div>
         </div>
@@ -79,7 +92,7 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
       ) : (
         <>
           {active && <p className="num mb-2 text-center text-[11px] text-dim">re-printing in the background…</p>}
-          <BrandWall header={header} cards={cards} creator={{ id: creator.id, handle: creator.handle, platform: p, displayName: creator.display_name || creator.handle }} signedIn={!!user} roster={(roster || []) as RosterCreator[]} />
+          <BrandWall header={header} timeline={timeline} why={whyMap} cards={cards} creator={{ id: creator.id, handle: creator.handle, platform: p, displayName: creator.display_name || creator.handle }} signedIn={!!user} roster={(roster || []) as RosterCreator[]} />
         </>
       )}
     </div>
