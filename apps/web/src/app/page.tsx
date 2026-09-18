@@ -21,6 +21,8 @@ export default async function Home() {
     const { data: me } = await admin.from("profiles").select("onboarded_at").eq("id", user.id).single();
     if (!me?.onboarded_at) { const { count } = await admin.from("roster_creators").select("*", { count: "exact", head: true }).eq("user_id", user.id); if (!count) redirect("/start"); }
   }
+  let watchNew = 0;
+  if (user) { const { count } = await admin.from("watch_events").select("*", { count: "exact", head: true }).eq("user_id", user.id).eq("seen", false); watchNew = count || 0; }
   // First-run checklist: printed? roster? drafted? Hidden once all three are done.
   let firstRun: { printed: boolean; roster: boolean; drafted: boolean } | null = null;
   if (user) {
@@ -62,6 +64,7 @@ export default async function Home() {
         </div>
       </section>
 
+      {watchNew > 0 && <Link href="/watchlist" className="mt-6 flex items-center justify-between rounded-lg border border-ok/30 bg-okSoft/60 px-4 py-3 text-[13px] hover:border-ok"><span><b>{watchNew}</b> creator{watchNew === 1 ? "" : "s"} on your watchlist picked up new brands this week</span><span className="num text-[11px] text-ok">see what's new →</span></Link>}
       {firstRun && <FirstRun {...firstRun} />}
 
       {recent && recent.length > 0 && (

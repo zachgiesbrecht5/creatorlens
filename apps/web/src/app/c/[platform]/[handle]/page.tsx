@@ -4,6 +4,7 @@ import { UnlockCreator } from "@/components/UnlockCreator";
 import { PrinterMachine } from "@/components/PrinterMachine";
 import type { TL } from "@/components/PrintTimeline";
 import { Reprint } from "@/components/Reprint";
+import { WatchButton } from "@/components/WatchButton";
 import { BrandWall, type WallCard, type RosterCreator } from "@/components/BrandWall";
 import { PrintingScan } from "@/components/PrintingScan";
 import { fmt } from "@/lib/fmt";
@@ -38,6 +39,8 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
   const unlocked = await canSeeCreator(user?.id || null, seesAll, creator);
   const { data: wall } = await admin.from("brand_wall").select("*").eq("creator_id", creator.id).order("deals", { ascending: false }).order("best_score", { ascending: false });
   const cards = ((wall || []) as WallCard[]).filter((c) => !c.is_junk);
+  const { data: watchRow } = user ? await admin.from("watchlist").select("handle").eq("user_id", user.id).eq("platform", p).eq("handle", creator.handle.toLowerCase()).maybeSingle() : { data: null };
+  const watching = !!watchRow;
   // the map: every dated deal by brand, plus the "why then" lines
   const [{ data: dealMonths }, { data: insights }] = await Promise.all([
     admin.from("partnerships").select("brand_id,published_at").eq("creator_id", creator.id).neq("status", "rejected").not("published_at", "is", null).limit(1000),
@@ -66,6 +69,7 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
               <span>{fmt(creator.followers)} {p === "youtube" ? "subscribers" : "followers"}</span>
               <span>printed {creator.last_scanned_at ? new Date(creator.last_scanned_at).toLocaleDateString() : "never"}</span>
               {user && !active && <Reprint platform={p} handle={creator.handle} />}
+              {user && <WatchButton platform={p} handle={creator.handle} initial={watching} />}
             </div>
           </div>
         </div>

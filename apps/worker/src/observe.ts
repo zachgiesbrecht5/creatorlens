@@ -2,6 +2,7 @@
 // optional Slack/Discord webhook via ALERT_WEBHOOK_URL), and a nightly snapshot
 // of row counts plus a JSON export of the core tables to the `backups` bucket.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { keepWatch } from "./watch";
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[observe]", ...a);
 
@@ -44,5 +45,6 @@ export async function nightly(sb: SupabaseClient) {
     if (error) await alert(sb, `backup upload failed: ${t}`, { error: error.message });
   }
   log("nightly snapshot", JSON.stringify(counts));
+  try { await keepWatch(sb); } catch (e: any) { await alert(sb, "watchlist keeper failed", { error: String(e?.message || e).slice(0, 300) }); }
   return true;
 }
