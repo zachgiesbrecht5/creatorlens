@@ -21,7 +21,9 @@ const IG_PATTERNS: { tier: Tier; res: RegExp[] }[] = [
   { tier: { type: "Paid - explicit", score: 8, label: "High" }, res: [
     /#ad\b/gi, /#advert(?:isement)?\b/gi, /#sponsored\b/gi, /#spons\b/gi,
     /paid partnership/gi, /in (?:paid )?partnership with/gi,
-    /partner(?:ing|ed)?\s+with/gi, /sponsored by/gi ] },
+    /partner(?:ing|ed)?\s+with/gi, /sponsored by/gi,
+    /#\w*partner\b/gi, /#brandpartner/gi, /#ad\W/gi, /\bad\s*[|:]/gi, /\[ad\]/gi, /\(ad\)/gi, /#sponsoredpost/gi, /#paidpartnership/gi, /#paidad/gi,
+    /in collaboration with/gi, /#collab\b/gi, /brought to you by/gi, /made possible by/gi ] },
   { tier: { type: "Affiliate / code", score: 5, label: "Medium" }, res: [
     /use (?:my |the )?code/gi, /(?:promo|discount|coupon) code/gi,
     /code[:\s]+[A-Z0-9]{3,}/g, /affiliate/gi ] },

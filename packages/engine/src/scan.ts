@@ -72,7 +72,7 @@ export async function scanYouTube(apiKey: string, handleOrId: string, opts: YtSc
   };
 }
 
-export async function scanInstagram(token: IgToken, username: string, maxPosts = 100): Promise<ScanResult> {
+export async function scanInstagram(token: IgToken, username: string, maxPosts = 250): Promise<ScanResult> {
   const { profile, posts } = await fetchIgCreator(token, username, maxPosts);
   const rows: PartnershipRow[] = [];
   for (const p of posts) {
