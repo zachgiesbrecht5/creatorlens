@@ -32,6 +32,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <NavLink href="/brands">Brands</NavLink>
                   <NavLink href="/scans">My scans</NavLink>
                   {profile.plan === "admin" && <NavLink href="/queue">Queue</NavLink>}
+                  <NavLink href="/batch">Batch</NavLink>
                   <NavLink href="/creators">My creators</NavLink>
                   <NavLink href="/settings">Settings</NavLink>
                   <Link href="/pricing" className="pill ml-3 hover:border-fg" title={profile.plan === "trial" ? "Free plan. Click to see plans." : "Your plan"}>
