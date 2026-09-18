@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { PrinterMachine } from "@/components/PrinterMachine";
+import { PrintTimeline, type TL } from "@/components/PrintTimeline";
 import { ContactCard, type ContactInfo } from "./ContactCard";
 
 export type WallCard = {
@@ -16,7 +17,7 @@ export type RosterCreator = { id: string; name: string; handle: string | null; p
 
 type Creator = { id: string; handle: string; platform: string; displayName: string };
 
-export function BrandWall({ cards, creator, signedIn, roster, header }: { cards: WallCard[]; creator: Creator; signedIn: boolean; roster: RosterCreator[]; header?: React.ReactNode }) {
+export function BrandWall({ cards, creator, signedIn, roster, header, timeline, why }: { cards: WallCard[]; creator: Creator; signedIn: boolean; roster: RosterCreator[]; header?: React.ReactNode; timeline?: TL[]; why?: Record<string, { why: string; season: string | null }> }) {
   const [minLabel, setMinLabel] = useState<"High" | "Medium" | "Low">("Medium");
   const [hideMass, setHideMass] = useState(false);
   const [showDead, setShowDead] = useState(false);
@@ -102,6 +103,7 @@ export function BrandWall({ cards, creator, signedIn, roster, header }: { cards:
       <div className="pw-machine"><PrinterMachine lcd={lcdIdle} /></div>
       <div className="pw">
         {header}
+        {timeline && timeline.length > 0 && <PrintTimeline items={timeline} onPick={(id) => { setOpen(id); document.getElementById(`row-${id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }); }} />}
         <div className="pw-head">
           <span className="pw-brandcol">brand</span>
           <span className="pw-evcol">evidence</span>
@@ -112,7 +114,7 @@ export function BrandWall({ cards, creator, signedIn, roster, header }: { cards:
         {sorted.map((c, i) => {
           const isOpen = open === c.brand_id;
           return (
-            <div key={c.brand_id} className={`pw-row ${isOpen ? "pw-open" : ""}`} style={{ animationDelay: `${Math.min(i, 14) * 45}ms` }}
+            <div key={c.brand_id} id={`row-${c.brand_id}`} className={`pw-row ${isOpen ? "pw-open" : ""}`} style={{ animationDelay: `${Math.min(i, 14) * 45}ms` }}
               onMouseEnter={() => hover(c.brand_id)} onClick={() => setOpen(isOpen ? null : c.brand_id)}>
               <div className="pw-line">
                 <div className="pw-brandcol min-w-0">
@@ -136,6 +138,7 @@ export function BrandWall({ cards, creator, signedIn, roster, header }: { cards:
                 <div className="pw-evcol min-w-0">
                   {c.evidence && <div className="truncate text-[12.5px] text-muted" title={c.evidence}>{c.evidence}</div>}
                   {c.content_url && <a href={c.content_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="num text-[10.5px] text-dim hover:text-accent">view post ↗</a>}
+                  {why?.[c.brand_id] && <div className="pw-why">{why[c.brand_id].season && <em>{why[c.brand_id].season} · </em>}{why[c.brand_id].why}</div>}
                 </div>
                 <div className="pw-lastcol num text-[12px] text-muted">{when(c.last_seen)}</div>
                 <div className="pw-dealscol num text-right text-[13px]">{c.deals}</div>

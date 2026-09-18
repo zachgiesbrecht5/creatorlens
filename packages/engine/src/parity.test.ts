@@ -1,6 +1,7 @@
 // Differential test: the ORIGINAL Apps Script detection code (loaded from
 // legacy-apps-script/*.gs into a vm sandbox) vs the TypeScript port, on a
 // corpus of realistic descriptions and captions. Any divergence fails.
+import { cleanBrandCapture } from "./youtube";
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -81,7 +82,8 @@ describe.skipIf(!have)("parity with the original Apps Script engine", () => {
       const seen: any = {};
       const legacyRows: any[] = [];
       for (const b of brands) {
-        const n = L.normalizeBrandName(b.name);
+        // The port cuts clause bleed ("Squarespace Head over to…", "Helix Sleep Use Code…"); apply the same cut to the legacy name so parity compares like with like.
+        const n = L.normalizeBrandName(cleanBrandCapture(b.name));
         if (!n || n.length < 2) continue;
         const nl = n.toLowerCase();
         if (L.isJunkBrand(nl) || L.isSelfRefDynamic(nl, selfKeys) || seen[nl]) continue;

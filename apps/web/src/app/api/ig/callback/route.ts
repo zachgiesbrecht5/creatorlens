@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
   if (!t1.access_token) return fail(req, "Meta did not return a token: " + (t1.error?.message || "unknown"));
   const t2: any = await (await fetch(`https://graph.facebook.com/${V}/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.META_APP_ID}&client_secret=${process.env.META_APP_SECRET}&fb_exchange_token=${t1.access_token}`)).json();
   const token = t2.access_token || t1.access_token;
+  const fbUserId: string | null = await fetch(`https://graph.facebook.com/v25.0/me?fields=id&access_token=${token}`).then((r) => r.json()).then((j) => (j?.id ? String(j.id) : null)).catch(() => null);
 
   // find pages with an IG business account
   const pages: any = await (await fetch(`https://graph.facebook.com/${V}/me/accounts?fields=name,instagram_business_account{id,username}&access_token=${token}`)).json();
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
   const admin = supabaseAdmin();
   for (const p of withIg) {
     await admin.from("ig_connections").upsert({
-      user_id: user.id, ig_user_id: p.instagram_business_account.id, ig_username: p.instagram_business_account.username,
+      user_id: user.id, ig_user_id: p.instagram_business_account.id, ig_username: p.instagram_business_account.username, fb_user_id: fbUserId,
       access_token: token, healthy: true, cooldown_until: null, last_error: null,
     }, { onConflict: "ig_user_id" });
   }

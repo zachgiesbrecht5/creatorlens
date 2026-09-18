@@ -169,3 +169,7 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 .hero { background: #0b0d12; background-image: radial-gradient(60% 80% at 75% 45%, rgba(47,91,255,.14), transparent 60%), repeating-linear-gradient(0deg, transparent 0 39px, rgba(255,255,255,.035) 39px 40px); }
 .hero .rc-machine { filter: drop-shadow(0 30px 40px rgba(0,0,0,.6)); }
 .hero .rc-paper { box-shadow: 0 40px 70px -30px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.06); }
+
+.pw-map { padding: 14px 0 6px; border-bottom: 1px dashed #cfd3d9; }
+.pw-why { margin-top: 4px; font-size: 11.5px; line-height: 1.45; color: #5b6472; font-family: var(--font-sans), Inter, sans-serif; }
+.pw-why em { font-style: normal; color: #0e6b45; font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; }

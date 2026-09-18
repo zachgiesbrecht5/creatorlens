@@ -125,6 +125,13 @@ export function cleanBrandCapture(raw: string | undefined): string {
     if (idx > 0) name = name.substring(0, idx).trim();
   }
   name = name.replace(/[.!,;:]+$/, "").trim();
+  // Sentence bleed: "Rocket Mortgage Some of my favorite…", "Rocket Mortgage It's always fun…".
+  // Cut at the first token that starts a new clause, and never keep more than 4 words.
+  const CLAUSE = /^(some|it's|its|it|this|that|these|those|here|there|check|click|use|go|grab|get|try|shop|visit|head|watch|today|now|also|plus|thanks|thank|if|when|what|which|i|i'm|we|you|they|he|she|a|an|the|as|because|so|but|or)$/i;
+  const words = name.split(" ");
+  let cut = words.length;
+  for (let i = 1; i < words.length; i++) { if (CLAUSE.test(words[i].replace(/[^A-Za-z']/g, ""))) { cut = i; break; } }
+  name = words.slice(0, Math.min(cut, 4)).join(" ");
   // URL fragments that leak into captures: "Provided by https", "Board https",
   // "Commission www.egyptf". Strip them; if nothing meaningful is left, drop it.
   name = name.replace(/\s*\b(?:https?|www\.?\S*)$/i, "").trim();
