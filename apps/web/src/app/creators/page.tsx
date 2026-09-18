@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { QuickAdd } from "@/components/QuickAdd";
 import { currentProfile, supabaseAdmin, supabaseServer } from "@/lib/supabase";
 
 async function addRoster(formData: FormData) {
@@ -59,7 +60,10 @@ export default async function Creators() {
               ))}
             </div>
           ) : <p className="mt-4 font-mono text-[11px] text-warn">No creators yet. Add one below to unlock pitch drafts.</p>}
-          <form action={addRoster} className="mt-5 grid gap-3 border-t border-line pt-5 md:grid-cols-2">
+          <div className="mt-5 border-t border-line pt-5"><QuickAdd /></div>
+          <details className="mt-4 group">
+            <summary className="cursor-pointer font-mono text-[11px] text-muted hover:text-fg">or add manually (multi-platform, or a creator we can't look up)</summary>
+          <form action={addRoster} className="mt-3 grid gap-3 md:grid-cols-2">
             <input name="name" required className="input-flat" placeholder="Name (e.g. Andy Yen)" />
             <input name="handle" className="input-flat" placeholder="Primary handle (e.g. andyyyen)" />
             <select name="platform" className="input-flat" defaultValue="multi">
@@ -71,6 +75,7 @@ export default async function Creators() {
             <input name="media_kit_url" className="input-flat md:col-span-2" placeholder="Media kit link (optional)" />
             <div className="md:col-span-2 flex justify-end"><button className="btn-ghost">Add creator</button></div>
           </form>
+          </details>
         </div>
 
     </div>
