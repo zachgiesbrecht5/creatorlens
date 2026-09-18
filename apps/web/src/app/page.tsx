@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { SearchBox } from "@/components/SearchBox";
 import { PrintReceipt } from "@/components/PrintReceipt";
 import { FirstRun } from "@/components/FirstRun";
@@ -15,6 +16,11 @@ export default async function Home() {
     admin.from("brands").select("*", { count: "exact", head: true }),
     admin.from("partnerships").select("*", { count: "exact", head: true }),
   ]);
+  // Brand-new account with no roster: the onboarding is the first page.
+  if (user) {
+    const { data: me } = await admin.from("profiles").select("onboarded_at").eq("id", user.id).single();
+    if (!me?.onboarded_at) { const { count } = await admin.from("roster_creators").select("*", { count: "exact", head: true }).eq("user_id", user.id); if (!count) redirect("/start"); }
+  }
   // First-run checklist: printed? roster? drafted? Hidden once all three are done.
   let firstRun: { printed: boolean; roster: boolean; drafted: boolean } | null = null;
   if (user) {

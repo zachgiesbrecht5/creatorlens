@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { currentProfile, supabaseAdmin, supabaseServer } from "@/lib/supabase";
 
 async function addRoster(formData: FormData) {
@@ -41,7 +42,7 @@ export default async function Creators() {
       <div className="mb-6">
         <div className="label mb-1.5">Roster</div>
         <h1 className="h2">My creators</h1>
-        <p className="mt-1 text-sm text-muted">The creators you represent. Every pitch Sponsorprint writes is for one of them; the creator you scan on a brand wall is only the proof that the brand books this kind of talent.</p>
+        <p className="mt-1 text-sm text-muted">The creators you represent. Every pitch Sponsorprint writes is for one of them; the creator you scan on a brand wall is only the proof that the brand books this kind of talent. <Link href="/start" className="text-accent hover:underline">Find each creator&apos;s neighborhood →</Link></p>
       </div>
       <div className="card p-6" id="roster">
           {roster?.length ? (

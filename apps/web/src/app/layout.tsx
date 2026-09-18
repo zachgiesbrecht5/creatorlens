@@ -32,6 +32,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <NavLink href="/brands">Brands</NavLink>
                   <NavLink href="/scans">My scans</NavLink>
                   {profile.plan === "admin" && <NavLink href="/queue">Queue</NavLink>}
+                  <NavLink href="/start">Start</NavLink>
                   <NavLink href="/batch">Batch</NavLink>
                   <NavLink href="/creators">My creators</NavLink>
                   <NavLink href="/settings">Settings</NavLink>
