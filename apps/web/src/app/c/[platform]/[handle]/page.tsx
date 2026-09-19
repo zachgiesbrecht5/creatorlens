@@ -8,6 +8,7 @@ import { WatchButton } from "@/components/WatchButton";
 import { NeighborsButton } from "@/components/NeighborsButton";
 import { Tour } from "@/components/Tour";
 import { PRINT_TOUR } from "@/components/tours";
+import { ShareBar } from "@/components/ShareBar";
 import { BrandWall, type WallCard, type RosterCreator } from "@/components/BrandWall";
 import { PrintingScan } from "@/components/PrintingScan";
 import { fmt } from "@/lib/fmt";
@@ -73,6 +74,7 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
               <span>{fmt(creator.followers)} {p === "youtube" ? "subscribers" : "followers"}</span>
               <span>printed {creator.last_scanned_at ? new Date(creator.last_scanned_at).toLocaleDateString() : "never"}</span>
             </div>
+            {user && <ShareBar url={`${process.env.NEXT_PUBLIC_APP_URL || "https://sponsorprint.com"}/p/${p}/${creator.handle}`} name={creator.display_name || creator.handle} og={`/api/og/print?platform=${p}&handle=${encodeURIComponent(creator.handle)}`} />}
             {user && <div className="pw-actions" data-tour="actions">
               {!active && <Reprint platform={p} handle={creator.handle} />}
               <WatchButton platform={p} handle={creator.handle} initial={watching} />

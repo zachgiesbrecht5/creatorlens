@@ -266,3 +266,7 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 .pw-actions button, .pw-actions a.btn-like { font-family: var(--font-mono); font-size: 12px; padding: 6px 11px; border: 1px solid #cfd3d9; border-radius: 999px; background: #fff; color: #0b0d12; }
 .pw-actions button:hover { border-color: #0b0d12; }
 .pw-actions button.text-ok { border-color: #0e6b45; background: #e3f5ec; }
+
+/* public print */
+.pub-row { display: grid; grid-template-columns: minmax(180px, 2fr) 1fr 90px 90px 50px; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px dashed #e4e6ea; }
+.pub .pw-head { grid-template-columns: minmax(180px, 2fr) 1fr 90px 90px 50px; }

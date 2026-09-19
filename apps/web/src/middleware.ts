@@ -18,7 +18,7 @@ export async function middleware(req: NextRequest) {
   });
   const { data: { user } } = await sb.auth.getUser();
   const p = req.nextUrl.pathname;
-  const isPublic = p === "/" || p.startsWith("/login") || p.startsWith("/auth") || p.startsWith("/api/search") || p.startsWith("/c/") || p === "/brands" || p === "/privacy" || p === "/terms" || p === "/pricing" || p === "/data-deletion" || p.startsWith("/api/billing/webhook") || p.startsWith("/api/meta/");
+  const isPublic = p === "/" || p.startsWith("/login") || p.startsWith("/auth") || p.startsWith("/api/search") || p.startsWith("/c/") || p === "/brands" || p === "/privacy" || p === "/terms" || p === "/pricing" || p === "/data-deletion" || p.startsWith("/p/") || p.startsWith("/reports") || p.startsWith("/api/og/") || p === "/sitemap.xml" || p === "/robots.txt" || p.startsWith("/api/billing/webhook") || p.startsWith("/api/meta/");
   if (!user && !isPublic) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
