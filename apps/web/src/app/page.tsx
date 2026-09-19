@@ -21,6 +21,21 @@ export default async function Home() {
     admin.from("partnerships").select("*", { count: "exact", head: true }),
   ]);
   if (user) admin.from("profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", user.id).then(() => {});
+  // Real prints for the hero: recent creators with at least four brands. Brand
+  // names and post dates are public; contacts are not shown here.
+  const { data: heroCreators } = await admin.from("creators").select("id,handle,platform,followers,last_scanned_at").not("last_scanned_at", "is", null).order("last_scanned_at", { ascending: false }).limit(40);
+  const fmtK = (n: number | null) => (!n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
+  const samples: { handle: string; platform: string; followers: string; lines: { brand: string; tag: string; when: string; deals: number; repeat?: boolean }[]; contact: string | null; href: string }[] = [];
+  if (heroCreators?.length) {
+    const { data: walls } = await admin.from("brand_wall").select("creator_id,brand,evidence,deals,last_seen,repeat_partner").in("creator_id", heroCreators.map((c) => c.id)).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false);
+    for (const c of heroCreators) {
+      const rows = (walls || []).filter((w) => w.creator_id === c.id).sort((a, b) => String(b.last_seen).localeCompare(String(a.last_seen))).slice(0, 6);
+      if (rows.length < 4) continue;
+      samples.push({ handle: c.handle, platform: c.platform === "youtube" ? "YouTube" : "Instagram", followers: fmtK(c.followers), href: `/c/${c.platform}/${c.handle}`, contact: null,
+        lines: rows.map((r) => ({ brand: r.brand, tag: String(r.evidence || "").replace(/\s+/g, " ").slice(0, 24), when: r.last_seen ? new Date(r.last_seen).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "", deals: Number(r.deals) || 1, repeat: !!r.repeat_partner })) });
+      if (samples.length >= 6) break;
+    }
+  }
   // Brand-new account with no roster: the onboarding is the first page.
   if (user) {
     const { data: me } = await admin.from("profiles").select("onboarded_at").eq("id", user.id).single();
@@ -80,7 +95,7 @@ export default async function Home() {
             <p className="mt-4 text-[13px] text-white/45">Public posts only, read through the official YouTube and Instagram APIs. Nothing is ever sent for you.</p>
           </div>
           <div className="md:col-span-6 md:pl-6">
-            <PrintReceipt indexDeals={deals ?? 0} />
+            <PrintReceipt indexDeals={deals ?? 0} samples={samples} />
           </div>
         </div>
       </section>
