@@ -3,6 +3,7 @@
 // of row counts plus a JSON export of the core tables to the `backups` bucket.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { keepWatch } from "./watch";
+import { discover } from "./discover";
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[observe]", ...a);
 
@@ -46,5 +47,6 @@ export async function nightly(sb: SupabaseClient) {
   }
   log("nightly snapshot", JSON.stringify(counts));
   try { await keepWatch(sb); } catch (e: any) { await alert(sb, "watchlist keeper failed", { error: String(e?.message || e).slice(0, 300) }); }
+  try { await discover(sb); } catch (e: any) { await alert(sb, "discover failed", { error: String(e?.message || e).slice(0, 300) }); }
   return true;
 }

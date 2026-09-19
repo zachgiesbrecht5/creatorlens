@@ -127,6 +127,7 @@ async function persist(job: any, result: ScanResult) {
   try {
     await classifyCreator(sb, creator.id, true);
     try { await explainCreatorDeals(sb, creator.id); } catch (e: any) { log("insights failed", e?.message); }
+    if (job.source === "discover") await sb.from("creators").update({ is_public: true, discovered_at: new Date().toISOString(), discover_reason: job.note || null }).eq("id", creator.id);
     // resolve sites for new brands first so the classifier sees the brand's own page (cap per scan; backfill gets the rest)
     const { data: fresh } = await sb.from("brands").select("id,key,name,domain,website,website_locked,name_locked").in("id", touched).is("site_checked_at", null).order("deal_count", { ascending: false }).limit(12);
     for (const b of fresh || []) { try { await resolveBrandSite(b); } catch (e: any) { log("site check failed", b.name, e?.message); } }

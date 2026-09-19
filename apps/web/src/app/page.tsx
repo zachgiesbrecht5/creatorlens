@@ -34,6 +34,11 @@ export default async function Home() {
     const f = { printed: (prints || 0) > 0, roster: (roster || 0) > 0, drafted: (drafts || 0) > 0 };
     if (!(f.printed && f.roster && f.drafted)) firstRun = f;
   }
+  // Fresh off the printer: creators the discover agent picked and printed, public to everyone signed in.
+  const { data: fresh } = await admin.from("creators").select("id,platform,handle,display_name,avatar_url,followers,category,discover_reason,discovered_at").eq("is_public", true).not("last_scanned_at", "is", null).order("discovered_at", { ascending: false }).limit(9);
+  const freshIds = (fresh || []).map((f) => f.id);
+  const { data: freshWalls } = freshIds.length ? await admin.from("brand_wall").select("creator_id,brand,deals").in("creator_id", freshIds).eq("is_junk", false).eq("is_self_brand", false) : { data: [] };
+  const freshCards = (fresh || []).map((f) => { const w = (freshWalls || []).filter((x) => x.creator_id === f.id).sort((a, b) => Number(b.deals) - Number(a.deals)); return { ...f, brands: w.length, top: w.slice(0, 3).map((x) => x.brand) }; });
   // Recently scanned: the whole index for the house, only your own unlocks otherwise.
   let recent: { platform: string; handle: string; display_name: string | null; avatar_url: string | null; followers: number | null }[] = [];
   if (seesAll) {
@@ -66,6 +71,31 @@ export default async function Home() {
 
       {watchNew > 0 && <Link href="/watchlist" className="mt-6 flex items-center justify-between rounded-lg border border-ok/30 bg-okSoft/60 px-4 py-3 text-[13px] hover:border-ok"><span><b>{watchNew}</b> creator{watchNew === 1 ? "" : "s"} on your watchlist picked up new brands this week</span><span className="num text-[11px] text-ok">see what's new →</span></Link>}
       {firstRun && <FirstRun {...firstRun} />}
+
+      {user && freshCards.length > 0 && (
+        <section className="mt-10">
+          <div className="mb-3 flex items-baseline justify-between">
+            <div><div className="label">Fresh off the printer</div><div className="text-[13px] text-muted">Creators the printer went looking for on its own, next to the rosters people have added. Free to open.</div></div>
+            <div className="num text-[11px] text-dim">new every night</div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            {freshCards.map((f) => (
+              <Link key={f.id} href={`/c/${f.platform}/${f.handle}`} className="card group p-4 transition hover:border-fg">
+                <div className="flex items-center gap-3">
+                  {f.avatar_url ? <img src={f.avatar_url} alt="" className="h-11 w-11 rounded-full object-cover" /> : <div className="h-11 w-11 rounded-full bg-surface2" />}
+                  <div className="min-w-0">
+                    <div className="truncate text-[14px] font-semibold tracking-tight group-hover:text-accent">{f.display_name || f.handle}</div>
+                    <div className="num truncate text-[10.5px] text-muted">{f.platform === "youtube" ? "YouTube" : "Instagram"} · {f.followers ? (f.followers >= 1e6 ? `${(f.followers / 1e6).toFixed(1)}M` : f.followers >= 1e3 ? `${Math.round(f.followers / 1e3)}K` : f.followers) : ""}{f.category ? ` · ${f.category}` : ""}</div>
+                  </div>
+                  <div className="ml-auto text-right"><div className="text-[20px] font-semibold leading-none tracking-tight">{f.brands}</div><div className="num text-[9.5px] text-dim">brands</div></div>
+                </div>
+                {f.top.length > 0 && <div className="num mt-3 truncate text-[11px] text-muted">{f.top.join(" · ")}</div>}
+                {f.discover_reason && <div className="mt-2 line-clamp-2 text-[11.5px] leading-snug text-dim">{f.discover_reason}</div>}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {recent && recent.length > 0 && (
         <section className="mt-10">

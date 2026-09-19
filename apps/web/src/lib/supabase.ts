@@ -72,6 +72,8 @@ export async function canSeeCreator(userId: string | null, seesAll: boolean, cre
   if (seesAll) return true;
   if (!userId) return false;
   const admin = supabaseAdmin();
+  const { data: pub } = await admin.from("creators").select("is_public").eq("platform", creator.platform).ilike("handle", creator.handle).maybeSingle();
+  if (pub?.is_public) return true;
   const handles = [creator.handle.toLowerCase(), (creator.external_id || "").toLowerCase()].filter(Boolean);
   const { data } = await admin.from("creator_access").select("handle").eq("user_id", userId).eq("platform", creator.platform).in("handle", handles).limit(1);
   return !!data?.length;
