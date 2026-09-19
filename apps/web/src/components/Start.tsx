@@ -84,7 +84,7 @@ export function Start({ initialRoster, isHouse }: { initialRoster: Roster[]; isH
       }
     };
     tick();
-    pollers.current[rosterId] = setInterval(tick, 3500);
+    pollers.current[rosterId] = setInterval(tick, 2000);
   }
   useEffect(() => () => Object.values(pollers.current).forEach(clearInterval), []);
 

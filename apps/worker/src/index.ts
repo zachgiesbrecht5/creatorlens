@@ -19,8 +19,8 @@ const env = (k: string, d?: string) => {
 const sb = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), { auth: { persistSession: false } });
 const YT_API_KEY = env("YT_API_KEY");
 const YT_DAILY_BUDGET = Number(env("YT_DAILY_BUDGET", "9000"));
-const POLL_MS = 3000;
-const CONCURRENCY = Math.max(1, Number(process.env.WORKER_CONCURRENCY || 4));   // scans in flight at once
+const POLL_MS = 1500;
+const CONCURRENCY = Math.max(1, Number(process.env.WORKER_CONCURRENCY || 8));   // scans in flight at once
 const WORKER_ID = `${process.env.RAILWAY_REPLICA_ID || process.env.HOSTNAME || "worker"}-${Math.random().toString(36).slice(2, 6)}`;
 let inFlight = 0;
 
@@ -125,8 +125,9 @@ async function persist(job: any, result: ScanResult) {
   // brand categories for anything new, then the verticals rollup.
   const touched = [...new Set(brandIds.values())];
   try {
-    await classifyCreator(sb, creator.id, true);
-    try { await explainCreatorDeals(sb, creator.id); } catch (e: any) { log("insights failed", e?.message); }
+    // Mark done first so the print shows up, then enrich in the background.
+    await sb.from("scan_jobs").update({ status: "done", finished_at: new Date().toISOString(), rows_found: result.rows.length }).eq("id", job.id);
+    classifyCreator(sb, creator.id, true).then(() => explainCreatorDeals(sb, creator.id)).catch((e: any) => log("enrich failed", e?.message));
     if (job.source === "discover") await sb.from("creators").update({ is_public: true, discovered_at: new Date().toISOString(), discover_reason: job.note || null }).eq("id", creator.id);
     // resolve sites for new brands first so the classifier sees the brand's own page (cap per scan; backfill gets the rest)
     const { data: fresh } = await sb.from("brands").select("id,key,name,domain,website,website_locked,name_locked").in("id", touched).is("site_checked_at", null).order("deal_count", { ascending: false }).limit(12);
@@ -144,13 +145,14 @@ async function runJob(job: any) {
   let result: ScanResult;
   if (job.platform === "youtube") {
     if ((await ytBudgetLeft()) < 200) throw Object.assign(new Error("House YouTube quota nearly exhausted for today"), { retry: 60 });
-    result = await scanYouTube(YT_API_KEY, job.handle);
+    const quick = job.source === "neighborhood" || job.source === "discover";
+    result = await scanYouTube(YT_API_KEY, job.handle, quick ? { lookbackDays: 365, maxVideos: 150 } : {});
     await ytBudgetSpend(result.quotaUnits);
   } else if (job.platform === "instagram") {
     const tok = await pickIgToken();
     if (!tok) throw Object.assign(new Error("No healthy Instagram token available (all cooling down)"), { retry: 30 });
     try {
-      result = await scanInstagram(tok, job.handle);
+      result = await scanInstagram(tok, job.handle, job.source === "neighborhood" || job.source === "discover" ? 120 : undefined);
     } catch (e: any) {
       if (e instanceof IgRateLimitError) { await coolDownToken(tok.id, e.message); throw Object.assign(e, { retry: 15 }); }
       throw e;
@@ -309,7 +311,7 @@ async function tick() {
   if (Date.now() - lastReap > 5 * 60000) { lastReap = Date.now(); sb.rpc("requeue_stuck_jobs").then(({ data }) => { if (data) log("requeued stuck jobs:", data); }); }
 
   // Neighborhood finds run alongside scans (they're short and users are watching).
-  if (!neighborhoodBusy) { neighborhoodBusy = true; runNeighborhoods(sb, 1).then(() => runBrandScans(sb, 1)).catch(() => {}).finally(() => { neighborhoodBusy = false; }); }
+  if (!neighborhoodBusy) { neighborhoodBusy = true; runNeighborhoods(sb, 3).then(() => runBrandScans(sb, 1)).catch(() => {}).finally(() => { neighborhoodBusy = false; }); }
 
   // Claim up to (CONCURRENCY - inFlight) jobs atomically and run them in parallel.
   const room = CONCURRENCY - inFlight;

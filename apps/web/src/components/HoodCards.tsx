@@ -45,7 +45,7 @@ export function useHood(initialId: string | null, seed?: { rosterCreatorId?: str
         if (rr.ok && jj.id && jj.id !== hoodId) { setRounds((n) => n + 1); setHood(null); setHoodId(jj.id); }
       }
     };
-    tick(); timer.current = setInterval(tick, 3500);
+    tick(); timer.current = setInterval(tick, 2000);
     return () => clearInterval(timer.current);
   }, [hoodId]);
   // merged view: kept good ones first, then the current round

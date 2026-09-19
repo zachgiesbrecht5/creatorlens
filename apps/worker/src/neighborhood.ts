@@ -77,7 +77,7 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
   if (client && picked.length < 3) {
     const sys = `You find creators similar to a given creator for a talent manager. Return 8 candidates on the SAME platform who are clearly in the same content lane and roughly the same audience size (within 4x). Prefer active, real accounts. Use web search to verify handles exist. Never return the creator themselves, and never return mega-celebrities unless the input creator is one. Reply ONLY with JSON: {"candidates":[{"handle":"...","why":"<one sentence on the overlap>"}]}`;
     const user = `Platform: ${platform}\nCreator: ${r.name} (@${handle})\nAudience: ${size || "unknown"} ${platform === "youtube" ? "subscribers" : "followers"}\nNiche: ${r.niche || cat || "unknown"}\nBio: ${String(r.bio || "").slice(0, 300)}\nAngle: ${String(r.pitch_angle || "").slice(0, 300)}${avoid.length ? `\n\nDo NOT return any of these (already shown): ${avoid.map((h) => "@" + h).join(", ")}. Find different people.` : ""}`;
-    const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0.4, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 } as any], messages: [{ role: "user", content: user }] });
+    const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0.4, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 } as any], messages: [{ role: "user", content: user }] });
     const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
     const m = text.match(/\{[\s\S]*\}/);
     let cands: { handle: string; why: string }[] = [];
@@ -117,7 +117,7 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
     if (c.cached) continue;
     const { data: existing } = await sb.from("scan_jobs").select("id").eq("platform", c.platform).ilike("handle", c.handle).in("status", ["queued", "running", "rate_limited"]).limit(1);
     if (existing?.length) { c.job_id = existing[0].id; continue; }
-    const { data: job } = await sb.from("scan_jobs").insert({ user_id: userId, platform: c.platform, handle: c.handle, priority: 4, source: "neighborhood" }).select("id").single();
+    const { data: job } = await sb.from("scan_jobs").insert({ user_id: userId, platform: c.platform, handle: c.handle, priority: 1, source: "neighborhood" }).select("id").single();
     c.job_id = job?.id || null;
   }
   await sb.from("neighborhoods").update({ status: "done", candidates: picked, finished_at: new Date().toISOString() }).eq("id", id);
