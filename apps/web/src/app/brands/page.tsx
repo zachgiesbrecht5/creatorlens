@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BrandSearch } from "@/components/BrandSearch";
 import { supabaseAdmin, currentAccess, unlockedCreatorIds } from "@/lib/supabase";
 import { Verticals } from "@/components/Verticals";
 import { BrandMap, type MapBrand } from "@/components/BrandMap";
@@ -84,7 +85,7 @@ export default async function Brands({ searchParams }: { searchParams: Promise<{
         <form className="flex gap-2">
           {cat && <input type="hidden" name="cat" value={cat} />}
           {sort && <input type="hidden" name="sort" value={sort} />}
-          <input name="q" defaultValue={q || ""} placeholder="Search brands" className="input !w-64" />
+          <BrandSearch placeholder="Search brands" />
         </form>
       </div>
 

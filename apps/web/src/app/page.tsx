@@ -6,6 +6,7 @@ import { PrintReceipt } from "@/components/PrintReceipt";
 import { Journey } from "@/components/Journey";
 import { HiringStrip } from "@/components/HiringStrip";
 import { SignalsStrip, type MatchRow } from "@/components/SignalsStrip";
+import { BrandSearch } from "@/components/BrandSearch";
 import { supabaseAdmin, currentAccess } from "@/lib/supabase";
 import { fmt } from "@/lib/fmt";
 
@@ -85,6 +86,13 @@ export default async function Home() {
       </section>
 
       {watchNew > 0 && <Link href="/watchlist" className="mt-6 flex items-center justify-between rounded-lg border border-ok/30 bg-okSoft/60 px-4 py-3 text-[13px] hover:border-ok"><span><b>{watchNew}</b> creator{watchNew === 1 ? "" : "s"} on your watchlist picked up new brands this week</span><span className="num text-[11px] text-ok">see what's new →</span></Link>}
+      {user && (
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <div className="label">or look up a brand</div>
+          <div className="w-full max-w-md"><BrandSearch placeholder="Type a brand: Samsung, LMNT, Rocket Mortgage…" /></div>
+          <div className="num text-[11px] text-dim">who they book, how often, who to email</div>
+        </div>
+      )}
       {journey && <div className="mt-6"><Journey s={journey} compact /></div>}
 
       {user && dropCards.length > 0 && (
