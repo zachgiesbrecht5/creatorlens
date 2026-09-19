@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { SearchBox } from "@/components/SearchBox";
 import { PrintReceipt } from "@/components/PrintReceipt";
 import { FirstRun } from "@/components/FirstRun";
+import { HiringStrip } from "@/components/HiringStrip";
 import { supabaseAdmin, currentAccess } from "@/lib/supabase";
 import { fmt } from "@/lib/fmt";
 
@@ -39,6 +40,7 @@ export default async function Home() {
   const freshIds = (fresh || []).map((f) => f.id);
   const { data: freshWalls } = freshIds.length ? await admin.from("brand_wall").select("creator_id,brand,deals").in("creator_id", freshIds).eq("is_junk", false).eq("is_self_brand", false) : { data: [] };
   const freshCards = (fresh || []).map((f) => { const w = (freshWalls || []).filter((x) => x.creator_id === f.id).sort((a, b) => Number(b.deals) - Number(a.deals)); return { ...f, brands: w.length, top: w.slice(0, 3).map((x) => x.brand) }; });
+  const { data: hiring } = user ? await admin.from("hiring_signals").select("id,company,brand_id,title,seniority,url,posted_at,found_at,closed_at,summary").order("found_at", { ascending: false }).limit(6) : { data: [] };
   // Recently scanned: the whole index for the house, only your own unlocks otherwise.
   let recent: { platform: string; handle: string; display_name: string | null; avatar_url: string | null; followers: number | null }[] = [];
   if (seesAll) {
@@ -71,6 +73,8 @@ export default async function Home() {
 
       {watchNew > 0 && <Link href="/watchlist" className="mt-6 flex items-center justify-between rounded-lg border border-ok/30 bg-okSoft/60 px-4 py-3 text-[13px] hover:border-ok"><span><b>{watchNew}</b> creator{watchNew === 1 ? "" : "s"} on your watchlist picked up new brands this week</span><span className="num text-[11px] text-ok">see what's new →</span></Link>}
       {firstRun && <FirstRun {...firstRun} />}
+
+      {user && <HiringStrip signals={(hiring || []) as any} />}
 
       {user && freshCards.length > 0 && (
         <section className="mt-10">
