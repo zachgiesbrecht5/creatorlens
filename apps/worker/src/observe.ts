@@ -7,6 +7,7 @@ import { discover } from "./discover";
 import { findHiring } from "./hiring";
 import { autoBrandScans } from "./brandscan";
 import { morningDrops } from "./drops";
+import { findSignals, matchSignals } from "./signals";
 import { writeCreatorUpdates } from "./updates";
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[observe]", ...a);
@@ -55,6 +56,8 @@ export async function nightly(sb: SupabaseClient) {
   try { await autoBrandScans(sb); } catch (e: any) { await alert(sb, "auto brand scans failed", { error: String(e?.message || e).slice(0, 300) }); }
   try { await morningDrops(sb); } catch (e: any) { await alert(sb, "morning drops failed", { error: String(e?.message || e).slice(0, 300) }); }
   // weekly on Mondays: hiring signals; monthly on the 1st: creator updates
+  if (new Date().getUTCDay() === 2) { try { await findSignals(sb); } catch (e: any) { await alert(sb, "signals agent failed", { error: String(e?.message || e).slice(0, 300) }); } }
+  else { try { await matchSignals(sb); } catch { /* daily re-match for new roster rows */ } }
   if (new Date().getUTCDay() === 1) { try { await findHiring(sb); } catch (e: any) { await alert(sb, "hiring agent failed", { error: String(e?.message || e).slice(0, 300) }); } }
   if (new Date().getUTCDate() === 1) { try { await writeCreatorUpdates(sb); } catch (e: any) { await alert(sb, "creator updates failed", { error: String(e?.message || e).slice(0, 300) }); } }
   return true;

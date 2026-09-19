@@ -5,6 +5,7 @@ import { SearchBox } from "@/components/SearchBox";
 import { PrintReceipt } from "@/components/PrintReceipt";
 import { Journey } from "@/components/Journey";
 import { HiringStrip } from "@/components/HiringStrip";
+import { SignalsStrip, type MatchRow } from "@/components/SignalsStrip";
 import { supabaseAdmin, currentAccess } from "@/lib/supabase";
 import { fmt } from "@/lib/fmt";
 
@@ -42,6 +43,15 @@ export default async function Home() {
       const { data: ws } = await admin.from("brand_wall").select("creator_id,brand,deals").in("creator_id", items.map((i) => i.creator_id)).eq("is_junk", false).eq("is_self_brand", false);
       dropCards = items.map((i) => { const c = (cs || []).find((x) => x.id === i.creator_id); if (!c) return null; const w = (ws || []).filter((x) => x.creator_id === c.id).sort((a, b) => Number(b.deals) - Number(a.deals)); return { ...c, reason: i.reason, brands: w.length, top: w.slice(0, 3).map((x) => x.brand) }; }).filter(Boolean);
     }
+  }
+  let sigMatches: MatchRow[] = [], sigGeneral: any[] = [];
+  if (user) {
+    const [{ data: sm }, { data: sg }] = await Promise.all([
+      admin.from("signal_matches").select("id,reason,score,seen,roster_creators(name),signals(*)").eq("user_id", user.id).order("seen").order("score", { ascending: false }).limit(3),
+      admin.from("signals").select("*").order("announced_at", { ascending: false, nullsFirst: false }).limit(3),
+    ]);
+    sigMatches = (sm || []).map((m: any) => ({ id: m.id, reason: m.reason, score: m.score, seen: m.seen, creator: m.roster_creators?.name || "creator", signal: m.signals }));
+    sigGeneral = sg || [];
   }
   const { data: hiring } = user ? await admin.from("hiring_signals").select("id,company,brand_id,title,seniority,url,posted_at,found_at,closed_at,summary").order("found_at", { ascending: false }).limit(6) : { data: [] };
   // Recently scanned: the whole index for the house, only your own unlocks otherwise.
@@ -96,6 +106,7 @@ export default async function Home() {
         </section>
       )}
 
+      {user && <SignalsStrip matches={sigMatches} general={sigGeneral} />}
       {user && <HiringStrip signals={(hiring || []) as any} />}
 
       {user && freshCards.length > 0 && (

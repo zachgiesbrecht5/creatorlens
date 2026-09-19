@@ -28,17 +28,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <nav className="flex items-center gap-1 overflow-x-auto whitespace-nowrap text-[13px] [scrollbar-width:none]">
               {profile ? (
                 <>
-                  <NavLink href="/">Search</NavLink>
+                  <NavLink href="/">Print</NavLink>
                   <NavLink href="/brands">Brands</NavLink>
-                  <NavLink href="/scans">My scans</NavLink>
-                  {profile.plan === "admin" && <NavLink href="/queue">Queue</NavLink>}
-                  <NavLink href="/start">Start</NavLink>
-                  <NavLink href="/batch">Batch</NavLink>
-                  <NavLink href="/watchlist">Watchlist</NavLink>
-                  <NavLink href="/pipeline">Pipeline</NavLink>
-                  <NavLink href="/updates">Updates</NavLink>
                   <NavLink href="/creators">My creators</NavLink>
-                  <NavLink href="/settings">Settings</NavLink>
+                  <NavLink href="/pipeline">Pipeline</NavLink>
+                  <details className="nav-more">
+                    <summary>More</summary>
+                    <div className="nav-menu">
+                      <Link href="/start">Start: roster and neighborhood</Link>
+                      <Link href="/batch">Batch prints</Link>
+                      <Link href="/signals">Signals</Link>
+                      <Link href="/watchlist">Watchlist</Link>
+                      <Link href="/updates">Creator updates</Link>
+                      <Link href="/scans">My prints</Link>
+                      <Link href="/settings">Settings</Link>
+                      {profile.plan === "admin" && <Link href="/queue">Queue and health</Link>}
+                    </div>
+                  </details>
                   <Link href="/pricing" className="pill ml-3 hover:border-fg" title={profile.plan === "trial" ? "Free plan. Click to see plans." : "Your plan"}>
                     {profile.plan === "trial" ? `free · ${profile.scan_credits} prints · ${profile.draft_credits} drafts` : profile.plan}
                   </Link>
