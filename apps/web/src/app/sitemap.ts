@@ -2,9 +2,10 @@ import type { MetadataRoute } from "next";
 import { supabaseAdmin } from "@/lib/supabase";
 import { lastFullMonth } from "@/lib/report";
 const base = process.env.NEXT_PUBLIC_APP_URL || "https://sponsorprint.com";
+export const dynamic = "force-dynamic";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const admin = supabaseAdmin();
-  const { data: creators } = await admin.from("creators").select("platform,handle,last_scanned_at").not("last_scanned_at", "is", null).order("last_scanned_at", { ascending: false }).limit(5000);
+  let creators: any[] | null = [];
+  try { const admin = supabaseAdmin(); ({ data: creators } = await admin.from("creators").select("platform,handle,last_scanned_at").not("last_scanned_at", "is", null).order("last_scanned_at", { ascending: false }).limit(5000)); } catch { creators = []; }
   const months: string[] = []; const d = new Date(lastFullMonth() + "-01T00:00:00Z"); for (let i = 0; i < 6; i++) { months.push(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - i, 1)).toISOString().slice(0, 7)); }
   return [
     { url: base, changeFrequency: "daily", priority: 1 },
