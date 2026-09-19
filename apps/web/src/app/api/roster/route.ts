@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       if (!ch) return NextResponse.json({ error: "No YouTube channel by that handle" }, { status: 404 });
       row = { ...row, handle: ch.handle || handle, name: ch.title, followers: ch.subs ?? null, avatar_url: ch.thumbnail || null, bio: (ch.description || "").slice(0, 400) };
     } else if (platform === "instagram") {
-      const { data: tok } = await admin.from("ig_connections").select("ig_user_id,access_token").eq("is_house", true).or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
+      const { data: tok } = await admin.from("ig_connections").select("ig_user_id,access_token").or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
       const p = tok ? await lookupIgProfile({ igUserId: tok.ig_user_id, accessToken: tok.access_token }, handle) : null;
       if (!p) return NextResponse.json({ error: "Couldn't find that Instagram account (it needs to be a Business or Creator account)" }, { status: 404 });
       row = { ...row, handle: p.username, name: p.name, followers: p.followers, avatar_url: p.avatar };

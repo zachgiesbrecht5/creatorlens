@@ -31,17 +31,25 @@ export async function runNeighborhoods(sb: SupabaseClient, limit = 1): Promise<n
 }
 
 async function houseIgToken(sb: SupabaseClient): Promise<IgToken | null> {
-  const { data } = await sb.from("ig_connections").select("ig_user_id,access_token").eq("is_house", true).eq("healthy", true).or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
+  const { data } = await sb.from("ig_connections").select("ig_user_id,access_token").or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
   return data ? { igUserId: data.ig_user_id, accessToken: data.access_token } : null;
 }
 
 async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: string) {
-  const { data: r } = await sb.from("roster_creators").select("id,name,handle,platform,followers,niche,bio,pitch_angle").eq("id", rosterId).single();
-  if (!r) throw new Error("roster creator missing");
+  const { data: r0 } = await sb.from("roster_creators").select("id,name,handle,platform,followers,niche,bio,pitch_angle,avatar_url").eq("id", rosterId).single();
+  if (!r0) throw new Error("roster creator missing");
+  let r = r0;
   const platform: "youtube" | "instagram" = r.platform === "youtube" ? "youtube" : "instagram";
   const handle = String(r.handle || "").replace(/^@/, "").toLowerCase();
+  // roster rows added by hand have no size/avatar/bio: fill them from the platform so the agent has something to go on
+  if (!r.avatar_url || !r.followers) {
+    try {
+      if (platform === "youtube" && YT_KEY) { const ch = await resolveChannel(YT_KEY, handle); if (ch) { const patch = { followers: ch.subs ?? r.followers, avatar_url: ch.thumbnail || r.avatar_url, bio: r.bio || (ch.description || "").slice(0, 400) }; await sb.from("roster_creators").update(patch).eq("id", r.id); r = { ...r, ...patch }; } }
+      else { const tok = await houseIgToken(sb); const p = tok ? await lookupIgProfile(tok, handle) : null; if (p) { const patch = { followers: p.followers ?? r.followers, avatar_url: p.avatar || r.avatar_url }; await sb.from("roster_creators").update(patch).eq("id", r.id); r = { ...r, ...patch }; } }
+    } catch (e: any) { log("roster enrich failed", handle, e?.message); }
+  }
   const size = Number(r.followers || 0);
-  const lo = size ? size * 0.25 : 0, hi = size ? size * 4 : Infinity;
+  const lo = size ? size * 0.1 : 0, hi = size ? size * 10 : Infinity;
   const inBand = (n: number | null) => !size || !n || (n >= lo && n <= hi);
   const picked: Cand[] = [];
   const seen = new Set<string>([handle]);
@@ -66,8 +74,13 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
     const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0.4, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 } as any], messages: [{ role: "user", content: user }] });
     const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
     const m = text.match(/\{[\s\S]*\}/);
-    const cands: { handle: string; why: string }[] = m ? (JSON.parse(m[0]).candidates || []) : [];
+    let cands: { handle: string; why: string }[] = [];
+    try { cands = m ? (JSON.parse(m[0]).candidates || []) : []; } catch { cands = []; }
+    log(handle, "model candidates:", cands.map((c) => c.handle).join(", ") || "(none)", "| text:", text.slice(0, 200).replace(/\n/g, " "));
+    await sb.from("neighborhoods").update({ error: null, candidates: [], debug: { raw: text.slice(0, 2000), candidates: cands } }).eq("id", id);
     const tok = platform === "instagram" ? await houseIgToken(sb) : null;
+    if (platform === "instagram" && !tok) log("no house Instagram token available");
+    const unverified: Cand[] = [];
     for (const c of cands) {
       if (picked.length >= 3) break;
       const h = String(c.handle || "").replace(/^@/, "").replace(/^https?:\/\/[^/]+\//, "").replace(/\/.*$/, "").trim();
@@ -76,15 +89,18 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
       try {
         if (platform === "youtube" && YT_KEY) {
           const ch = await resolveChannel(YT_KEY, h);
-          if (!ch || !inBand(ch.subs)) continue;
-          picked.push({ platform, handle: ch.handle || ch.id, display_name: ch.title, avatar_url: ch.thumbnail || null, followers: ch.subs ?? null, reason: c.why, external_id: ch.id });
+          if (ch && inBand(ch.subs)) { picked.push({ platform, handle: ch.handle || ch.id, display_name: ch.title, avatar_url: ch.thumbnail || null, followers: ch.subs ?? null, reason: c.why, external_id: ch.id }); continue; }
+          if (ch) { log("out of band", h, ch.subs); continue; }
         } else if (platform === "instagram" && tok) {
           const p = await lookupIgProfile(tok, h);
-          if (!p || !inBand(p.followers)) continue;
-          picked.push({ platform, handle: p.username, display_name: p.name, avatar_url: p.avatar, followers: p.followers, reason: c.why });
+          if (p && inBand(p.followers)) { picked.push({ platform, handle: p.username, display_name: p.name, avatar_url: p.avatar, followers: p.followers, reason: c.why }); continue; }
+          if (p) { log("out of band", h, p.followers); continue; }
         }
-      } catch { /* skip unverifiable */ }
+      } catch (e: any) { log("verify error", h, e?.message); }
+      // couldn't verify here: let the print itself verify (it fails cleanly if the account doesn't exist)
+      unverified.push({ platform, handle: h, display_name: h, avatar_url: null, followers: null, reason: c.why });
     }
+    for (const u of unverified) { if (picked.length >= 3) break; if (!picked.some((p) => p.handle.toLowerCase() === u.handle.toLowerCase())) picked.push(u); }
   }
 
   // 3. free prints for each pick (source=neighborhood: no credit), unlock for the user

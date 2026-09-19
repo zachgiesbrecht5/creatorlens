@@ -18,7 +18,7 @@ const YT_KEY = process.env.YT_API_KEY || "";
 type Seed = { platform: "youtube" | "instagram"; handle: string; name: string; followers: number | null; niche: string | null; bio: string | null; why: string };
 
 async function houseIgToken(sb: SupabaseClient): Promise<IgToken | null> {
-  const { data } = await sb.from("ig_connections").select("ig_user_id,access_token").eq("is_house", true).eq("healthy", true).or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
+  const { data } = await sb.from("ig_connections").select("ig_user_id,access_token").eq("healthy", true).or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
   return data ? { igUserId: data.ig_user_id, accessToken: data.access_token } : null;
 }
 

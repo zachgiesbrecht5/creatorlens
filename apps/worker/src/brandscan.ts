@@ -56,7 +56,7 @@ async function scanOne(sb: SupabaseClient, id: string, brandId: string, requeste
   // Instagram pulse
   let pulse: any = null;
   try {
-    const { data: tok } = await sb.from("ig_connections").select("ig_user_id,access_token").eq("is_house", true).eq("healthy", true).or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
+    const { data: tok } = await sb.from("ig_connections").select("ig_user_id,access_token").eq("healthy", true).or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
     if (tok) pulse = await hashtagPulse({ igUserId: tok.ig_user_id, accessToken: tok.access_token } as IgToken, `${slug}Partner`);
   } catch (e: any) { log("ig pulse failed", e?.message); }
   await sb.from("brand_scans").update({ status: "done", found, ig_pulse: pulse, finished_at: new Date().toISOString() }).eq("id", id);

@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
           const res: Hit[] = ch ? [{ platform: "youtube", handle: ch.handle || ch.id, display_name: ch.title, avatar_url: ch.thumbnail || null, followers: ch.subs ?? null, cached: false, source: "live" }] : [];
           res.forEach(add); await toCache(key, res);
         } else if (platform === "instagram" && isValidIgUsername(q)) {
-          const { data: tok } = await admin.from("ig_connections").select("ig_user_id,access_token").eq("is_house", true).or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
+          const { data: tok } = await admin.from("ig_connections").select("ig_user_id,access_token").or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
           if (tok) {
             const p = await lookupIgProfile({ igUserId: tok.ig_user_id, accessToken: tok.access_token }, q);
             const res: Hit[] = p ? [{ platform: "instagram", handle: p.username, display_name: p.name, avatar_url: p.avatar, followers: p.followers, cached: false, source: "live" }] : [];
