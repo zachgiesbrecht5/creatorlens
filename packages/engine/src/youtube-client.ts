@@ -125,3 +125,14 @@ export async function getVideos(apiKey: string, ids: string[], meter?: QuotaMete
   }
   return out;
 }
+
+/** Video search -> the channels behind the matching videos. 100 units per call. */
+export async function searchVideoChannels(apiKey: string, query: string, max = 25, meter?: QuotaMeter) {
+  const json = await ytGet(apiKey, "search", { part: "snippet", type: "video", maxResults: String(max), q: query, order: "date" }, meter, 100);
+  const seen = new Map<string, { channelId: string; title: string; videoId: string; videoTitle: string; publishedAt: string }>();
+  for (const it of json.items || []) {
+    const cid = it.snippet?.channelId; if (!cid || seen.has(cid)) continue;
+    seen.set(cid, { channelId: cid, title: it.snippet?.channelTitle || "", videoId: it.id?.videoId || "", videoTitle: it.snippet?.title || "", publishedAt: it.snippet?.publishedAt || "" });
+  }
+  return [...seen.values()];
+}

@@ -99,3 +99,17 @@ export async function fetchIgCreator(token: IgToken, username: string, maxPosts 
   }
   return { profile: profile!, posts: posts.slice(0, maxPosts) };
 }
+
+/** Hashtag pulse: how many public posts used #tag in the last N days. The Hashtag
+ *  API does not expose who posted, so this is a spend signal, not a creator list.
+ *  Costs one of the 30 hashtag lookups per week per connected account. */
+export async function hashtagPulse(token: IgToken, tag: string, days = 30): Promise<{ tag: string; posts: number; sample: { permalink: string; timestamp: string; caption: string }[] } | null> {
+  const clean = tag.replace(/^#/, "").toLowerCase();
+  const base = `https://graph.facebook.com/${GRAPH_VERSION}`;
+  const q = await fetch(`${base}/ig_hashtag_search?user_id=${token.igUserId}&q=${encodeURIComponent(clean)}&access_token=${encodeURIComponent(token.accessToken)}`).then((r) => r.json()).catch(() => null);
+  const id = q?.data?.[0]?.id; if (!id) return null;
+  const media = await fetch(`${base}/${id}/recent_media?user_id=${token.igUserId}&fields=id,permalink,timestamp,caption&limit=50&access_token=${encodeURIComponent(token.accessToken)}`).then((r) => r.json()).catch(() => null);
+  const cutoff = Date.now() - days * 864e5;
+  const recent = (media?.data || []).filter((m: any) => new Date(m.timestamp).getTime() > cutoff);
+  return { tag: clean, posts: recent.length, sample: recent.slice(0, 5).map((m: any) => ({ permalink: m.permalink, timestamp: m.timestamp, caption: String(m.caption || "").slice(0, 140) })) };
+}

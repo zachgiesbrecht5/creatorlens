@@ -9,6 +9,9 @@ export const dynamic = "force-dynamic";
 
 // Reverse view: every creator this brand has booked. This is the casting
 // intel for "who does Brand X work with" and for competitor pitches.
+import { BrandScan } from "@/components/BrandScan";
+import { track } from "@/lib/track";
+
 async function hiringFor(brandId: string) {
   const { data } = await supabaseAdmin().from("hiring_signals").select("id,title,seniority,url,posted_at,found_at,closed_at,summary").eq("brand_id", brandId).order("found_at", { ascending: false }).limit(3);
   return data || [];
@@ -23,6 +26,8 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
   const { data: brand } = await admin.from("brands").select("*").eq("id", id).single();
   if (!brand) return <p>Brand not found.</p>;
   const hiring = await hiringFor(brand.id);
+  const { data: lastScan } = await supabaseAdmin().from("brand_scans").select("id,status,found,ig_pulse,error").eq("brand_id", brand.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (profile) track(profile.id, "brand_view", { brand_id: brand.id, brand: brand.name });
   let rowsQ = admin.from("brand_wall").select("*, creators(handle,display_name,platform,followers,avatar_url,category)").eq("brand_id", id).order("deals", { ascending: false });
   if (scope) rowsQ = rowsQ.in("creator_id", scope.length ? scope : ["00000000-0000-0000-0000-000000000000"]);
   const { data: rows } = await rowsQ;
@@ -56,7 +61,8 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-{hiring.length > 0 && (
+{profile && <BrandScan brandId={brand.id} brandName={brand.name} last={(lastScan as any) || null} />}
+      {hiring.length > 0 && (
         <div className="card mb-6 border-ok/40 p-4">
           <div className="label mb-1">Hiring now</div>
           {hiring.map((h) => <div key={h.id} className="text-[13px]"><a href={h.url} target="_blank" rel="noreferrer" className="font-medium hover:text-accent">{h.title}</a>{h.seniority && <span className="pill ml-2">{h.seniority}</span>} <span className="num text-[10.5px] text-muted">· {h.closed_at ? `filled ${new Date(h.closed_at).toLocaleDateString()}` : `open since ${new Date(h.posted_at || h.found_at).toLocaleDateString()}`}</span>{h.summary && <div className="text-[11.5px] text-dim">{h.summary}</div>}</div>)}

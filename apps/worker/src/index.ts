@@ -296,6 +296,7 @@ async function checkBrandSites(limit = 4) {
 import { runResearch } from "./research";
 import { explainCreatorDeals, insightsBackfill } from "./insights";
 import { runNeighborhoods } from "./neighborhood";
+import { runBrandScans } from "./brandscan";
 import { heartbeat, alert, nightly } from "./observe";
 
 let lastNightly = "";
@@ -308,7 +309,7 @@ async function tick() {
   if (Date.now() - lastReap > 5 * 60000) { lastReap = Date.now(); sb.rpc("requeue_stuck_jobs").then(({ data }) => { if (data) log("requeued stuck jobs:", data); }); }
 
   // Neighborhood finds run alongside scans (they're short and users are watching).
-  if (!neighborhoodBusy) { neighborhoodBusy = true; runNeighborhoods(sb, 1).catch(() => {}).finally(() => { neighborhoodBusy = false; }); }
+  if (!neighborhoodBusy) { neighborhoodBusy = true; runNeighborhoods(sb, 1).then(() => runBrandScans(sb, 1)).catch(() => {}).finally(() => { neighborhoodBusy = false; }); }
 
   // Claim up to (CONCURRENCY - inFlight) jobs atomically and run them in parallel.
   const room = CONCURRENCY - inFlight;
