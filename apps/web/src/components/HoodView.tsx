@@ -4,15 +4,15 @@ import { HoodCards, useHood } from "@/components/HoodCards";
 import { PrinterMachine } from "@/components/PrinterMachine";
 
 export function HoodView({ hoodId: initial, seed }: { hoodId: string; seed: { name: string; handle: string; platform: string; followers: number | null; avatar_url: string | null; href: string; creatorId: string | null } | null }) {
-  const [hoodId, setHoodId] = useState(initial);
-  const hood = useHood(hoodId);
+  const [startId, setStartId] = useState(initial);
+  const { hood, rounds, searching, hoodId } = useHood(startId, seed?.creatorId ? { creatorId: seed.creatorId } : undefined);
   const printing = !!hood && (hood.status !== "done" || hood.candidates.some((c) => c.print_status !== "done" && c.print_status !== "failed"));
-  const lcd = !hood ? "SCANNING THE LANE…" : hood.status === "failed" ? "NO NEIGHBORS FOUND" : hood.status !== "done" ? "SCANNING THE LANE…" : printing ? `PRINTING ${hood.candidates.filter((c) => c.print_status === "done").length + 1}/${hood.candidates.length}` : `${hood.candidates.length} NEIGHBORS ✓`;
+  const lcd = searching ? `ROUND ${rounds + 1}: LOOKING FURTHER…` : !hood ? "SCANNING THE LANE…" : hood.status === "failed" ? "NO NEIGHBORS FOUND" : hood.status !== "done" ? "SCANNING THE LANE…" : printing ? `PRINTING ${hood.candidates.filter((c) => c.print_status === "done").length + 1}/${hood.candidates.length}` : `${hood.candidates.filter((c) => c.brands > 0).length} WITH DEALS ✓`;
   const fmt = (n: number | null) => (n == null ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
   async function again() {
     if (!seed?.creatorId) return;
     const r = await fetch("/api/neighborhood?again=1", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ creatorId: seed.creatorId }) });
-    const j = await r.json(); if (r.ok) setHoodId(j.id);
+    const j = await r.json(); if (r.ok) setStartId(j.id);
   }
   return (
     <div>
@@ -28,6 +28,7 @@ export function HoodView({ hoodId: initial, seed }: { hoodId: string; seed: { na
       <section className="st-hood">
         <div className="st-hood-head"><div className="text-[17px] font-semibold tracking-tight">Neighbors</div>{hood?.status === "done" && seed?.creatorId && <button onClick={again} className="btn-ghost !py-1.5 !text-[12px]">find three more ↻</button>}</div>
         <HoodCards hood={hood} from={`/n/${hoodId}`} />
+        {rounds > 1 && <div className="num mt-3 text-[11px] text-dim">round {rounds}: the first picks had no disclosed deals, so the printer kept looking and kept the ones that did.</div>}
       </section>
     </div>
   );

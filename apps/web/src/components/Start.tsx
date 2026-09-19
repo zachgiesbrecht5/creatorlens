@@ -43,6 +43,7 @@ export function Start({ initialRoster, isHouse }: { initialRoster: Roster[]; isH
 
   async function explore(rosterId: string, again = false) {
     setActive(rosterId);
+    if (again) { kept.current[rosterId] = []; rounds.current[rosterId] = 1; }
     const r = await fetch(`/api/neighborhood${again ? "?again=1" : ""}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rosterCreatorId: rosterId }) });
     const j = await r.json();
     if (!r.ok) { setErr(j.error || "Couldn't start"); return; }
@@ -50,20 +51,37 @@ export function Start({ initialRoster, isHouse }: { initialRoster: Roster[]; isH
     poll(rosterId, j.id);
   }
 
+  const kept = useRef<Record<string, Cand[]>>({});      // good neighbors carried across rounds
+  const rounds = useRef<Record<string, number>>({});
   function poll(rosterId: string, hoodId: string) {
     clearInterval(pollers.current[rosterId]);
+    rounds.current[rosterId] = rounds.current[rosterId] || 1;
     const tick = async () => {
       const r = await fetch(`/api/neighborhood?id=${hoodId}`);
       if (!r.ok) return;
       const j: Hood = await r.json();
+      const keep = kept.current[rosterId] || [];
+      const merged: Hood = { ...j, candidates: [...keep, ...j.candidates.filter((c) => !keep.some((k) => k.handle === c.handle))] };
       setHoods((h) => {
         const prev = h[rosterId];
-        const newlyPrinted = j.candidates.filter((c) => c.print_status === "done").length - (prev?.candidates.filter((c) => c.print_status === "done").length || 0);
+        const newlyPrinted = merged.candidates.filter((c) => c.print_status === "done").length - (prev?.candidates.filter((c) => c.print_status === "done").length || 0);
         if (newlyPrinted > 0) playPrint(8, 1400);
-        return { ...h, [rosterId]: j };
+        return { ...h, [rosterId]: merged };
       });
       const allDone = j.status === "done" && j.candidates.every((c) => c.print_status === "done" || c.print_status === "failed");
-      if (j.status === "failed" || allDone) clearInterval(pollers.current[rosterId]);
+      if (!(j.status === "failed" || allDone)) return;
+      clearInterval(pollers.current[rosterId]);
+      // not enough neighbors with actual deals? keep the good ones and look further (up to 3 rounds)
+      const good = j.candidates.filter((c) => c.print_status === "done" && c.brands > 0);
+      const goodTotal = keep.length + good.filter((g) => !keep.some((k) => k.handle === g.handle)).length;
+      if (goodTotal < 2 && rounds.current[rosterId] < 3) {
+        kept.current[rosterId] = [...keep, ...good.filter((g) => !keep.some((k) => k.handle === g.handle))];
+        rounds.current[rosterId] += 1;
+        setErr(null);
+        const rr = await fetch("/api/neighborhood?again=1", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rosterCreatorId: rosterId }) });
+        const jj = await rr.json();
+        if (rr.ok && jj.id && jj.id !== hoodId) { setHoods((h) => ({ ...h, [rosterId]: { id: jj.id, status: "queued", candidates: kept.current[rosterId] } })); poll(rosterId, jj.id); }
+      }
     };
     tick();
     pollers.current[rosterId] = setInterval(tick, 3500);
@@ -73,7 +91,8 @@ export function Start({ initialRoster, isHouse }: { initialRoster: Roster[]; isH
   const current = active ? roster.find((r) => r.id === active) : null;
   const hood = active ? hoods[active] : null;
   const printing = !!hood && (hood.status !== "done" || hood.candidates.some((c) => c.print_status !== "done" && c.print_status !== "failed"));
-  const lcd = !hood ? (busy ? "LOOKING UP…" : "ADD A CREATOR") : hood.status === "failed" ? "NO NEIGHBORS FOUND" : hood.status !== "done" ? "SCANNING THE LANE…" : printing ? `PRINTING ${hood.candidates.filter((c) => c.print_status === "done").length + 1}/${hood.candidates.length}` : `${hood.candidates.length} NEIGHBORS ✓`;
+  const roundNo = active ? rounds.current[active] || 1 : 1;
+  const lcd = !hood ? (busy ? "LOOKING UP…" : "ADD A CREATOR") : hood.status === "failed" ? "NO NEIGHBORS FOUND" : hood.status !== "done" ? (roundNo > 1 ? `ROUND ${roundNo}: LOOKING FURTHER…` : "SCANNING THE LANE…") : printing ? `PRINTING ${hood.candidates.filter((c) => c.print_status === "done").length + 1}/${hood.candidates.length}` : `${hood.candidates.filter((c) => c.brands > 0).length} WITH DEALS ✓`;
   const totalBrands = Object.values(hoods).flatMap((h) => h.candidates).reduce((s, c) => s + (c.brands || 0), 0);
 
   return (
