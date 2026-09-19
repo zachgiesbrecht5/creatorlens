@@ -11,7 +11,7 @@ import { fmt } from "@/lib/fmt";
 
 export const dynamic = "force-dynamic";
 
-export default async function CreatorPage({ params }: { params: Promise<{ platform: string; handle: string }> }) {
+export default async function CreatorPage({ params, searchParams }: { params: Promise<{ platform: string; handle: string }>; searchParams: Promise<{ pitch?: string }> }) {
   const { platform, handle } = await params;
   const user = await currentUser();
   const admin = supabaseAdmin();
@@ -96,7 +96,7 @@ export default async function CreatorPage({ params }: { params: Promise<{ platfo
       ) : (
         <>
           {active && <p className="num mb-2 text-center text-[11px] text-dim">re-printing in the background…</p>}
-          <BrandWall header={header} timeline={timeline} why={whyMap} cards={cards} creator={{ id: creator.id, handle: creator.handle, platform: p, displayName: creator.display_name || creator.handle }} signedIn={!!user} roster={(roster || []) as RosterCreator[]} />
+          <BrandWall header={header} timeline={timeline} why={whyMap} pitchFor={(await searchParams).pitch || null} cards={cards} creator={{ id: creator.id, handle: creator.handle, platform: p, displayName: creator.display_name || creator.handle }} signedIn={!!user} roster={(roster || []) as RosterCreator[]} />
         </>
       )}
     </div>

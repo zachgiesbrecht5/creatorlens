@@ -17,12 +17,12 @@ export type RosterCreator = { id: string; name: string; handle: string | null; p
 
 type Creator = { id: string; handle: string; platform: string; displayName: string };
 
-export function BrandWall({ cards, creator, signedIn, roster, header, timeline, why }: { cards: WallCard[]; creator: Creator; signedIn: boolean; roster: RosterCreator[]; header?: React.ReactNode; timeline?: TL[]; why?: Record<string, { why: string; season: string | null }> }) {
+export function BrandWall({ cards, creator, signedIn, roster, header, timeline, why, pitchFor }: { cards: WallCard[]; creator: Creator; signedIn: boolean; roster: RosterCreator[]; header?: React.ReactNode; timeline?: TL[]; why?: Record<string, { why: string; season: string | null }>; pitchFor?: string | null }) {
   const [minLabel, setMinLabel] = useState<"High" | "Medium" | "Low">("Medium");
   const [hideMass, setHideMass] = useState(false);
   const [showDead, setShowDead] = useState(false);
   const [showSelf, setShowSelf] = useState(false);
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(() => (pitchFor ? (cards.find((c) => !c.is_self_brand && !c.is_mass_sponsor && c.site_status !== "dead")?.brand_id || null) : null));
   const [sort, setSort] = useState<"recent" | "deals" | "confidence">("recent");
   const [contacts, setContacts] = useState<Record<string, ContactInfo | "loading">>({});
   const [gone, setGone] = useState<Set<string>>(new Set());
@@ -146,7 +146,7 @@ export function BrandWall({ cards, creator, signedIn, roster, header, timeline, 
               </div>
               {signedIn && isOpen && (
                 <div className="pw-drawer" onClick={(e) => e.stopPropagation()}>
-                  <ContactCard brandId={c.brand_id} brand={c.brand} creator={creator} roster={roster} info={contacts[c.brand_id]} expanded onLoad={() => refetch(c.brand_id)} />
+                  <ContactCard brandId={c.brand_id} brand={c.brand} creator={creator} roster={roster} info={contacts[c.brand_id]} expanded onLoad={() => refetch(c.brand_id)} preferRoster={pitchFor || null} />
                   <div className="mt-3 flex gap-3 font-mono text-[10px] text-dim">
                     <button className="hover:text-bad" title="Hide this brand for this creator (agency link, own merch, collab credit)" onClick={() => reject(c.brand_id, "pair")}>not a sponsor of @{creator.handle}</button>
                     <button className="hover:text-bad" title="Never a sponsor for anyone (music library, agency, vendor). Team accounts only." onClick={() => reject(c.brand_id, "brand")}>never a sponsor</button>

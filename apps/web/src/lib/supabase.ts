@@ -82,3 +82,15 @@ export async function canSeeCreator(userId: string | null, seesAll: boolean, cre
 export async function grantCreatorAccess(userId: string, platform: string, handle: string) {
   await supabaseAdmin().from("creator_access").upsert({ user_id: userId, platform, handle: handle.toLowerCase() }, { onConflict: "user_id,platform,handle", ignoreDuplicates: true });
 }
+
+/** Where a user is on the four-step path: roster -> neighborhood -> first pitch -> first search. */
+export async function journeyState(userId: string) {
+  const admin = supabaseAdmin();
+  const [{ count: roster }, { count: hoods }, { count: drafts }, { count: prints }] = await Promise.all([
+    admin.from("roster_creators").select("*", { count: "exact", head: true }).eq("user_id", userId),
+    admin.from("neighborhoods").select("*", { count: "exact", head: true }).eq("user_id", userId).eq("status", "done"),
+    admin.from("drafts").select("*", { count: "exact", head: true }).eq("user_id", userId),
+    admin.from("events").select("*", { count: "exact", head: true }).eq("user_id", userId).in("name", ["print", "print_cached"]),
+  ]);
+  return { roster: (roster || 0) > 0, neighborhood: (hoods || 0) > 0, pitched: (drafts || 0) > 0, searched: (prints || 0) > 0 };
+}

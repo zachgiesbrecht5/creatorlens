@@ -6,6 +6,7 @@ import { keepWatch } from "./watch";
 import { discover } from "./discover";
 import { findHiring } from "./hiring";
 import { autoBrandScans } from "./brandscan";
+import { morningDrops } from "./drops";
 import { writeCreatorUpdates } from "./updates";
 
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[observe]", ...a);
@@ -52,6 +53,7 @@ export async function nightly(sb: SupabaseClient) {
   try { await keepWatch(sb); } catch (e: any) { await alert(sb, "watchlist keeper failed", { error: String(e?.message || e).slice(0, 300) }); }
   try { await discover(sb); } catch (e: any) { await alert(sb, "discover failed", { error: String(e?.message || e).slice(0, 300) }); }
   try { await autoBrandScans(sb); } catch (e: any) { await alert(sb, "auto brand scans failed", { error: String(e?.message || e).slice(0, 300) }); }
+  try { await morningDrops(sb); } catch (e: any) { await alert(sb, "morning drops failed", { error: String(e?.message || e).slice(0, 300) }); }
   // weekly on Mondays: hiring signals; monthly on the 1st: creator updates
   if (new Date().getUTCDay() === 1) { try { await findHiring(sb); } catch (e: any) { await alert(sb, "hiring agent failed", { error: String(e?.message || e).slice(0, 300) }); } }
   if (new Date().getUTCDate() === 1) { try { await writeCreatorUpdates(sb); } catch (e: any) { await alert(sb, "creator updates failed", { error: String(e?.message || e).slice(0, 300) }); } }

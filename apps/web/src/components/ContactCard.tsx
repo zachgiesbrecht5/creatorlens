@@ -15,12 +15,12 @@ export type ContactInfo = {
 
 // The scanned creator is the EVIDENCE (this brand books creators like them).
 // The pitch is written for one of the user's own roster creators.
-export function ContactCard({ brandId, brand, creator, roster, info, expanded, onLoad }: {
+export function ContactCard({ brandId, brand, creator, roster, info, expanded, onLoad, preferRoster }: {
   brandId: string; brand: string; creator: { id: string; handle: string; platform: string; displayName: string };
-  roster: RosterCreator[]; info?: ContactInfo | "loading"; expanded: boolean; onLoad: () => void;
+  roster: RosterCreator[]; info?: ContactInfo | "loading"; expanded: boolean; onLoad: () => void; preferRoster?: string | null;
 }) {
   const [picked, setPicked] = useState<string | null>(null);
-  const [rosterId, setRosterId] = useState<string>(roster[0]?.id || "");
+  const [rosterId, setRosterId] = useState<string>((preferRoster && roster.find((r) => r.id === preferRoster)?.id) || roster[0]?.id || "");
   const [drafting, setDrafting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string; link?: string } | null>(null);
   const [manual, setManual] = useState("");

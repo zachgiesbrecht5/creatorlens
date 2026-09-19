@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { journeyState } from "@/lib/supabase";
 import { SearchBox } from "@/components/SearchBox";
 import { PrintReceipt } from "@/components/PrintReceipt";
-import { FirstRun } from "@/components/FirstRun";
+import { Journey } from "@/components/Journey";
 import { HiringStrip } from "@/components/HiringStrip";
 import { supabaseAdmin, currentAccess } from "@/lib/supabase";
 import { fmt } from "@/lib/fmt";
@@ -17,6 +18,7 @@ export default async function Home() {
     admin.from("brands").select("*", { count: "exact", head: true }),
     admin.from("partnerships").select("*", { count: "exact", head: true }),
   ]);
+  if (user) admin.from("profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", user.id).then(() => {});
   // Brand-new account with no roster: the onboarding is the first page.
   if (user) {
     const { data: me } = await admin.from("profiles").select("onboarded_at").eq("id", user.id).single();
@@ -24,22 +26,23 @@ export default async function Home() {
   }
   let watchNew = 0;
   if (user) { const { count } = await admin.from("watch_events").select("*", { count: "exact", head: true }).eq("user_id", user.id).eq("seen", false); watchNew = count || 0; }
-  // First-run checklist: printed? roster? drafted? Hidden once all three are done.
-  let firstRun: { printed: boolean; roster: boolean; drafted: boolean } | null = null;
-  if (user) {
-    const [{ count: prints }, { count: roster }, { count: drafts }] = await Promise.all([
-      admin.from("creator_access").select("*", { count: "exact", head: true }).eq("user_id", user.id),
-      admin.from("roster_creators").select("*", { count: "exact", head: true }).eq("user_id", user.id),
-      admin.from("drafts").select("*", { count: "exact", head: true }).eq("user_id", user.id),
-    ]);
-    const f = { printed: (prints || 0) > 0, roster: (roster || 0) > 0, drafted: (drafts || 0) > 0 };
-    if (!(f.printed && f.roster && f.drafted)) firstRun = f;
-  }
+  const journey = user ? await journeyState(user.id) : null;
   // Fresh off the printer: creators the discover agent picked and printed, public to everyone signed in.
   const { data: fresh } = await admin.from("creators").select("id,platform,handle,display_name,avatar_url,followers,category,discover_reason,discovered_at").eq("is_public", true).not("last_scanned_at", "is", null).order("discovered_at", { ascending: false }).limit(9);
   const freshIds = (fresh || []).map((f) => f.id);
   const { data: freshWalls } = freshIds.length ? await admin.from("brand_wall").select("creator_id,brand,deals").in("creator_id", freshIds).eq("is_junk", false).eq("is_self_brand", false) : { data: [] };
   const freshCards = (fresh || []).map((f) => { const w = (freshWalls || []).filter((x) => x.creator_id === f.id).sort((a, b) => Number(b.deals) - Number(a.deals)); return { ...f, brands: w.length, top: w.slice(0, 3).map((x) => x.brand) }; });
+  // today's drop
+  let dropCards: any[] = [];
+  if (user) {
+    const { data: drop } = await admin.from("drops").select("items").eq("user_id", user.id).eq("day", new Date().toISOString().slice(0, 10)).maybeSingle();
+    const items = ((drop?.items || []) as { creator_id: string; reason: string }[]);
+    if (items.length) {
+      const { data: cs } = await admin.from("creators").select("id,platform,handle,display_name,avatar_url,followers").in("id", items.map((i) => i.creator_id));
+      const { data: ws } = await admin.from("brand_wall").select("creator_id,brand,deals").in("creator_id", items.map((i) => i.creator_id)).eq("is_junk", false).eq("is_self_brand", false);
+      dropCards = items.map((i) => { const c = (cs || []).find((x) => x.id === i.creator_id); if (!c) return null; const w = (ws || []).filter((x) => x.creator_id === c.id).sort((a, b) => Number(b.deals) - Number(a.deals)); return { ...c, reason: i.reason, brands: w.length, top: w.slice(0, 3).map((x) => x.brand) }; }).filter(Boolean);
+    }
+  }
   const { data: hiring } = user ? await admin.from("hiring_signals").select("id,company,brand_id,title,seniority,url,posted_at,found_at,closed_at,summary").order("found_at", { ascending: false }).limit(6) : { data: [] };
   // Recently scanned: the whole index for the house, only your own unlocks otherwise.
   let recent: { platform: string; handle: string; display_name: string | null; avatar_url: string | null; followers: number | null }[] = [];
@@ -72,7 +75,26 @@ export default async function Home() {
       </section>
 
       {watchNew > 0 && <Link href="/watchlist" className="mt-6 flex items-center justify-between rounded-lg border border-ok/30 bg-okSoft/60 px-4 py-3 text-[13px] hover:border-ok"><span><b>{watchNew}</b> creator{watchNew === 1 ? "" : "s"} on your watchlist picked up new brands this week</span><span className="num text-[11px] text-ok">see what's new →</span></Link>}
-      {firstRun && <FirstRun {...firstRun} />}
+      {journey && <div className="mt-6"><Journey s={journey} compact /></div>}
+
+      {user && dropCards.length > 0 && (
+        <section className="mt-8">
+          <div className="mb-3 flex items-baseline justify-between"><div><div className="label">This morning's drop</div><div className="text-[13px] text-muted">Three prints in your lane, picked overnight from your roster. Yours to open, free.</div></div><div className="num text-[11px] text-dim">{new Date().toLocaleDateString(undefined, { weekday: "long" })}</div></div>
+          <div className="grid gap-3 md:grid-cols-3">
+            {dropCards.map((f) => (
+              <Link key={f.id} href={`/c/${f.platform}/${f.handle}`} className="card group border-fg/20 p-4 transition hover:border-fg">
+                <div className="flex items-center gap-3">
+                  {f.avatar_url ? <img src={f.avatar_url} alt="" className="h-11 w-11 rounded-full object-cover" /> : <div className="h-11 w-11 rounded-full bg-surface2" />}
+                  <div className="min-w-0"><div className="truncate text-[14px] font-semibold tracking-tight group-hover:text-accent">{f.display_name || f.handle}</div><div className="num truncate text-[10.5px] text-muted">{f.platform === "youtube" ? "YouTube" : "Instagram"} · {f.followers ? (f.followers >= 1e6 ? `${(f.followers / 1e6).toFixed(1)}M` : f.followers >= 1e3 ? `${Math.round(f.followers / 1e3)}K` : f.followers) : ""}</div></div>
+                  <div className="ml-auto text-right"><div className="text-[20px] font-semibold leading-none tracking-tight">{f.brands}</div><div className="num text-[9.5px] text-dim">brands</div></div>
+                </div>
+                {f.top.length > 0 && <div className="num mt-3 truncate text-[11px] text-muted">{f.top.join(" · ")}</div>}
+                <div className="num mt-2 text-[10.5px] text-ok">{f.reason}</div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {user && <HiringStrip signals={(hiring || []) as any} />}
 
