@@ -136,3 +136,9 @@ export async function searchVideoChannels(apiKey: string, query: string, max = 2
   }
   return [...seen.values()];
 }
+
+/** The channel's most recent uploads (ids), cheap: 1 unit. */
+export async function recentVideoIds(apiKey: string, uploadsPlaylist: string, n = 3, meter?: QuotaMeter): Promise<string[]> {
+  const json = await ytGet(apiKey, "playlistItems", { part: "contentDetails", playlistId: uploadsPlaylist, maxResults: String(n) }, meter);
+  return (json.items || []).map((it: any) => it.contentDetails?.videoId).filter(Boolean);
+}

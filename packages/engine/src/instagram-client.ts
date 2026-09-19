@@ -52,14 +52,15 @@ export function isValidIgUsername(u: string): boolean {
 }
 
 /** Profile only (no posts): one cheap call, for search previews. Null if not a professional account. */
-export async function lookupIgProfile(token: IgToken, username: string): Promise<{ username: string; name: string; followers: number; avatar: string | null } | null> {
+export async function lookupIgProfile(token: IgToken, username: string): Promise<{ username: string; name: string; followers: number; avatar: string | null; biography?: string | null; media?: { url: string; kind: string; thumb: string | null }[] } | null> {
   const clean = username.trim().replace(/^@/, "").toLowerCase();
   if (!isValidIgUsername(clean)) return null;
   try {
-    const json = await graph(token, `fields=${encodeURIComponent(`business_discovery.username(${clean}){username,name,followers_count,profile_picture_url}`)}`);
+    const json = await graph(token, `fields=${encodeURIComponent(`business_discovery.username(${clean}){username,name,followers_count,profile_picture_url,biography,media.limit(4){permalink,media_type,thumbnail_url,media_url}}`)}`);
     const bd = json.business_discovery;
     if (!bd) return null;
-    return { username: bd.username, name: bd.name || bd.username, followers: bd.followers_count || 0, avatar: bd.profile_picture_url || null };
+    const media = (bd.media?.data || []).map((m: any) => ({ url: m.permalink, kind: m.media_type === "VIDEO" ? "reel" : "post", thumb: m.thumbnail_url || m.media_url || null }));
+    return { username: bd.username, name: bd.name || bd.username, followers: bd.followers_count || 0, avatar: bd.profile_picture_url || null, biography: bd.biography || null, media };
   } catch (e) {
     if (e instanceof IgRateLimitError) throw e;
     return null;   // private / personal / nonexistent

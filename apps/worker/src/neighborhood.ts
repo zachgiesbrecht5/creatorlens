@@ -5,7 +5,7 @@
 // platform (cheap lookups) and keep the ones that fit; (4) queue free prints.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { resolveChannel, lookupIgProfile, type IgToken } from "@creatorlens/engine";
+import { resolveChannel, lookupIgProfile, recentVideoIds, type IgToken } from "@creatorlens/engine";
 import { alert } from "./observe";
 
 const MODEL = process.env.ANTHROPIC_NEIGHBORHOOD_MODEL || "claude-haiku-4-5";
@@ -13,7 +13,7 @@ const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !=
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[neighborhood]", ...a);
 const YT_KEY = process.env.YT_API_KEY || "";
 
-type Cand = { platform: "youtube" | "instagram"; handle: string; display_name: string; avatar_url: string | null; followers: number | null; reason: string; job_id?: string | null; cached?: boolean; external_id?: string | null };
+type Cand = { platform: "youtube" | "instagram"; handle: string; display_name: string; avatar_url: string | null; followers: number | null; reason: string; job_id?: string | null; cached?: boolean; external_id?: string | null; media?: { url: string; kind: string; thumb: string | null }[]; bio?: string | null };
 
 export async function runNeighborhoods(sb: SupabaseClient, limit = 1): Promise<number> {
   const { data: jobs } = await sb.from("neighborhoods").select("id,user_id,roster_creator_id,creator_id,exclude").eq("status", "queued").order("created_at").limit(limit);
@@ -59,6 +59,11 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
   const { data: priorHoods } = await sb.from("neighborhoods").select("candidates").eq("user_id", userId).neq("id", id).limit(50);
   for (const ph of priorHoods || []) for (const c of (ph.candidates || []) as any[]) if (c?.handle) seen.add(String(c.handle).toLowerCase());
   const avoid = [...seen].filter((h) => h !== handle).slice(0, 40);
+  // what the manager has already said about this lane
+  const fbq = sb.from("lane_feedback").select("handle,verdict").eq("user_id", userId).order("created_at", { ascending: false }).limit(60);
+  const { data: fb } = rosterId ? await fbq.eq("roster_creator_id", rosterId) : creatorId ? await fbq.eq("seed_creator_id", creatorId) : { data: [] };
+  const liked = (fb || []).filter((f) => f.verdict === "like").map((f) => "@" + f.handle);
+  const passed = (fb || []).filter((f) => f.verdict === "pass").map((f) => "@" + f.handle);
 
   // 1. our index: same category, similar size, same platform
   const { data: rosterCat } = await sb.from("creators").select("category").eq("platform", platform).ilike("handle", handle).maybeSingle();
@@ -76,7 +81,7 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
   // 2. the agent names candidates
   if (client && picked.length < 3) {
     const sys = `You find creators similar to a given creator for a talent manager. Return 8 candidates on the SAME platform who are clearly in the same content lane and roughly the same audience size (within 4x). Prefer active, real accounts. Use web search to verify handles exist. Never return the creator themselves, and never return mega-celebrities unless the input creator is one. Reply ONLY with JSON: {"candidates":[{"handle":"...","why":"<one sentence on the overlap>"}]}`;
-    const user = `Platform: ${platform}\nCreator: ${r.name} (@${handle})\nAudience: ${size || "unknown"} ${platform === "youtube" ? "subscribers" : "followers"}\nNiche: ${r.niche || cat || "unknown"}\nBio: ${String(r.bio || "").slice(0, 300)}\nAngle: ${String(r.pitch_angle || "").slice(0, 300)}${avoid.length ? `\n\nDo NOT return any of these (already shown): ${avoid.map((h) => "@" + h).join(", ")}. Find different people.` : ""}`;
+    const user = `Platform: ${platform}\nCreator: ${r.name} (@${handle})\nAudience: ${size || "unknown"} ${platform === "youtube" ? "subscribers" : "followers"}\nNiche: ${r.niche || cat || "unknown"}\nBio: ${String(r.bio || "").slice(0, 300)}\nAngle: ${String(r.pitch_angle || "").slice(0, 300)}${liked.length ? `\n\nThe manager said these ARE a match for the lane (find more like them): ${liked.slice(0, 12).join(", ")}` : ""}${passed.length ? `\nThe manager said these are NOT a match (avoid this kind): ${passed.slice(0, 12).join(", ")}` : ""}${avoid.length ? `\n\nDo NOT return any of these (already shown): ${avoid.map((h) => "@" + h).join(", ")}. Find different people.` : ""}`;
     const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0.4, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 } as any], messages: [{ role: "user", content: user }] });
     const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
     const m = text.match(/\{[\s\S]*\}/);
@@ -95,11 +100,15 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
       try {
         if (platform === "youtube" && YT_KEY) {
           const ch = await resolveChannel(YT_KEY, h);
-          if (ch && inBand(ch.subs)) { picked.push({ platform, handle: ch.handle || ch.id, display_name: ch.title, avatar_url: ch.thumbnail || null, followers: ch.subs ?? null, reason: c.why, external_id: ch.id }); continue; }
+          if (ch && inBand(ch.subs)) {
+            let media: Cand["media"] = [];
+            try { media = (await recentVideoIds(YT_KEY, ch.uploadsPlaylist, 3)).map((v) => ({ url: `https://www.youtube.com/watch?v=${v}`, kind: "video", thumb: `https://i.ytimg.com/vi/${v}/hqdefault.jpg` })); } catch { /* optional */ }
+            picked.push({ platform, handle: ch.handle || ch.id, display_name: ch.title, avatar_url: ch.thumbnail || null, followers: ch.subs ?? null, reason: c.why, external_id: ch.id, media, bio: (ch.description || "").slice(0, 200) }); continue;
+          }
           if (ch) { log("out of band", h, ch.subs); continue; }
         } else if (platform === "instagram" && tok) {
           const p = await lookupIgProfile(tok, h);
-          if (p && inBand(p.followers)) { picked.push({ platform, handle: p.username, display_name: p.name, avatar_url: p.avatar, followers: p.followers, reason: c.why }); continue; }
+          if (p && inBand(p.followers)) { picked.push({ platform, handle: p.username, display_name: p.name, avatar_url: p.avatar, followers: p.followers, reason: c.why, media: p.media || [], bio: p.biography || null }); continue; }
           if (p) { log("out of band", h, p.followers); continue; }
         }
       } catch (e: any) { log("verify error", h, e?.message); }

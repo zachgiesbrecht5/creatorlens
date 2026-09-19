@@ -2,9 +2,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { playPrint } from "@/lib/print-sound";
+import { SwipeDeck } from "@/components/SwipeDeck";
 
 // The three-card neighborhood reveal, usable from Start or from any print.
-export type Cand = { platform: string; handle: string; display_name: string; avatar_url: string | null; followers: number | null; reason: string; print_status: string; brands: number; top: string[] };
+export type Cand = { platform: string; handle: string; display_name: string; avatar_url: string | null; followers: number | null; reason: string; print_status: string; brands: number; top: string[]; media?: { url: string; kind: string; thumb: string | null }[]; bio?: string | null; verdict?: "like" | "pass" };
 export type Hood = { id: string; status: string; error?: string | null; candidates: Cand[] };
 const fmt = (n: number | null | undefined) => (n == null ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
 
@@ -55,10 +56,21 @@ export function useHood(initialId: string | null, seed?: { rosterCreatorId?: str
 
 export function HoodCards({ hood, from }: { hood: Hood | null; from?: string }) {
   const q = from ? `?from=${encodeURIComponent(from)}` : "";
+  const [deck, setDeck] = useState(false);
+  const [verdicts, setVerdicts] = useState<Record<string, "like" | "pass">>({});
+  const reviewable = (hood?.candidates || []).filter((c) => !verdicts[c.handle]);
   return (
+    <>
+    {hood && reviewable.length > 0 && (
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface2/60 px-4 py-2.5">
+        <div className="text-[13px]"><b>Review the neighbors.</b> Watch their recent posts and say whether each one is in your creator's lane. Every answer sharpens the next round.</div>
+        <button onClick={() => setDeck(true)} className="btn-dark !py-1.5 !text-[12px]">review {reviewable.length} →</button>
+      </div>
+    )}
+    {deck && hood && <SwipeDeck hoodId={hood.id} candidates={reviewable} onVerdict={(h, v) => setVerdicts((x) => ({ ...x, [h]: v }))} onClose={() => setDeck(false)} />}
     <div className="st-cards">
       {([...(hood?.candidates || []), ...Array(Math.max(0, 3 - (hood?.candidates.length || 0))).fill(null)] as (Cand | null)[]).map((c, i) => (
-        <div key={c ? c.handle : `blank-${i}`} className={`st-card ${c ? "st-card-in" : ""} ${c?.print_status === "done" ? "st-card-done" : ""}`} style={{ animationDelay: `${i * 220}ms` }}>
+        <div key={c ? c.handle : `blank-${i}`} className={`st-card ${c ? "st-card-in" : ""} ${c?.print_status === "done" ? "st-card-done" : ""} ${c && verdicts[c.handle] === "pass" ? "st-card-pass" : ""} ${c && verdicts[c.handle] === "like" ? "st-card-like" : ""}`} style={{ animationDelay: `${i * 220}ms` }}>
           {!c ? (
             <div className="st-card-wait"><span className="st-dots"><i /><i /><i /></span>{hood?.status === "failed" ? "nothing close enough" : "searching the lane"}</div>
           ) : (
@@ -86,5 +98,6 @@ export function HoodCards({ hood, from }: { hood: Hood | null; from?: string }) 
         </div>
       ))}
     </div>
+    </>
   );
 }

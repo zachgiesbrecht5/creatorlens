@@ -270,3 +270,26 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 /* public print */
 .pub-row { display: grid; grid-template-columns: minmax(180px, 2fr) 1fr 90px 90px 50px; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px dashed #e4e6ea; }
 .pub .pw-head { grid-template-columns: minmax(180px, 2fr) 1fr 90px 90px 50px; }
+
+/* ── Swipe deck ───────────────────────────────────────── */
+.sw-overlay { position: fixed; inset: 0; z-index: 70; background: rgba(11,13,18,.72); display: flex; align-items: center; justify-content: center; padding: 16px; backdrop-filter: blur(6px); }
+.sw-close { position: absolute; top: 16px; right: 18px; color: #fff; font-size: 18px; opacity: .7; } .sw-close:hover { opacity: 1; }
+.sw-hint { position: absolute; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,.45); font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; }
+.sw-hint-l { left: 24px; } .sw-hint-r { right: 24px; }
+@media (max-width: 860px) { .sw-hint { display: none; } }
+.sw-card { width: min(560px, 100%); max-height: 92vh; overflow-y: auto; background: #fbfbfa; border-radius: 18px; padding: 18px 18px 14px; box-shadow: 0 40px 80px -30px rgba(0,0,0,.7); touch-action: pan-y; }
+.sw-top { display: flex; align-items: center; gap: 12px; } .sw-top img { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; }
+.sw-why { margin-top: 10px; font-size: 13px; line-height: 1.5; color: #5b6472; }
+.sw-media { display: grid; gap: 8px; margin-top: 12px; grid-template-columns: 1fr; }
+.sw-media-tall { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.sw-media iframe { width: 100%; border: 0; border-radius: 10px; background: #111; }
+.sw-thumb img { width: 100%; border-radius: 10px; object-fit: cover; aspect-ratio: 1/1; }
+.sw-media-empty { margin-top: 12px; padding: 18px; border: 1px dashed #cfd3d9; border-radius: 10px; text-align: center; }
+.sw-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; gap: 8px; }
+.sw-pass, .sw-like { font-size: 13px; font-weight: 600; padding: 10px 14px; border-radius: 999px; }
+.sw-pass { background: #f2f4f7; color: #5b6472; } .sw-pass:hover { background: #e4e6ea; color: #0b0d12; }
+.sw-like { background: #0e6b45; color: #fff; } .sw-like:hover { background: #0b5637; }
+.sw-done { background: #fbfbfa; border-radius: 16px; padding: 24px; max-width: 420px; text-align: center; }
+.st-card-pass { opacity: .35; filter: grayscale(1); }
+.st-card-like { border-color: #0e6b45; }
+.st-card-like::before { content: "✓ in the lane"; position: absolute; top: 12px; left: 12px; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .08em; color: #fff; background: #0e6b45; border-radius: 999px; padding: 2px 8px; }
