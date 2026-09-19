@@ -7,6 +7,8 @@ import { Journey } from "@/components/Journey";
 import { HiringStrip } from "@/components/HiringStrip";
 import { SignalsStrip, type MatchRow } from "@/components/SignalsStrip";
 import { BrandSearch } from "@/components/BrandSearch";
+import { Tour } from "@/components/Tour";
+import { HOME_TOUR } from "@/components/tours";
 import { supabaseAdmin, currentAccess } from "@/lib/supabase";
 import { fmt } from "@/lib/fmt";
 
@@ -90,7 +92,7 @@ export default async function Home() {
               Every brand that has paid them, the post that proves it, and the person to email. Twenty seconds from a handle to a pitch for your own talent.
             </p>
             <div className="mt-8 max-w-xl">
-              <SearchBox signedIn={!!user} cta="Pull the print" />
+              <div data-tour="search"><SearchBox signedIn={!!user} cta="Pull the print" /></div>
             </div>
             <p className="mt-4 text-[13px] text-white/45">Public posts only, read through the official YouTube and Instagram APIs. Nothing is ever sent for you.</p>
           </div>
@@ -104,14 +106,15 @@ export default async function Home() {
       {user && (
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <div className="label">or look up a brand</div>
-          <div className="w-full max-w-md"><BrandSearch placeholder="Type a brand: Samsung, LMNT, Rocket Mortgage…" /></div>
+          <div className="w-full max-w-md" data-tour="brand"><BrandSearch placeholder="Type a brand: Samsung, LMNT, Rocket Mortgage…" /></div>
           <div className="num text-[11px] text-dim">who they book, how often, who to email</div>
         </div>
       )}
-      {journey && <div className="mt-6"><Journey s={journey} compact /></div>}
+      {journey && <div className="mt-6" data-tour="journey"><Journey s={journey} compact /></div>}
+      {user && <Tour id="home" steps={HOME_TOUR} />}
 
       {user && dropCards.length > 0 && (
-        <section className="mt-8">
+        <section className="mt-8" data-tour="drop">
           <div className="mb-3 flex items-baseline justify-between"><div><div className="label">This morning's drop</div><div className="text-[13px] text-muted">Three prints in your lane, picked overnight from your roster. Yours to open, free.</div></div><div className="num text-[11px] text-dim">{new Date().toLocaleDateString(undefined, { weekday: "long" })}</div></div>
           <div className="grid gap-3 md:grid-cols-3">
             {dropCards.map((f) => (

@@ -6,6 +6,8 @@ import type { TL } from "@/components/PrintTimeline";
 import { Reprint } from "@/components/Reprint";
 import { WatchButton } from "@/components/WatchButton";
 import { NeighborsButton } from "@/components/NeighborsButton";
+import { Tour } from "@/components/Tour";
+import { PRINT_TOUR } from "@/components/tours";
 import { BrandWall, type WallCard, type RosterCreator } from "@/components/BrandWall";
 import { PrintingScan } from "@/components/PrintingScan";
 import { fmt } from "@/lib/fmt";
@@ -70,10 +72,12 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
               <a className="hover:text-accent" href={p === "youtube" ? `https://youtube.com/@${creator.handle}` : `https://instagram.com/${creator.handle}`} target="_blank" rel="noreferrer">open profile ↗</a>
               <span>{fmt(creator.followers)} {p === "youtube" ? "subscribers" : "followers"}</span>
               <span>printed {creator.last_scanned_at ? new Date(creator.last_scanned_at).toLocaleDateString() : "never"}</span>
-              {user && !active && <Reprint platform={p} handle={creator.handle} />}
-              {user && <WatchButton platform={p} handle={creator.handle} initial={watching} />}
-              {user && <NeighborsButton creatorId={creator.id} />}
             </div>
+            {user && <div className="pw-actions" data-tour="actions">
+              {!active && <Reprint platform={p} handle={creator.handle} />}
+              <WatchButton platform={p} handle={creator.handle} initial={watching} />
+              <NeighborsButton creatorId={creator.id} />
+            </div>}
           </div>
         </div>
         <div className="pw-stats">
@@ -100,6 +104,7 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
         <>
           {active && <p className="num mb-2 text-center text-[11px] text-dim">re-printing in the background…</p>}
           {sp.from && <div className="mx-auto mb-3 max-w-5xl num text-[11px] text-dim"><Link href={sp.from} className="hover:text-accent">← back to {sp.from.startsWith("/n/") ? "the neighborhood" : "Start"}</Link></div>}
+      {user && <Tour id="print" steps={PRINT_TOUR} />}
       <BrandWall header={header} timeline={timeline} why={whyMap} pitchFor={sp.pitch || null} cards={cards} creator={{ id: creator.id, handle: creator.handle, platform: p, displayName: creator.display_name || creator.handle }} signedIn={!!user} roster={(roster || []) as RosterCreator[]} />
         </>
       )}

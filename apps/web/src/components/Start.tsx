@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PrinterMachine } from "@/components/PrinterMachine";
 import { HoodCards } from "@/components/HoodCards";
+import { Tour } from "@/components/Tour";
+import { START_TOUR } from "@/components/tours";
 import { unlockAudio, playChunk, playPrint } from "@/lib/print-sound";
 
 // The first thing a new manager does: name a creator they represent. The
@@ -76,12 +78,13 @@ export function Start({ initialRoster, isHouse }: { initialRoster: Roster[]; isH
 
   return (
     <div className="st">
+      <Tour id="start" steps={START_TOUR} />
       <div className="st-hero">
         <div>
           <div className="label mb-2">Start here</div>
           <h1 className="h1">Who do you represent?</h1>
           <p className="mt-3 max-w-md text-[15px] leading-relaxed text-muted">Add a creator. We'll find three others in their lane and print them for free, so you can see who's paying creators like yours before you pitch anyone.</p>
-          <div className="mt-6 flex flex-wrap items-center gap-2">
+          <div className="mt-6 flex flex-wrap items-center gap-2" data-tour="add">
             <div className="flex rounded-md bg-surface2 p-0.5 font-mono text-[12px]">
               {(["instagram", "youtube"] as const).map((p) => <button key={p} onClick={() => setPlatform(p)} className={`rounded px-3 py-1.5 ${platform === p ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}>{p === "youtube" ? "YouTube" : "Instagram"}</button>)}
             </div>
@@ -102,7 +105,7 @@ export function Start({ initialRoster, isHouse }: { initialRoster: Roster[]; isH
             </div>
           )}
         </div>
-        <div className="st-machine">
+        <div className="st-machine" data-tour="machine">
           <PrinterMachine lcd={lcd} printing={busy || printing} />
           {totalBrands > 0 && <div className="st-counter"><b>{totalBrands}</b> brands found in your lane so far</div>}
         </div>

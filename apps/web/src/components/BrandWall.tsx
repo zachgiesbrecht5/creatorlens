@@ -103,8 +103,8 @@ export function BrandWall({ cards, creator, signedIn, roster, header, timeline, 
       <div className="pw-machine"><PrinterMachine lcd={lcdIdle} /></div>
       <div className="pw">
         {header}
-        {timeline && timeline.length > 0 && <PrintTimeline items={timeline} onPick={(id) => { setOpen(id); document.getElementById(`row-${id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }); }} />}
-        <div className="pw-head">
+        {timeline && timeline.length > 0 && <div data-tour="map"><PrintTimeline items={timeline} onPick={(id) => { setOpen(id); document.getElementById(`row-${id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }); }} /></div>}
+        <div className="pw-head" data-tour="rows">
           <span className="pw-brandcol">brand</span>
           <span className="pw-evcol">evidence</span>
           <span className="pw-lastcol">last</span>
