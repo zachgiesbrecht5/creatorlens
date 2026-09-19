@@ -7,16 +7,27 @@ import { track } from "@/lib/track";
 export async function POST(req: NextRequest) {
   const profile = await currentProfile();
   if (!profile) return NextResponse.json({ error: "Sign in" }, { status: 401 });
-  const { rosterCreatorId } = await req.json().catch(() => ({}));
+  const { rosterCreatorId, creatorId } = await req.json().catch(() => ({}));
+  const again = !!req.nextUrl.searchParams.get("again");
   const admin = supabaseAdmin();
-  const { data: rc } = await admin.from("roster_creators").select("id,user_id").eq("id", rosterCreatorId).single();
-  if (!rc || rc.user_id !== profile.id) return NextResponse.json({ error: "Not your creator" }, { status: 403 });
-  const { data: recent } = await admin.from("neighborhoods").select("id,status").eq("roster_creator_id", rc.id).in("status", ["queued", "running", "done"]).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  let key: { roster_creator_id?: string; creator_id?: string } = {};
+  if (rosterCreatorId) {
+    const { data: rc } = await admin.from("roster_creators").select("id,user_id").eq("id", rosterCreatorId).single();
+    if (!rc || rc.user_id !== profile.id) return NextResponse.json({ error: "Not your creator" }, { status: 403 });
+    key = { roster_creator_id: rc.id };
+  } else if (creatorId) {
+    const { data: c } = await admin.from("creators").select("id").eq("id", creatorId).single();
+    if (!c) return NextResponse.json({ error: "No such creator" }, { status: 404 });
+    key = { creator_id: c.id };
+  } else return NextResponse.json({ error: "bad request" }, { status: 400 });
+  const q = admin.from("neighborhoods").select("id,status,candidates").eq("user_id", profile.id).in("status", ["queued", "running", "done"]).order("created_at", { ascending: false }).limit(1);
+  const { data: recent } = key.roster_creator_id ? await q.eq("roster_creator_id", key.roster_creator_id).maybeSingle() : await q.eq("creator_id", key.creator_id!).maybeSingle();
   if (recent && recent.status !== "done") return NextResponse.json({ id: recent.id, status: recent.status });
-  if (recent && recent.status === "done" && !req.nextUrl.searchParams.get("again")) return NextResponse.json({ id: recent.id, status: "done" });
-  const { data: n, error } = await admin.from("neighborhoods").insert({ user_id: profile.id, roster_creator_id: rc.id }).select("id").single();
+  if (recent && recent.status === "done" && !again) return NextResponse.json({ id: recent.id, status: "done" });
+  const exclude = ((recent?.candidates || []) as any[]).map((c) => c.handle).filter(Boolean);
+  const { data: n, error } = await admin.from("neighborhoods").insert({ user_id: profile.id, ...key, exclude }).select("id").single();
   if (error || !n) return NextResponse.json({ error: error?.message || "failed" }, { status: 500 });
-  track(profile.id, "neighborhood", { roster_creator_id: rc.id });
+  track(profile.id, "neighborhood", { ...key, again });
   return NextResponse.json({ id: n.id, status: "queued" });
 }
 

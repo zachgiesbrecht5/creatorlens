@@ -5,14 +5,16 @@ import { PrinterMachine } from "@/components/PrinterMachine";
 import type { TL } from "@/components/PrintTimeline";
 import { Reprint } from "@/components/Reprint";
 import { WatchButton } from "@/components/WatchButton";
+import { NeighborsButton } from "@/components/NeighborsButton";
 import { BrandWall, type WallCard, type RosterCreator } from "@/components/BrandWall";
 import { PrintingScan } from "@/components/PrintingScan";
 import { fmt } from "@/lib/fmt";
 
 export const dynamic = "force-dynamic";
 
-export default async function CreatorPage({ params, searchParams }: { params: Promise<{ platform: string; handle: string }>; searchParams: Promise<{ pitch?: string }> }) {
+export default async function CreatorPage({ params, searchParams }: { params: Promise<{ platform: string; handle: string }>; searchParams: Promise<{ pitch?: string; from?: string }> }) {
   const { platform, handle } = await params;
+  const sp = await searchParams;
   const user = await currentUser();
   const admin = supabaseAdmin();
   const p = platform === "instagram" ? "instagram" : "youtube";
@@ -70,6 +72,7 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
               <span>printed {creator.last_scanned_at ? new Date(creator.last_scanned_at).toLocaleDateString() : "never"}</span>
               {user && !active && <Reprint platform={p} handle={creator.handle} />}
               {user && <WatchButton platform={p} handle={creator.handle} initial={watching} />}
+              {user && <NeighborsButton creatorId={creator.id} />}
             </div>
           </div>
         </div>
@@ -96,7 +99,8 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
       ) : (
         <>
           {active && <p className="num mb-2 text-center text-[11px] text-dim">re-printing in the background…</p>}
-          <BrandWall header={header} timeline={timeline} why={whyMap} pitchFor={(await searchParams).pitch || null} cards={cards} creator={{ id: creator.id, handle: creator.handle, platform: p, displayName: creator.display_name || creator.handle }} signedIn={!!user} roster={(roster || []) as RosterCreator[]} />
+          {sp.from && <div className="mx-auto mb-3 max-w-5xl num text-[11px] text-dim"><Link href={sp.from} className="hover:text-accent">← back to {sp.from.startsWith("/n/") ? "the neighborhood" : "Start"}</Link></div>}
+      <BrandWall header={header} timeline={timeline} why={whyMap} pitchFor={sp.pitch || null} cards={cards} creator={{ id: creator.id, handle: creator.handle, platform: p, displayName: creator.display_name || creator.handle }} signedIn={!!user} roster={(roster || []) as RosterCreator[]} />
         </>
       )}
     </div>

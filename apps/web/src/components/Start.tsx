@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PrinterMachine } from "@/components/PrinterMachine";
+import { HoodCards } from "@/components/HoodCards";
 import { unlockAudio, playChunk, playPrint } from "@/lib/print-sound";
 
 // The first thing a new manager does: name a creator they represent. The
@@ -120,39 +121,7 @@ export function Start({ initialRoster, isHouse }: { initialRoster: Roster[]; isH
             {hood?.status === "done" && <button onClick={() => explore(current.id, true)} className="btn-ghost !py-1.5 !text-[12px]">find three more ↻</button>}
           </div>
 
-          <div className="st-cards">
-            {(hood?.candidates.length ? hood.candidates : [0, 1, 2].map(() => null)).map((c, i) => (
-              <div key={c ? c.handle : `blank-${i}`} className={`st-card ${c ? "st-card-in" : ""} ${c?.print_status === "done" ? "st-card-done" : ""}`} style={{ animationDelay: `${i * 220}ms` }}>
-                {!c ? (
-                  <div className="st-card-wait"><span className="st-dots"><i /><i /><i /></span>{hood?.status === "failed" ? "nothing close enough" : "searching the lane"}</div>
-                ) : (
-                  <>
-                    <div className="st-card-top">
-                      {c.avatar_url ? <img src={c.avatar_url} alt="" /> : <span className="st-chip-blank" style={{ width: 56, height: 56 }} />}
-                      <div className="min-w-0">
-                        <div className="truncate text-[15px] font-semibold tracking-tight">{c.display_name}</div>
-                        <div className="num truncate text-[11px] text-muted">@{c.handle} · {fmt(c.followers)}</div>
-                      </div>
-                    </div>
-                    <p className="st-why">{c.reason}</p>
-                    <div className="st-card-print">
-                      {c.print_status === "done" ? (
-                        <>
-                          <div className="st-brands"><b className="st-count">{c.brands}</b> brands</div>
-                          {c.top.length > 0 && <div className="num truncate text-[11px] text-muted">{c.top.join(" · ")}</div>}
-                          <Link href={`/c/${c.platform}/${c.handle}`} className="st-open">open the print →</Link>
-                        </>
-                      ) : c.print_status === "failed" ? (
-                        <div className="num text-[11px] text-dim">print failed</div>
-                      ) : (
-                        <div className="st-printing"><span className="st-dots"><i /><i /><i /></span>{c.print_status === "rate_limited" ? "waiting on the platform" : "printing"}</div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+          <HoodCards hood={hood} from="/start" />
           {hood?.status === "done" && hood.candidates.every((c) => c.print_status === "done") && (
             <div className="st-next">
               <span><b>Step 3.</b> Open the print with the most brands, pick one, and hit Pitch. The email lands in your Gmail drafts with {current.name} as the creator.</span>

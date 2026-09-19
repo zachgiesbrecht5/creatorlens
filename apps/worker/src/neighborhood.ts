@@ -16,11 +16,11 @@ const YT_KEY = process.env.YT_API_KEY || "";
 type Cand = { platform: "youtube" | "instagram"; handle: string; display_name: string; avatar_url: string | null; followers: number | null; reason: string; job_id?: string | null; cached?: boolean; external_id?: string | null };
 
 export async function runNeighborhoods(sb: SupabaseClient, limit = 1): Promise<number> {
-  const { data: jobs } = await sb.from("neighborhoods").select("id,user_id,roster_creator_id").eq("status", "queued").order("created_at").limit(limit);
+  const { data: jobs } = await sb.from("neighborhoods").select("id,user_id,roster_creator_id,creator_id,exclude").eq("status", "queued").order("created_at").limit(limit);
   if (!jobs?.length) return 0;
   for (const j of jobs) {
     await sb.from("neighborhoods").update({ status: "running" }).eq("id", j.id);
-    try { await runOne(sb, j.id, j.user_id, j.roster_creator_id); }
+    try { await runOne(sb, j.id, j.user_id, j.roster_creator_id, j.creator_id, (j.exclude || []) as string[]); }
     catch (e: any) {
       log("failed", j.id, e?.message);
       await alert(sb, "neighborhood failed", { id: j.id, error: String(e?.message || e).slice(0, 300) });
@@ -35,14 +35,16 @@ async function houseIgToken(sb: SupabaseClient): Promise<IgToken | null> {
   return data ? { igUserId: data.ig_user_id, accessToken: data.access_token } : null;
 }
 
-async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: string) {
-  const { data: r0 } = await sb.from("roster_creators").select("id,name,handle,platform,followers,niche,bio,pitch_angle,avatar_url").eq("id", rosterId).single();
-  if (!r0) throw new Error("roster creator missing");
+async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: string | null, creatorId: string | null, exclude: string[]) {
+  let r0: any = null;
+  if (rosterId) { const { data } = await sb.from("roster_creators").select("id,name,handle,platform,followers,niche,bio,pitch_angle,avatar_url").eq("id", rosterId).single(); r0 = data; }
+  else if (creatorId) { const { data } = await sb.from("creators").select("id,display_name,handle,platform,followers,category,bio,avatar_url").eq("id", creatorId).single(); if (data) r0 = { id: null, name: data.display_name || data.handle, handle: data.handle, platform: data.platform, followers: data.followers, niche: data.category, bio: data.bio, pitch_angle: null, avatar_url: data.avatar_url }; }
+  if (!r0) throw new Error("seed creator missing");
   let r = r0;
   const platform: "youtube" | "instagram" = r.platform === "youtube" ? "youtube" : "instagram";
   const handle = String(r.handle || "").replace(/^@/, "").toLowerCase();
   // roster rows added by hand have no size/avatar/bio: fill them from the platform so the agent has something to go on
-  if (!r.avatar_url || !r.followers) {
+  if (r.id && (!r.avatar_url || !r.followers)) {
     try {
       if (platform === "youtube" && YT_KEY) { const ch = await resolveChannel(YT_KEY, handle); if (ch) { const patch = { followers: ch.subs ?? r.followers, avatar_url: ch.thumbnail || r.avatar_url, bio: r.bio || (ch.description || "").slice(0, 400) }; await sb.from("roster_creators").update(patch).eq("id", r.id); r = { ...r, ...patch }; } }
       else { const tok = await houseIgToken(sb); const p = tok ? await lookupIgProfile(tok, handle) : null; if (p) { const patch = { followers: p.followers ?? r.followers, avatar_url: p.avatar || r.avatar_url }; await sb.from("roster_creators").update(patch).eq("id", r.id); r = { ...r, ...patch }; } }
@@ -52,7 +54,11 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
   const lo = size ? size * 0.1 : 0, hi = size ? size * 10 : Infinity;
   const inBand = (n: number | null) => !size || !n || (n >= lo && n <= hi);
   const picked: Cand[] = [];
-  const seen = new Set<string>([handle]);
+  const seen = new Set<string>([handle, ...exclude.map((h) => String(h).toLowerCase())]);
+  // everything already suggested to this user (any seed): fresh faces every round
+  const { data: priorHoods } = await sb.from("neighborhoods").select("candidates").eq("user_id", userId).neq("id", id).limit(50);
+  for (const ph of priorHoods || []) for (const c of (ph.candidates || []) as any[]) if (c?.handle) seen.add(String(c.handle).toLowerCase());
+  const avoid = [...seen].filter((h) => h !== handle).slice(0, 40);
 
   // 1. our index: same category, similar size, same platform
   const { data: rosterCat } = await sb.from("creators").select("category").eq("platform", platform).ilike("handle", handle).maybeSingle();
@@ -70,7 +76,7 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
   // 2. the agent names candidates
   if (client && picked.length < 3) {
     const sys = `You find creators similar to a given creator for a talent manager. Return 8 candidates on the SAME platform who are clearly in the same content lane and roughly the same audience size (within 4x). Prefer active, real accounts. Use web search to verify handles exist. Never return the creator themselves, and never return mega-celebrities unless the input creator is one. Reply ONLY with JSON: {"candidates":[{"handle":"...","why":"<one sentence on the overlap>"}]}`;
-    const user = `Platform: ${platform}\nCreator: ${r.name} (@${handle})\nAudience: ${size || "unknown"} ${platform === "youtube" ? "subscribers" : "followers"}\nNiche: ${r.niche || cat || "unknown"}\nBio: ${String(r.bio || "").slice(0, 300)}\nAngle: ${String(r.pitch_angle || "").slice(0, 300)}`;
+    const user = `Platform: ${platform}\nCreator: ${r.name} (@${handle})\nAudience: ${size || "unknown"} ${platform === "youtube" ? "subscribers" : "followers"}\nNiche: ${r.niche || cat || "unknown"}\nBio: ${String(r.bio || "").slice(0, 300)}\nAngle: ${String(r.pitch_angle || "").slice(0, 300)}${avoid.length ? `\n\nDo NOT return any of these (already shown): ${avoid.map((h) => "@" + h).join(", ")}. Find different people.` : ""}`;
     const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0.4, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 } as any], messages: [{ role: "user", content: user }] });
     const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
     const m = text.match(/\{[\s\S]*\}/);
@@ -115,6 +121,6 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
     c.job_id = job?.id || null;
   }
   await sb.from("neighborhoods").update({ status: "done", candidates: picked, finished_at: new Date().toISOString() }).eq("id", id);
-  await sb.from("roster_creators").update({ neighborhood_at: new Date().toISOString() }).eq("id", rosterId);
+  if (rosterId) await sb.from("roster_creators").update({ neighborhood_at: new Date().toISOString() }).eq("id", rosterId);
   log(r.name, picked.length, "neighbors");
 }
