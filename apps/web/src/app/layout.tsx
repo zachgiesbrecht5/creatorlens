@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { currentProfile } from "@/lib/supabase";
 import { Logo } from "@/components/Logo";
+import { MoreMenu } from "@/components/MoreMenu";
 
 export const metadata: Metadata = {
   title: "Sponsorprint",
@@ -32,19 +33,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <NavLink href="/brands">Brands</NavLink>
                   <NavLink href="/creators">My creators</NavLink>
                   <NavLink href="/pipeline">Pipeline</NavLink>
-                  <details className="nav-more">
-                    <summary>More</summary>
-                    <div className="nav-menu">
-                      <Link href="/start">Start: roster and neighborhood</Link>
-                      <Link href="/batch">Batch prints</Link>
-                      <Link href="/signals">Signals</Link>
-                      <Link href="/watchlist">Watchlist</Link>
-                      <Link href="/updates">Creator updates</Link>
-                      <Link href="/scans">My prints</Link>
-                      <Link href="/settings">Settings</Link>
-                      {profile.plan === "admin" && <Link href="/queue">Queue and health</Link>}
-                    </div>
-                  </details>
+                  <MoreMenu items={[
+                    { href: "/start", label: "Start: roster and neighborhood" },
+                    { href: "/batch", label: "Batch prints" },
+                    { href: "/signals", label: "Signals" },
+                    { href: "/watchlist", label: "Watchlist" },
+                    { href: "/updates", label: "Creator updates" },
+                    { href: "/scans", label: "My prints" },
+                    { href: "/settings", label: "Settings" },
+                    ...(profile.plan === "admin" ? [{ href: "/queue", label: "Queue and health" }] : []),
+                  ]} />
                   <Link href="/pricing" className="pill ml-3 hover:border-fg" title={profile.plan === "trial" ? "Free plan. Click to see plans." : "Your plan"}>
                     {profile.plan === "trial" ? `free · ${profile.scan_credits} prints · ${profile.draft_credits} drafts` : profile.plan}
                   </Link>

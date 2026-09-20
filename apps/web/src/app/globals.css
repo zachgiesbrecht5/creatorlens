@@ -232,11 +232,9 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 
 /* ── Nav "More" ───────────────────────────────────────── */
 .nav-more { position: relative; }
-.nav-more summary { list-style: none; cursor: pointer; padding: 6px 10px; border-radius: 6px; color: #5b6472; font-size: 14px; }
-.nav-more summary::-webkit-details-marker { display: none; }
-.nav-more summary::after { content: " ▾"; font-size: 10px; }
-.nav-more summary:hover, .nav-more[open] summary { background: #f2f4f7; color: #0b0d12; }
-.nav-menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 220px; background: #fff; border: 1px solid #e4e6ea; border-radius: 10px; box-shadow: 0 12px 32px -12px rgba(11,13,18,.25); padding: 6px; z-index: 40; display: flex; flex-direction: column; }
+.nav-more-btn { cursor: pointer; padding: 6px 10px; border-radius: 6px; color: #5b6472; font-size: 14px; }
+.nav-more-btn:hover, .nav-more-btn.is-open { background: #f2f4f7; color: #0b0d12; }
+.nav-menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 220px; z-index: 80; background: #fff; border: 1px solid #e4e6ea; border-radius: 10px; box-shadow: 0 12px 32px -12px rgba(11,13,18,.25); padding: 6px; z-index: 40; display: flex; flex-direction: column; }
 .nav-menu a { padding: 8px 10px; border-radius: 6px; font-size: 13.5px; color: #0b0d12; }
 .nav-menu a:hover { background: #f2f4f7; }
 
