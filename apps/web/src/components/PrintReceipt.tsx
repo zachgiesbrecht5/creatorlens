@@ -16,7 +16,7 @@ const LINES: { brand: string; tag: string; when: string; deals: number; repeat?:
   { brand: "Saltmarsh", tag: "@saltmarsh.pantry", when: "Jan 2026", deals: 1 },
 ];
 
-export type Sample = { handle: string; platform: string; followers: string; lines: { brand: string; tag: string; when: string; deals: number; repeat?: boolean }[]; contact: string | null; href: string };
+export type Sample = { handle: string; name?: string; avatar?: string | null; platform: string; followers: string; lines: { brand: string; domain?: string | null; tag: string; when: string; deals: number; repeat?: boolean }[]; contact: string | null; href: string };
 
 export function PrintReceipt({ indexDeals, samples = [] }: { indexDeals: number; samples?: Sample[] }) {
   const [run, setRun] = useState(0);   // bump to re-print

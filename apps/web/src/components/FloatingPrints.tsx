@@ -1,17 +1,17 @@
 import Link from "next/link";
 import type { Sample } from "@/components/PrintReceipt";
 
-// Real prints drifting behind the hero like paper in slow air. Positioned in
-// the gutters so they never sit under the headline or the live receipt; faded,
-// slightly rotated, each on its own drift timing. Click one to open it.
+// Real prints floating behind the hero: creator photo, name, and brand rows
+// with the brand's favicon. Small, in the gutters, always moving.
 const SLOTS = [
-  { left: "-2%", top: "4%", rot: -7, dur: 26, delay: 0, w: 300 },
-  { left: "22%", top: "70%", rot: 4, dur: 31, delay: -9, w: 260 },
-  { left: "44%", top: "-6%", rot: 6, dur: 24, delay: -4, w: 280 },
-  { left: "86%", top: "58%", rot: -5, dur: 29, delay: -14, w: 270 },
-  { left: "63%", top: "78%", rot: 8, dur: 33, delay: -20, w: 240 },
-  { left: "-4%", top: "60%", rot: 3, dur: 28, delay: -17, w: 250 },
+  { left: "1%",  top: "2%",  rot: -6, dur: 14, delay: 0,   w: 230 },
+  { left: "3%",  top: "64%", rot: 4,  dur: 17, delay: -6,  w: 210 },
+  { left: "30%", top: "72%", rot: -3, dur: 15, delay: -11, w: 220 },
+  { left: "46%", top: "-4%", rot: 5,  dur: 16, delay: -3,  w: 210 },
+  { left: "86%", top: "0%",  rot: 7,  dur: 18, delay: -9,  w: 200 },
+  { left: "84%", top: "66%", rot: -5, dur: 13, delay: -14, w: 220 },
 ];
+const fav = (d: string) => `https://www.google.com/s2/favicons?domain=${d}&sz=32`;
 
 export function FloatingPrints({ samples }: { samples: Sample[] }) {
   if (!samples.length) return null;
@@ -21,12 +21,18 @@ export function FloatingPrints({ samples }: { samples: Sample[] }) {
         const p = samples[i % samples.length];
         return (
           <Link key={i} href={p.href} className="fp-print" style={{ left: sl.left, top: sl.top, width: sl.w, ["--rot" as any]: `${sl.rot}deg`, ["--dur" as any]: `${sl.dur}s`, ["--delay" as any]: `${sl.delay}s` }}>
-            <div className="fp-head"><span>sponsorprint</span><span>{p.platform} · {p.followers}</span></div>
-            <div className="fp-handle">@{p.handle}</div>
-            {p.lines.slice(0, 5).map((l) => (
-              <div key={l.brand} className="fp-row"><span className="fp-brand">{l.brand}</span><span className="fp-when">{l.when}</span><span className="fp-deals">{l.deals}</span></div>
+            <div className="fp-id">
+              {p.avatar ? <img src={p.avatar} alt="" className="fp-avatar" /> : <span className="fp-avatar fp-avatar-blank" />}
+              <div className="min-w-0"><div className="fp-name">{p.name || `@${p.handle}`}</div><div className="fp-meta">{p.platform} · {p.followers}</div></div>
+            </div>
+            {p.lines.slice(0, 4).map((l) => (
+              <div key={l.brand} className="fp-row">
+                {l.domain ? <img src={fav(l.domain)} alt="" className="fp-fav" /> : <span className="fp-fav fp-fav-blank" />}
+                <span className="fp-brand">{l.brand}</span>
+                <span className="fp-when">{l.when}</span>
+              </div>
             ))}
-            <div className="fp-foot">{p.lines.length} brands · public posts only</div>
+            <div className="fp-foot">{p.lines.length} brands · paid</div>
             <div className="fp-tear" />
           </Link>
         );
