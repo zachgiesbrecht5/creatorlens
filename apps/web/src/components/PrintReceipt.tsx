@@ -30,7 +30,6 @@ export function PrintReceipt({ indexDeals, samples = [] }: { indexDeals: number;
   // Real prints when we have them; the fictional sample only as a last resort.
   const pool: Sample[] = samples.length ? samples : [{ handle: "priyacooks", platform: "Instagram", followers: "312K", lines: LINES, contact: "Hearthline → d.reyes@hearthline.co", href: "#" }];
   const cur = pool[run % pool.length];
-  const prev = pool.length > 1 ? [pool[(run + pool.length - 1) % pool.length], pool[(run + pool.length - 2) % pool.length]] : [];
   const totalDeals = cur.lines.reduce((s, l) => s + l.deals, 0);
   const repeats = cur.lines.filter((l) => l.repeat).length;
 
@@ -38,12 +37,6 @@ export function PrintReceipt({ indexDeals, samples = [] }: { indexDeals: number;
     <div className="rc-wrap">
       <PrinterMachine key={`m-${run}`} lcd={lcd} printing={lcd === "PRINTING…"} onFeed={feed} className="rc-machine-anim" />
       <div className="rc-feed">
-      {prev.map((p, i) => (
-        <a key={`ghost-${p.handle}-${run}`} href={p.href} className={`rc-ghost rc-ghost-${i + 1}`} aria-label={`print of @${p.handle}`}>
-          <div className="rc-line rc-title"><span className="rc-handle">@{p.handle}</span><span className="rc-sub">{p.platform} · {p.followers}</span></div>
-          {p.lines.slice(0, 4).map((l) => <div key={l.brand} className="rc-line rc-row"><span className="rc-brand">{l.brand}</span><span className="rc-tag">{l.tag}</span><span className="rc-when">{l.when}</span><span className="rc-deals">{l.deals}</span></div>)}
-        </a>
-      ))}
       <div className="rc-paper" key={`paper-${run}`}>
         <div className="rc-line rc-head" style={step(250)}>
           <span>sponsorprint</span>

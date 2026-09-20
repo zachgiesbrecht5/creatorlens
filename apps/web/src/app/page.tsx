@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { journeyState } from "@/lib/supabase";
 import { SearchBox } from "@/components/SearchBox";
 import { PrintReceipt } from "@/components/PrintReceipt";
+import { FloatingPrints } from "@/components/FloatingPrints";
 import { Journey } from "@/components/Journey";
 import { HiringStrip } from "@/components/HiringStrip";
 import { SignalsStrip, type MatchRow } from "@/components/SignalsStrip";
@@ -29,7 +30,7 @@ export default async function Home() {
   const fmtK = (n: number | null) => (!n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
   const samples: { handle: string; platform: string; followers: string; lines: { brand: string; tag: string; when: string; deals: number; repeat?: boolean }[]; contact: string | null; href: string }[] = [];
   if (heroCreators?.length) {
-    const { data: walls } = await admin.from("brand_wall").select("creator_id,brand,evidence,deals,last_seen,repeat_partner").in("creator_id", heroCreators.map((c) => c.id)).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false);
+    const { data: walls } = await admin.from("brand_wall").select("creator_id,brand,evidence,deals,last_seen,repeat_partner").in("creator_id", heroCreators.map((c) => c.id)).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).lte("deals", 40);
     for (const c of heroCreators) {
       const rows = (walls || []).filter((w) => w.creator_id === c.id).sort((a, b) => String(b.last_seen).localeCompare(String(a.last_seen))).slice(0, 6);
       if (rows.length < 4) continue;
@@ -85,6 +86,7 @@ export default async function Home() {
     <div>
       {/* Hero: the print is the product. Headline left, the machine on the right. */}
       <section className="hero -mx-6 -mt-10 px-6 pb-16 pt-14 md:pt-20">
+        <FloatingPrints samples={samples} />
         <div className="mx-auto grid max-w-6xl items-center gap-12 md:grid-cols-12">
           <div className="md:col-span-6">
             <h1 className="h1 max-w-xl text-white">Pull a creator&apos;s sponsor print.</h1>
