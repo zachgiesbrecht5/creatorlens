@@ -26,7 +26,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <header className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur">
           <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
             <Link href="/" className="flex items-center"><Logo /></Link>
-            <nav className="flex items-center gap-1 overflow-x-auto whitespace-nowrap text-[13px] [scrollbar-width:none]">
+            <nav className="flex items-center gap-1 whitespace-nowrap text-[13px]">
               {profile ? (
                 <>
                   <NavLink href="/">Print</NavLink>
