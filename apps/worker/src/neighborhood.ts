@@ -135,6 +135,15 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
   }
   await sb.from("neighborhoods").update({ error: null, candidates: [], cost_usd: usage?.cost_usd ?? 0, debug: { candidates: [...agentCands, ...reused.filter((c) => !agentCands.some((a) => a.handle === c.handle))].slice(0, 30), usage, reused: reused.length } }).eq("id", id);
   for (const u of unverified) { if (picked.length >= 3) break; if (!picked.some((p) => p.handle.toLowerCase() === u.handle.toLowerCase())) picked.push(u); }
+  // Empty round but names exist? Everything was filtered as "already shown". Better to
+  // re-show the strongest names than to hand back three blank cards.
+  if (!picked.length) {
+    const pool = [...agentCands, ...reused].filter((c) => c?.handle && !passed.some((p) => p.replace(/^@/, "").toLowerCase() === String(c.handle).replace(/^@/, "").toLowerCase()));
+    const uniq = new Map<string, { handle: string; why: string }>();
+    for (const c of pool) { const h = String(c.handle).replace(/^@/, "").replace(/^https?:\/\/[^/]+\//, "").replace(/\/.*$/, "").trim().toLowerCase(); if (h && h !== handle && !uniq.has(h)) uniq.set(h, { handle: h, why: c.why }); }
+    for (const c of [...uniq.values()].slice(0, 3)) picked.push({ platform, handle: c.handle, display_name: c.handle, avatar_url: null, followers: null, reason: c.why });
+    if (picked.length) log(handle, "empty round; re-showing", picked.map((p) => p.handle).join(", "));
+  }
 
   // 3. free prints for each pick (source=neighborhood: no credit), unlock for the user
   for (const c of picked) {

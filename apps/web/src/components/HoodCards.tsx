@@ -37,7 +37,8 @@ export function useHood(initialId: string | null, seed?: { rosterCreatorId?: str
       clearInterval(timer.current);
       const good = j.candidates.filter((c) => c.print_status === "done" && c.brands > 0);
       const goodTotal = kept.length + good.length;
-      if (goodTotal < MIN_GOOD && rounds < MAX_ROUNDS && seed) {
+      const allPrintsFinished = j.candidates.length > 0 && j.candidates.every((c) => c.print_status === "done" || c.print_status === "failed");
+      if (goodTotal < MIN_GOOD && rounds < MAX_ROUNDS && seed && allPrintsFinished) {
         // keep what worked, go find more
         setKept((k) => [...k, ...good.filter((g) => !k.some((x) => x.handle === g.handle))]);
         setSearching(true);
@@ -50,7 +51,10 @@ export function useHood(initialId: string | null, seed?: { rosterCreatorId?: str
     return () => clearInterval(timer.current);
   }, [hoodId]);
   // merged view: kept good ones first, then the current round
-  const merged: Hood | null = hood ? { ...hood, candidates: [...kept, ...hood.candidates.filter((c) => !kept.some((k) => k.handle === c.handle))] } : kept.length ? { id: hoodId || "", status: "running", candidates: kept } : null;
+  const lastNonEmpty = useRef<Cand[]>([]);
+  if (hood && hood.candidates.length) lastNonEmpty.current = hood.candidates;
+  const shownCands = hood && !hood.candidates.length && hood.status === "done" ? lastNonEmpty.current : (hood?.candidates || []);
+  const merged: Hood | null = hood ? { ...hood, candidates: [...kept, ...shownCands.filter((c) => !kept.some((k) => k.handle === c.handle))] } : kept.length ? { id: hoodId || "", status: "running", candidates: kept } : null;
   return { hood: merged, rounds, searching, hoodId };
 }
 
