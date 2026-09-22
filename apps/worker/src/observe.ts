@@ -37,6 +37,7 @@ export async function nightly(sb: SupabaseClient) {
   for (const t of CORE) { const was = Number(prev?.counts?.[t] || 0); if (was >= 20 && counts[t] < was * 0.8) drops.push(`${t} ${was} -> ${counts[t]}`); }
   if (drops.length) await alert(sb, "table shrank overnight", { drops });
   await sb.from("snapshots").insert({ day, counts });
+  await sb.rpc("prune_pageviews").then(() => {}, () => {});
   // export
   for (const t of ["brands", "contacts", "partnerships", "creators", "roster_creators"]) {
     const rows: unknown[] = [];

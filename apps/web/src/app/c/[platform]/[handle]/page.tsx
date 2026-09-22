@@ -43,7 +43,9 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
   const { admin: seesAll } = await currentAccess();
   const unlocked = await canSeeCreator(user?.id || null, seesAll, creator);
   const { data: wall } = await admin.from("brand_wall").select("*").eq("creator_id", creator.id).order("deals", { ascending: false }).order("best_score", { ascending: false });
-  const cards = ((wall || []) as WallCard[]).filter((c) => !c.is_junk);
+  const { data: hides } = user ? await admin.from("partnership_hides").select("brand_id").eq("user_id", user.id).eq("creator_id", creator.id) : { data: [] };
+  const hidden = new Set((hides || []).map((h: any) => h.brand_id));
+  const cards = ((wall || []) as WallCard[]).filter((c) => !c.is_junk && !hidden.has(c.brand_id));
   const { data: watchRow } = user ? await admin.from("watchlist").select("handle").eq("user_id", user.id).eq("platform", p).eq("handle", creator.handle.toLowerCase()).maybeSingle() : { data: null };
   const watching = !!watchRow;
   // the map: every dated deal by brand, plus the "why then" lines

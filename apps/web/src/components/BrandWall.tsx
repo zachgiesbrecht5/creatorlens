@@ -149,7 +149,7 @@ export function BrandWall({ cards, creator, signedIn, roster, header, timeline, 
                   <ContactCard brandId={c.brand_id} brand={c.brand} creator={creator} roster={roster} info={contacts[c.brand_id]} expanded onLoad={() => refetch(c.brand_id)} preferRoster={pitchFor || null} />
                   <div className="mt-3 flex gap-3 font-mono text-[10px] text-dim">
                     <button className="hover:text-bad" title="Hide this brand for this creator (agency link, own merch, collab credit)" onClick={() => reject(c.brand_id, "pair")}>not a sponsor of @{creator.handle}</button>
-                    <button className="hover:text-bad" title="Never a sponsor for anyone (music library, agency, vendor). Team accounts only." onClick={() => reject(c.brand_id, "brand")}>never a sponsor</button>
+                    <button className="hover:text-bad" title="Never a sponsor for anyone (music library, agency, vendor). Sent for review." onClick={() => reject(c.brand_id, "brand")}>never a sponsor</button>
                   </div>
                 </div>
               )}

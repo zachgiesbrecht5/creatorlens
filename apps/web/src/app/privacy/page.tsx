@@ -19,7 +19,8 @@ export default function Privacy() {
         <li><strong>Your account.</strong> When you sign in with Google we receive your name, email address and profile picture. We use these to create your account and show who is signed in.</li>
         <li><strong>Public creator data.</strong> Video titles, descriptions, captions, view counts and follower counts that creators have published publicly, retrieved through the YouTube Data API and the Instagram Graph API. We do not access private accounts or private messages.</li>
         <li><strong>What you add.</strong> Your pitch style guide, your email signature, the creators you tell us you represent, and the drafts you generate.</li>
-        <li><strong>Usage.</strong> Standard server logs (IP address, browser, pages requested) kept for security and debugging.</li>
+        <li><strong>Usage.</strong> Standard server logs (IP address, browser, pages requested) kept for security and debugging, plus our own first-party page counts (which page, which site sent you, and a random ID your browser keeps) so we can see what people use. No third-party analytics or ad trackers. Page counts are deleted after 180 days.</li>
+        <li><strong>Feedback and corrections.</strong> Notes, questions and "not a sponsor" flags you send us, so we can answer you and fix the index.</li>
       </ul>
 
       <h2 id="youtube">YouTube API Services</h2>

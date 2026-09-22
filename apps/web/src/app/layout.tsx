@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 import { currentProfile } from "@/lib/supabase";
 import { Logo } from "@/components/Logo";
 import { MoreMenu } from "@/components/MoreMenu";
+import { Feedback } from "@/components/Feedback";
+import { Beacon } from "@/components/Beacon";
 
 export const metadata: Metadata = {
   title: "Sponsorprint",
@@ -55,6 +57,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
+        <Feedback signedIn={!!profile} />
+        <Beacon />
         <footer className="mx-auto flex max-w-6xl items-center justify-between px-6 py-10 font-mono text-[11px] text-dim">
           <span>© {new Date().getFullYear()} Sponsorprint</span>
           <span className="flex flex-wrap items-center gap-4"><span>Public data only · Drafts, never sends</span><span className="inline-flex items-center gap-1.5" title="Sponsorprint uses YouTube API Services"><svg width="14" height="10" viewBox="0 0 28 20" aria-hidden><rect width="28" height="20" rx="5" fill="#c4302b" /><path d="M11 5.5v9l8-4.5z" fill="#fff" /></svg>Powered by YouTube API Services</span><a href="/privacy" className="hover:text-fg">Privacy</a><a href="/terms" className="hover:text-fg">Terms</a></span>

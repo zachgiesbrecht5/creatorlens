@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { supabaseAdmin, currentProfile } from "@/lib/supabase";
+import { CorrectionsTable, FeedbackList } from "@/components/ListenPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,23 @@ export default async function Queue() {
     admin.from("events").select("name,user_id").gte("created_at", since(30)),
     admin.from("snapshots").select("day,counts").order("day", { ascending: false }).limit(2),
   ]);
+  // Listening: traffic, feedback, flags
+  const [{ data: pv }, { data: fb }, { data: cr }] = await Promise.all([
+    admin.from("pageviews").select("anon_id,user_id,path,referrer,created_at").gte("created_at", since(30)).order("created_at", { ascending: false }).limit(20000),
+    admin.from("feedback").select("id,email,path,mood,kind,body,created_at").order("created_at", { ascending: false }).limit(40),
+    admin.from("corrections").select("id,scope,note,created_at,user_id,brands(name),creators(handle)").eq("status", "open").order("created_at", { ascending: false }).limit(50),
+  ]);
+  const pvRows = pv || [];
+  const pv7 = pvRows.filter((r) => r.created_at >= since(7));
+  const visitors = (rows: typeof pvRows) => new Set(rows.map((r) => r.anon_id)).size;
+  const tally = (vals: (string | null)[]) => Object.entries(vals.reduce((m: Record<string, number>, v) => { if (v) m[v] = (m[v] || 0) + 1; return m; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const topPaths = tally(pv7.map((r) => (r.path.startsWith("/p/") ? "/p/* (public prints)" : r.path.startsWith("/c/") ? "/c/* (prints)" : r.path.startsWith("/brands/") ? "/brands/*" : r.path)));
+  const topRefs = tally(pv7.map((r) => r.referrer));
+  const byAnon = new Map<string, { days: Set<string>; user: boolean }>();
+  for (const r of pvRows) { const e = byAnon.get(r.anon_id) || { days: new Set(), user: false }; e.days.add(r.created_at.slice(0, 10)); if (r.user_id) e.user = true; byAnon.set(r.anon_id, e); }
+  const anonTotal = byAnon.size, signedUp = [...byAnon.values()].filter((e) => e.user).length, returning = [...byAnon.values()].filter((e) => e.days.size >= 2).length;
+  const whoAll = new Map((outsiders || []).map((p) => [p.id, p.full_name || p.email]));
+  const crRows = (cr || []).map((c: any) => ({ id: c.id, scope: c.scope, note: c.note, created_at: c.created_at, brand: c.brands?.name || "?", creator: c.creators?.handle || "?", by: whoAll.get(c.user_id) || "someone" }));
   const workerAge = hb?.last_seen ? (Date.now() - new Date(hb.last_seen).getTime()) / 60000 : null;
   const funnel = (rows: { name: string; user_id: string | null }[] | null) => {
     const by: Record<string, Set<string>> = {};
@@ -177,6 +195,29 @@ export default async function Queue() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="mt-10 grid gap-6 lg:grid-cols-2">
+        <div className="card p-6">
+          <div className="label">listening · visitors (not you)</div>
+          <div className="mt-3 grid grid-cols-4 gap-3 text-center">
+            {[["7d visitors", visitors(pv7)], ["30d visitors", anonTotal], ["signed in", signedUp], ["came back", returning]].map(([l, n]) => (
+              <div key={String(l)} className="rounded-lg bg-surface2 p-3"><div className="num text-xl font-semibold">{n as number}</div><div className="label">{l}</div></div>
+            ))}
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-6 text-[12px]">
+            <div><div className="label mb-2">top pages · 7d</div>{topPaths.map(([k, n]) => <div key={k} className="flex justify-between py-0.5"><span className="truncate text-muted">{k}</span><span className="num">{n}</span></div>)}{!topPaths.length && <p className="text-dim">No traffic yet.</p>}</div>
+            <div><div className="label mb-2">sent from · 7d</div>{topRefs.map(([k, n]) => <div key={k} className="flex justify-between py-0.5"><span className="truncate text-muted">{k}</span><span className="num">{n}</span></div>)}{!topRefs.length && <p className="text-dim">Direct only so far.</p>}</div>
+          </div>
+        </div>
+        <div className="card p-6">
+          <div className="label mb-2">feedback and questions</div>
+          <FeedbackList rows={(fb || []) as any} />
+        </div>
+      </div>
+      <div className="card mt-6 p-6">
+        <div className="label mb-2">flagged deals to review · outsiders can&apos;t edit the index, you apply</div>
+        <CorrectionsTable rows={crRows} />
       </div>
     </div>
   );
