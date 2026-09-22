@@ -55,6 +55,9 @@ export default async function Queue() {
     admin.from("feedback").select("id,email,path,mood,kind,body,created_at").order("created_at", { ascending: false }).limit(40),
     admin.from("corrections").select("id,scope,note,created_at,user_id,brands(name),creators(handle)").eq("status", "open").order("created_at", { ascending: false }).limit(50),
   ]);
+  const { data: hoodCosts } = await admin.from("neighborhoods").select("cost_usd").gte("created_at", since(30)).not("cost_usd", "is", null);
+  const hc = (hoodCosts || []).map((h: any) => Number(h.cost_usd || 0));
+  const hoodSpend = hc.reduce((a, b) => a + b, 0), hoodPaid = hc.filter((c) => c > 0).length;
   const pvRows = pv || [];
   const pv7 = pvRows.filter((r) => r.created_at >= since(7));
   const visitors = (rows: typeof pvRows) => new Set(rows.map((r) => r.anon_id)).size;
@@ -199,6 +202,7 @@ export default async function Queue() {
 
       <div className="mt-10 grid gap-6 lg:grid-cols-2">
         <div className="card p-6">
+          <div className="mb-4 font-mono text-[11px] text-muted">neighborhood agent · 30d: {hc.length} runs, {hoodPaid} used the agent, ${hoodSpend.toFixed(2)} total, {hoodPaid ? "$" + (hoodSpend / hoodPaid).toFixed(3) : "n/a"} per agent run</div>
           <div className="label">listening · visitors (not you)</div>
           <div className="mt-3 grid grid-cols-4 gap-3 text-center">
             {[["7d visitors", visitors(pv7)], ["30d visitors", anonTotal], ["signed in", signedUp], ["came back", returning]].map(([l, n]) => (

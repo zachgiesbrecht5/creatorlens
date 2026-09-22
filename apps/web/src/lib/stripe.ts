@@ -22,7 +22,7 @@ export function planForPrice(priceId: string | null | undefined): "pro" | "agenc
 }
 
 export const PLANS = {
-  free: { name: "Free", price: 0, blurb: "Print anyone. Try the tools that book deals.", features: ["Unlimited creator prints (25 new a day)", "3 contact reveals", "3 pitch drafts", "1 brand research", "1 neighborhood (3 creators)"] },
-  pro: { name: "Pro", monthly: 49, yearly: 490, blurb: "For one manager who pitches every week.", features: ["Unlimited prints, no daily limit", "Unlimited contact reveals", "60 pitch drafts a month", "15 research runs a month", "10 neighborhoods a month"] },
-  agency: { name: "Agency", monthly: 149, yearly: 1490, blurb: "For a team that books at volume.", features: ["Everything in Pro", "Unlimited pitch drafts", "60 research runs a month", "40 neighborhoods a month", "5 seats, shared roster, brand map and exports"] },
+  free: { name: "Free", price: 0, blurb: "Print anyone. Try the tools that book deals.", features: ["Unlimited creator prints (25 new a day)", "3 contact reveals", "3 pitch drafts", "1 brand research", "5 neighborhoods a month (15 new creators)"] },
+  pro: { name: "Pro", monthly: 49, yearly: 490, blurb: "For one manager who pitches every week.", features: ["Unlimited prints, no daily limit", "Unlimited contact reveals", "60 pitch drafts a month", "15 research runs a month", "50 neighborhoods a month"] },
+  agency: { name: "Agency", monthly: 149, yearly: 1490, blurb: "For a team that books at volume.", features: ["Everything in Pro", "Unlimited pitch drafts", "60 research runs a month", "200 neighborhoods a month", "5 seats, shared roster, brand map and exports"] },
 } as const;

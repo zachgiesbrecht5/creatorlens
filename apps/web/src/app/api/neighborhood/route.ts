@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const autoRound = again && recent?.status === "done" && ((recent?.candidates || []) as any[]).filter((c) => (c.brands || 0) > 0).length < 2;
   if (!autoRound) {
     const { data: ok } = await admin.rpc("spend_credit", { p_user: profile.id, p_kind: "hood", p_reason: again ? "hood_more" : "hood", p_ref: key.roster_creator_id || key.creator_id });
-    if (!ok) { track(profile.id, "hood_locked", key); return NextResponse.json({ error: "You've used your free neighborhood. Pro includes 10 a month.", upgrade: true }, { status: 402 }); }
+    if (!ok) { track(profile.id, "hood_locked", key); return NextResponse.json({ error: "You've used this month's 5 free neighborhoods. Pro includes 50 a month.", upgrade: true }, { status: 402 }); }
   }
   const { data: n, error } = await admin.from("neighborhoods").insert({ user_id: profile.id, ...key, exclude }).select("id").single();
   if (error || !n) return NextResponse.json({ error: error?.message || "failed" }, { status: 500 });

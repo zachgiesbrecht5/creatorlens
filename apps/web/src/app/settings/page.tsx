@@ -24,6 +24,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   if (!profile) redirect("/login?next=/settings");
   const { insider } = await currentAccess();
   const admin = supabaseAdmin();
+  const { data: hoodsLeft } = await admin.rpc("hood_remaining", { p_user: profile.id });
   const [{ data: ig }, { data: gc }, { data: ledger }] = await Promise.all([
     admin.from("ig_connections").select("ig_username,healthy,cooldown_until,created_at").eq("user_id", profile.id),
     admin.from("google_connections").select("email,updated_at").eq("user_id", profile.id).maybeSingle(),
@@ -86,7 +87,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           {sp.upgraded && <p className="mt-2 text-sm text-ok">You&apos;re upgraded. Credits refill every billing cycle.</p>}
           {(profile.plan === "trial" || profile.plan === "pro") && (
             <div className="mt-3 grid grid-cols-2 gap-3 text-center">
-              <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.hood_credits ?? 0}</div><div className="label">neighborhoods left</div></div>
+              <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{hoodsLeft ?? 0}</div><div className="label">neighborhoods left · 30 days</div></div>
               {profile.plan === "trial" && <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.reveal_credits}</div><div className="label">reveals left</div></div>}
               <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.draft_credits}</div><div className="label">drafts left</div></div>
               <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.research_credits}</div><div className="label">research left</div></div>

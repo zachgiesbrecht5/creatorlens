@@ -78,20 +78,14 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
     }
   }
 
-  // 2. the agent names candidates
-  if (client && picked.length < 3) {
-    const sys = `You find creators similar to a given creator for a talent manager. Return 8 candidates on the SAME platform who are clearly in the same content lane and roughly the same audience size (within 4x). Prefer active, real accounts. Use web search to verify handles exist. Never return the creator themselves, and never return mega-celebrities unless the input creator is one. Reply ONLY with JSON: {"candidates":[{"handle":"...","why":"<one sentence on the overlap>"}]}`;
-    const user = `Platform: ${platform}\nCreator: ${r.name} (@${handle})\nAudience: ${size || "unknown"} ${platform === "youtube" ? "subscribers" : "followers"}\nNiche: ${r.niche || cat || "unknown"}\nBio: ${String(r.bio || "").slice(0, 300)}\nAngle: ${String(r.pitch_angle || "").slice(0, 300)}${liked.length ? `\n\nThe manager said these ARE a match for the lane (find more like them): ${liked.slice(0, 12).join(", ")}` : ""}${passed.length ? `\nThe manager said these are NOT a match (avoid this kind): ${passed.slice(0, 12).join(", ")}` : ""}${avoid.length ? `\n\nDo NOT return any of these (already shown): ${avoid.map((h) => "@" + h).join(", ")}. Find different people.` : ""}`;
-    const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0.4, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 } as any], messages: [{ role: "user", content: user }] });
-    const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
-    const m = text.match(/\{[\s\S]*\}/);
-    let cands: { handle: string; why: string }[] = [];
-    try { cands = m ? (JSON.parse(m[0]).candidates || []) : []; } catch { cands = []; }
-    log(handle, "model candidates:", cands.map((c) => c.handle).join(", ") || "(none)", "| text:", text.slice(0, 200).replace(/\n/g, " "));
-    await sb.from("neighborhoods").update({ error: null, candidates: [], debug: { raw: text.slice(0, 2000), candidates: cands } }).eq("id", id);
-    const tok = platform === "instagram" ? await houseIgToken(sb) : null;
-    if (platform === "instagram" && !tok) log("no house Instagram token available");
-    const unverified: Cand[] = [];
+  // 2. candidates: first reuse what the agent already found for this same seed creator
+  //    (any user, last 30 days) so repeat lookups cost nothing, then ask the agent for the rest.
+  const seedKey = `${platform}:${handle}`;
+  await sb.from("neighborhoods").update({ seed_key: seedKey }).eq("id", id);
+  const tok = platform === "instagram" ? await houseIgToken(sb) : null;
+  if (platform === "instagram" && !tok) log("no house Instagram token available");
+  const unverified: Cand[] = [];
+  const verify = async (cands: { handle: string; why: string }[]) => {
     for (const c of cands) {
       if (picked.length >= 3) break;
       const h = String(c.handle || "").replace(/^@/, "").replace(/^https?:\/\/[^/]+\//, "").replace(/\/.*$/, "").trim();
@@ -102,8 +96,9 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
           const ch = await resolveChannel(YT_KEY, h);
           if (ch && inBand(ch.subs)) {
             let media: Cand["media"] = [];
-            try { media = (await recentVideoIds(YT_KEY, ch.uploadsPlaylist, 3)).map((v) => ({ url: `https://www.youtube.com/watch?v=${v}`, kind: "video", thumb: `https://i.ytimg.com/vi/${v}/hqdefault.jpg` })); } catch { /* optional */ }
-            picked.push({ platform, handle: ch.handle || ch.id, display_name: ch.title, avatar_url: ch.thumbnail || null, followers: ch.subs ?? null, reason: c.why, external_id: ch.id, media, bio: (ch.description || "").slice(0, 200) }); continue;
+            try { media = (await recentVideoIds(YT_KEY, ch.uploadsPlaylist, 3)).map((v) => ({ url: `https://www.youtube.com/watch?v=${v}`, kind: "video", thumb: `https://i.ytimg.com/vi/${v}/hqdefault.jpg` })); } catch {}
+            picked.push({ platform, handle: ch.handle || ch.id, display_name: ch.title, avatar_url: ch.thumbnail || null, followers: ch.subs ?? null, reason: c.why, external_id: ch.id, media, bio: (ch.description || "").slice(0, 300) });
+            continue;
           }
           if (ch) { log("out of band", h, ch.subs); continue; }
         } else if (platform === "instagram" && tok) {
@@ -112,11 +107,34 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
           if (p) { log("out of band", h, p.followers); continue; }
         }
       } catch (e: any) { log("verify error", h, e?.message); }
-      // couldn't verify here: let the print itself verify (it fails cleanly if the account doesn't exist)
       unverified.push({ platform, handle: h, display_name: h, avatar_url: null, followers: null, reason: c.why });
     }
-    for (const u of unverified) { if (picked.length >= 3) break; if (!picked.some((p) => p.handle.toLowerCase() === u.handle.toLowerCase())) picked.push(u); }
+  };
+
+  const since30 = new Date(Date.now() - 30 * 864e5).toISOString();
+  const { data: prior } = await sb.from("neighborhoods").select("debug").eq("seed_key", seedKey).eq("status", "done").neq("id", id).gte("created_at", since30).order("created_at", { ascending: false }).limit(10);
+  const reused = (prior || []).flatMap((n: any) => (n.debug?.candidates || []) as { handle: string; why: string }[]);
+  if (reused.length) { await verify(reused); log(handle, "reused", reused.length, "cached candidates ->", picked.length, "picks"); }
+
+  let usage: { input: number; output: number; searches: number; cost_usd: number } | null = null;
+  let agentCands: { handle: string; why: string }[] = [];
+  if (client && picked.length < 3) {
+    const sys = `You find creators similar to a given creator for a talent manager. Return 8 candidates on the SAME platform who are clearly in the same content lane and roughly the same audience size (within 4x). Prefer active, real accounts. Use web search to verify handles exist. Never return the creator themselves, and never return mega-celebrities unless the input creator is one. Reply ONLY with JSON: {"candidates":[{"handle":"...","why":"<one sentence on the overlap>"}]}`;
+    const user = `Platform: ${platform}\nCreator: ${r.name} (@${handle})\nAudience: ${size || "unknown"} ${platform === "youtube" ? "subscribers" : "followers"}\nNiche: ${r.niche || cat || "unknown"}\nBio: ${String(r.bio || "").slice(0, 300)}\nAngle: ${String(r.pitch_angle || "").slice(0, 300)}${liked.length ? `\n\nThe manager said these ARE a match for the lane (find more like them): ${liked.slice(0, 12).join(", ")}` : ""}${passed.length ? `\nThe manager said these are NOT a match (avoid this kind): ${passed.slice(0, 12).join(", ")}` : ""}${avoid.length ? `\n\nDo NOT return any of these (already shown): ${avoid.map((h) => "@" + h).join(", ")}. Find different people.` : ""}`;
+    const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0.4, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 } as any], messages: [{ role: "user", content: user }] });
+    const u: any = msg.usage || {};
+    const input = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
+    const searches = u.server_tool_use?.web_search_requests || 0;
+    // Haiku 4.5: $1/M input, $5/M output; web search $10 per 1,000
+    usage = { input, output: u.output_tokens || 0, searches, cost_usd: +(input / 1e6 * 1 + (u.output_tokens || 0) / 1e6 * 5 + searches * 0.01).toFixed(4) };
+    const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
+    const m = text.match(/\{[\s\S]*\}/);
+    try { agentCands = m ? (JSON.parse(m[0]).candidates || []) : []; } catch { agentCands = []; }
+    log(handle, "model candidates:", agentCands.map((c) => c.handle).join(", ") || "(none)", "| cost $" + usage.cost_usd);
+    await verify(agentCands);
   }
+  await sb.from("neighborhoods").update({ error: null, candidates: [], cost_usd: usage?.cost_usd ?? 0, debug: { candidates: [...agentCands, ...reused.filter((c) => !agentCands.some((a) => a.handle === c.handle))].slice(0, 30), usage, reused: reused.length } }).eq("id", id);
+  for (const u of unverified) { if (picked.length >= 3) break; if (!picked.some((p) => p.handle.toLowerCase() === u.handle.toLowerCase())) picked.push(u); }
 
   // 3. free prints for each pick (source=neighborhood: no credit), unlock for the user
   for (const c of picked) {
