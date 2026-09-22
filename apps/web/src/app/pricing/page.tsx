@@ -13,8 +13,8 @@ export default async function Pricing() {
       <div className="text-center">
         <div className="label mb-2">Pricing</div>
         <h1 className="h1">The prints are cheap. The pitches are the product.</h1>
-        <p className="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-muted">Scan as many creators as you like on any paid plan. You pay for what turns into deals: contacts, pitches written in your voice, and research on the brands nobody can find.</p>
-        {profile?.founding && !paid && <p className="mt-3 num text-[12px] text-ok">You joined in the beta, so your founding discount applies at checkout for as long as you stay subscribed.</p>}
+        <p className="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-muted">Print as many creators as you like, on every plan. You pay for what turns into deals: contacts, pitches written in your voice, research on the brands nobody can find, and neighborhoods of creators like yours.</p>
+        {profile?.founding && !paid && <p className="mt-3 num text-[12px] text-ok">You joined in the beta, so 30% off applies at checkout for as long as you stay subscribed.</p>}
       </div>
       <div className="mt-12 grid gap-4 md:grid-cols-3">
         <Card title={PLANS.free.name} price="$0" sub="forever" blurb={PLANS.free.blurb} features={[...PLANS.free.features]} cta={plan === "trial" ? "Current plan" : "Free tier"} current={plan === "trial"} />

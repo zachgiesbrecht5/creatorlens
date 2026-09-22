@@ -215,8 +215,8 @@ export default async function Home() {
 
       <section className="mt-24 flex flex-wrap items-center justify-between gap-6 border-t border-line pt-10">
         <div className="max-w-xl">
-          <div className="text-lg font-semibold tracking-tight">Free while in beta.</div>
-          <p className="mt-2 text-[15px] leading-relaxed text-muted">Sign in with Google, get 5 prints and 3 drafts to start, and keep going at no charge if you tell us what worked. Paid plans are coming; beta users keep a founding discount for good.</p>
+          <div className="text-lg font-semibold tracking-tight">Prints are free. Pay for the pitch.</div>
+          <p className="mt-2 text-[15px] leading-relaxed text-muted">Sign in with Google and print any creator for free. Contacts, pitch drafts, research and neighborhoods come with a free taste, and Pro is $49 a month when you pitch every week. Beta users keep 30% off for as long as they stay subscribed.</p>
         </div>
         <div className="flex gap-2">{!user && <Link href="/login" className="btn-dark">Pull your first print</Link>}<Link href="/pricing" className="btn-ghost">See plans</Link></div>
       </section>

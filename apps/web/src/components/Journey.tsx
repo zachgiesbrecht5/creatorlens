@@ -6,7 +6,7 @@ export type JourneyState = { roster: boolean; neighborhood: boolean; pitched: bo
 export function Journey({ s, compact = false }: { s: JourneyState; compact?: boolean }) {
   const steps = [
     { k: "roster", done: s.roster, title: "Add your roster", tip: "Type the handle of a creator you represent.", href: "/start" },
-    { k: "neighborhood", done: s.neighborhood, title: "Meet the neighborhood", tip: "Three creators in their lane get printed for free. See who pays them.", href: "/start" },
+    { k: "neighborhood", done: s.neighborhood, title: "Meet the neighborhood", tip: "Your first neighborhood is on us: three creators in their lane, printed. See who pays them.", href: "/start" },
     { k: "pitched", done: s.pitched, title: "Pitch a brand", tip: "Open a print, pick a brand, hit Pitch. The email lands in your Gmail drafts.", href: "/start" },
     { k: "searched", done: s.searched, title: "Print anyone", tip: "Search any creator from the home page. Your morning drop keeps three new ones coming each day.", href: "/" },
   ];

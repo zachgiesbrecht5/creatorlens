@@ -12,7 +12,7 @@ export function HoodView({ hoodId: initial, seed }: { hoodId: string; seed: { na
   async function again() {
     if (!seed?.creatorId) return;
     const r = await fetch("/api/neighborhood?again=1", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ creatorId: seed.creatorId }) });
-    const j = await r.json(); if (r.ok) setStartId(j.id);
+    const j = await r.json().catch(() => ({})); if (r.ok) setStartId(j.id); else if (r.status === 402) window.location.href = "/pricing?need=neighborhoods";
   }
   return (
     <div>
@@ -20,7 +20,7 @@ export function HoodView({ hoodId: initial, seed }: { hoodId: string; seed: { na
         <div>
           <div className="label mb-2">Neighborhood</div>
           <h1 className="h1">{seed?.name || "This creator"}'s lane</h1>
-          <p className="mt-3 max-w-md text-[15px] leading-relaxed text-muted">Three creators next to {seed?.name || "them"}, printed for free. Open any print, then walk to its neighbors, and so on.</p>
+          <p className="mt-3 max-w-md text-[15px] leading-relaxed text-muted">Three creators next to {seed?.name || "them"}, printed and ready. Open any print, then walk to its neighbors, and so on.</p>
           {seed && <div className="mt-5 flex items-center gap-3">{seed.avatar_url ? <img src={seed.avatar_url} alt="" className="h-12 w-12 rounded-full object-cover ring-2 ring-fg" /> : <div className="h-12 w-12 rounded-full bg-surface2" />}<div><div className="text-[15px] font-semibold">{seed.name}</div><div className="num text-[11px] text-muted">@{seed.handle} · {fmt(seed.followers)} · {seed.platform === "youtube" ? "YouTube" : "Instagram"}</div></div></div>}
         </div>
         <div className="st-machine"><PrinterMachine lcd={lcd} printing={printing} /></div>

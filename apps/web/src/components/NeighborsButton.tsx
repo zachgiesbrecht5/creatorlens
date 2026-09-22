@@ -5,6 +5,6 @@ export function NeighborsButton({ creatorId }: { creatorId: string }) {
   const [busy, setBusy] = useState(false);
   const router = useRouter();
   return (
-    <button disabled={busy} onClick={async () => { setBusy(true); const r = await fetch("/api/neighborhood", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ creatorId }) }); const j = await r.json(); setBusy(false); if (r.ok) router.push(`/n/${j.id}`); }} className="hover:text-accent disabled:opacity-50" title="Find three creators next to this one and print them, free">{busy ? "finding…" : "neighbors ◎"}</button>
+    <button disabled={busy} onClick={async () => { setBusy(true); const r = await fetch("/api/neighborhood", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ creatorId }) }); const j = await r.json().catch(() => ({})); setBusy(false); if (r.ok) router.push(`/n/${j.id}`); else if (r.status === 402) router.push("/pricing?need=neighborhoods"); }} className="hover:text-accent disabled:opacity-50" title="Find three creators next to this one and print them">{busy ? "finding…" : "neighbors ◎"}</button>
   );
 }

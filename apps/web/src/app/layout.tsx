@@ -44,7 +44,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     ...(profile.plan === "admin" ? [{ href: "/queue", label: "Queue and health" }] : []),
                   ]} />
                   <Link href="/pricing" className="pill ml-3 hover:border-fg" title={profile.plan === "trial" ? "Free plan. Click to see plans." : "Your plan"}>
-                    {profile.plan === "trial" ? `free · ${profile.scan_credits} prints · ${profile.draft_credits} drafts` : profile.plan}
+                    {profile.plan === "trial" ? `free · ${profile.draft_credits} drafts · ${profile.reveal_credits} reveals` : profile.plan}
                   </Link>
                   <form action="/auth/signout" method="post" className="ml-2"><button className="rounded-md px-2.5 py-1.5 text-dim hover:bg-surface2 hover:text-fg">Sign out</button></form>
                 </>

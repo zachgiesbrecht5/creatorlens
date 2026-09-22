@@ -13,7 +13,7 @@ export default async function Batch() {
       <div className="mb-6">
         <div className="label mb-1.5">Batch</div>
         <h1 className="h2">Print a list of creators</h1>
-        <p className="mt-1 text-sm text-muted">Paste handles or profile links, one per line. Up to 100 at a time. Already-printed creators come back instantly and cost nothing.{!paid && ` You have ${profile.scan_credits} prints left on the free plan.`}</p>
+        <p className="mt-1 text-sm text-muted">Paste handles or profile links, one per line. Up to 100 at a time. Already-printed creators come back instantly and cost nothing.{!paid && " Free plans can pull 25 new prints a day."}</p>
       </div>
       <BatchRunner />
     </div>

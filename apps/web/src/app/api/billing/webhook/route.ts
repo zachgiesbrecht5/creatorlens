@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   switch (event.type) {
     case "checkout.session.completed": {
       const s = event.data.object as Stripe.Checkout.Session;
-      if (s.subscription) applySub(await stripe().subscriptions.retrieve(String(s.subscription)));
+      if (s.subscription) await applySub(await stripe().subscriptions.retrieve(String(s.subscription)));
       break;
     }
     case "customer.subscription.updated":

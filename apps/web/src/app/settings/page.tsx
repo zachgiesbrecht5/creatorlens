@@ -86,7 +86,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           {sp.upgraded && <p className="mt-2 text-sm text-ok">You&apos;re upgraded. Credits refill every billing cycle.</p>}
           {(profile.plan === "trial" || profile.plan === "pro") && (
             <div className="mt-3 grid grid-cols-2 gap-3 text-center">
-              {profile.plan === "trial" && <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.scan_credits}</div><div className="label">prints left</div></div>}
+              <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.hood_credits ?? 0}</div><div className="label">neighborhoods left</div></div>
               {profile.plan === "trial" && <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.reveal_credits}</div><div className="label">reveals left</div></div>}
               <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.draft_credits}</div><div className="label">drafts left</div></div>
               <div className="rounded-lg bg-surface2 p-3"><div className="num text-2xl font-semibold">{profile.research_credits}</div><div className="label">research left</div></div>
@@ -97,7 +97,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             {profile.stripe_customer_id && <ManagePlan />}
           </div>
           <h3 className="mt-6 text-sm font-medium">Invite a teammate</h3>
-          <p className="mt-1 text-xs text-muted">You both get 10 scans when they sign up.</p>
+          <p className="mt-1 text-xs text-muted">You both get 5 pitch drafts when they sign up.</p>
           <input readOnly className="input-flat mt-2 font-mono text-[11px]" value={inviteUrl} />
         </div>
         <div className="card p-6">

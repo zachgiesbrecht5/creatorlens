@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   if (existing?.length) { await grantCreatorAccess(user.id, platform, handle); return NextResponse.json({ handle, cached: false, jobId: existing[0].id, piggyback: true }); }
 
   const { data: ok } = await admin.rpc("spend_credit", { p_user: user.id, p_kind: "scan", p_reason: "scan", p_ref: `${platform}:${handle}` });
-  if (!ok) { track(user.id, "print_locked", { platform, handle }); return NextResponse.json({ error: "You're out of scan credits. Invite a teammate for 10 more, or upgrade." }, { status: 402 }); }
+  if (!ok) { track(user.id, "print_locked", { platform, handle }); return NextResponse.json({ error: "You've pulled 25 new prints today, the free-plan daily limit. Cached prints still open, and it resets tomorrow. Pro has no limit." }, { status: 402 }); }
 
   const { data: job, error } = await admin.from("scan_jobs").insert({ user_id: user.id, platform, handle, priority: 3 }).select("id").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
