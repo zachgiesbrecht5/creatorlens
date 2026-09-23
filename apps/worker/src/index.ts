@@ -299,17 +299,21 @@ import { runResearch } from "./research";
 import { explainCreatorDeals, insightsBackfill } from "./insights";
 import { runNeighborhoods } from "./neighborhood";
 import { runBrandScans } from "./brandscan";
+import { discover } from "./discover";
 import { heartbeat, alert, nightly } from "./observe";
 
 let lastNightly = "";
 let lastReap = 0;
 let neighborhoodBusy = false;
+let lastDiscover = 0;
 async function tick() {
   try { await heartbeat(sb, { worker: WORKER_ID, inFlight, concurrency: CONCURRENCY }); } catch { /* ignore */ }
   const today = new Date().toISOString().slice(0, 10);
   if (lastNightly !== today && new Date().getUTCHours() >= 8) { lastNightly = today; nightly(sb).catch((e) => alert(sb, "nightly failed", { error: String(e?.message || e) })); }
   if (Date.now() - lastReap > 5 * 60000) { lastReap = Date.now(); sb.rpc("requeue_stuck_jobs").then(({ data }) => { if (data) log("requeued stuck jobs:", data); }); }
 
+  // Discovery runs hourly (budgeted per platform inside discover()).
+  if (Date.now() - lastDiscover > 3600e3) { lastDiscover = Date.now(); discover(sb).catch((e: any) => log("discover failed", e?.message)); }
   // Neighborhood finds run alongside scans (they're short and users are watching).
   if (!neighborhoodBusy) { neighborhoodBusy = true; runNeighborhoods(sb, 3).then(() => runBrandScans(sb, 1)).catch(() => {}).finally(() => { neighborhoodBusy = false; }); }
 

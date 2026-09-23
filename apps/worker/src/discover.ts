@@ -10,7 +10,14 @@ import { resolveChannel, lookupIgProfile, type IgToken } from "@creatorlens/engi
 import { alert } from "./observe";
 
 const MODEL = process.env.ANTHROPIC_NEIGHBORHOOD_MODEL || "claude-haiku-4-5";
-const PER_DAY = Number(process.env.DISCOVER_PER_DAY || 8);
+// Hourly budgets, sized to the platforms' limits and leaving headroom for what
+// users ask for. YouTube: ~10 units per quick print against 10,000/day, so 15
+// an hour is ~3,600 units/day and stops early if the day's units pass the
+// guard. Instagram: 200 calls/hour per connected account, ~4 per print, so 8
+// an hour per account uses ~1/6 of the pool.
+const YT_PER_HOUR = Number(process.env.DISCOVER_YT_PER_HOUR || 15);
+const IG_PER_HOUR = Number(process.env.DISCOVER_IG_PER_HOUR || 8);
+const YT_DAILY_GUARD = Number(process.env.DISCOVER_YT_DAILY_GUARD || 7000);   // stop YouTube discovery once the day's units pass this
 const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "PASTE_ME" ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[discover]", ...a);
 const YT_KEY = process.env.YT_API_KEY || "";
@@ -24,8 +31,13 @@ async function houseIgToken(sb: SupabaseClient): Promise<IgToken | null> {
 
 async function seeds(sb: SupabaseClient): Promise<Seed[]> {
   const out: Seed[] = [];
-  const { data: roster } = await sb.from("roster_creators").select("id,name,handle,platform,followers,niche,bio,neighborhood_at").or("neighborhood_at.is.null,neighborhood_at.lt." + new Date(Date.now() - 30 * 864e5).toISOString()).order("created_at").limit(4);
+  const { data: roster } = await sb.from("roster_creators").select("id,name,handle,platform,followers,niche,bio,neighborhood_at").or("neighborhood_at.is.null,neighborhood_at.lt." + new Date(Date.now() - 7 * 864e5).toISOString()).order("neighborhood_at", { ascending: true, nullsFirst: true }).limit(8);
   for (const r of roster || []) if (r.handle) out.push({ platform: r.platform === "youtube" ? "youtube" : "instagram", handle: String(r.handle).replace(/^@/, ""), name: r.name, followers: r.followers, niche: r.niche, bio: r.bio, why: `next to ${r.name}, who a manager on Sponsorprint represents` });
+  // walk outward from recent discoveries on each platform
+  for (const plat of ["youtube", "instagram"] as const) {
+    const { data: recent } = await sb.from("creators").select("handle,display_name,platform,followers,category,bio").eq("platform", plat).eq("is_public", true).not("last_scanned_at", "is", null).order("discovered_at", { ascending: false }).limit(3);
+    for (const c of recent || []) out.push({ platform: plat, handle: c.handle, name: c.display_name || c.handle, followers: c.followers, niche: c.category, bio: c.bio, why: `next to ${c.display_name || c.handle}, a recent discovery` });
+  }
   // thinnest category
   const { data: cats } = await sb.rpc("category_counts").select("category,n").order("n").limit(1) as any;
   if (cats?.[0]?.category) {
@@ -38,13 +50,22 @@ async function seeds(sb: SupabaseClient): Promise<Seed[]> {
 export async function discover(sb: SupabaseClient): Promise<number> {
   if (!client) return 0;
   const day = new Date().toISOString().slice(0, 10);
-  const { count: today } = await sb.from("creators").select("*", { count: "exact", head: true }).gte("discovered_at", `${day}T00:00:00Z`);
-  let budget = PER_DAY - (today || 0);
-  if (budget <= 0) return 0;
+  const hourAgo = new Date(Date.now() - 3600e3).toISOString();
+  // what's already been queued this hour, per platform
+  const { data: recentJobs } = await sb.from("scan_jobs").select("platform").eq("source", "discover").gte("created_at", hourAgo);
+  const usedYt = (recentJobs || []).filter((j) => j.platform === "youtube").length;
+  const usedIg = (recentJobs || []).filter((j) => j.platform === "instagram").length;
+  const { data: hq } = await sb.from("house_quota").select("yt_units").eq("day", day).maybeSingle();
+  const ytOpen = Number(hq?.yt_units || 0) < YT_DAILY_GUARD;
+  const { data: igTokens } = await sb.from("ig_connections").select("id").or("cooldown_until.is.null,cooldown_until.lt.now()");
+  const igAccounts = (igTokens || []).length;
+  const budgets: Record<"youtube" | "instagram", number> = { youtube: ytOpen ? Math.max(0, YT_PER_HOUR - usedYt) : 0, instagram: Math.max(0, IG_PER_HOUR * igAccounts - usedIg) };
+  if (budgets.youtube <= 0 && budgets.instagram <= 0) return 0;
   const tok = await houseIgToken(sb);
   let queued = 0;
   for (const s of await seeds(sb)) {
-    if (budget <= 0) break;
+    if (budgets[s.platform] <= 0) continue;
+    let budget = budgets[s.platform];
     try {
       const sys = `You find creators similar to a given creator for a talent manager. Return 6 candidates on the SAME platform, same content lane, roughly the same audience size (within 4x), real and active. Never the creator themselves. Reply ONLY with JSON: {"candidates":[{"handle":"...","why":"<one sentence>"}]}`;
       const user = `Platform: ${s.platform}\nCreator: ${s.name} (@${s.handle})\nAudience: ${s.followers || "unknown"}\nNiche: ${s.niche || "unknown"}\nBio: ${String(s.bio || "").slice(0, 300)}`;
@@ -71,7 +92,7 @@ export async function discover(sb: SupabaseClient): Promise<number> {
         // the reason rides on the job; the worker stamps the creator public when the print lands
         await sb.from("scan_jobs").insert({ user_id: null, platform: s.platform, handle, priority: 7, source: "discover", note: `${c.why} Found ${s.why}.` });
         void ext;
-        got++; budget--; queued++;
+        got++; budget--; budgets[s.platform]--; queued++;
       }
       // roster seeds: mark so the same one doesn't reseed nightly
       await sb.from("roster_creators").update({ neighborhood_at: new Date().toISOString() }).ilike("handle", s.handle).eq("platform", s.platform);
