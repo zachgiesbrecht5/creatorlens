@@ -8,7 +8,7 @@ import { WatchButton } from "@/components/WatchButton";
 import { NeighborsButton } from "@/components/NeighborsButton";
 import { Tour } from "@/components/Tour";
 import { PRINT_TOUR } from "@/components/tours";
-import { ShareBar } from "@/components/ShareBar";
+import { Missing } from "@/components/Missing";
 import { BrandWall, type WallCard, type RosterCreator } from "@/components/BrandWall";
 import { PrintingScan } from "@/components/PrintingScan";
 import { fmt } from "@/lib/fmt";
@@ -56,6 +56,23 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
   const whyBy = new Map((insights || []).map((i) => [i.brand_id, i]));
   const monthsBy = new Map<string, Set<string>>();
   for (const d of dealMonths || []) { const m = String(d.published_at).slice(0, 7); (monthsBy.get(d.brand_id) || monthsBy.set(d.brand_id, new Set()).get(d.brand_id)!).add(m); }
+  // Missing opportunities: brands paying other creators in this lane, not (yet) this one.
+  const myBrandIds = new Set(cards.map((c) => c.brand_id));
+  let missing: { brand_id: string; brand: string; website: string | null; creators: number; sample: string[] }[] = [];
+  if (creator.category) {
+    const { data: laneRows } = await admin.from("brand_wall").select("brand_id,brand,website,creator_id,is_junk,is_self_brand,is_mass_sponsor,creators!inner(category,display_name,handle)").eq("creators.category", creator.category).neq("creator_id", creator.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).limit(3000);
+    const agg = new Map<string, { brand_id: string; brand: string; website: string | null; creators: Set<string>; sample: string[] }>();
+    for (const r of (laneRows || []) as any[]) {
+      if (myBrandIds.has(r.brand_id)) continue;
+      const e = agg.get(r.brand_id) || agg.set(r.brand_id, { brand_id: r.brand_id, brand: r.brand, website: r.website, creators: new Set(), sample: [] }).get(r.brand_id)!;
+      if (!e.creators.has(r.creator_id)) { e.creators.add(r.creator_id); if (e.sample.length < 3) e.sample.push(r.creators?.display_name || r.creators?.handle); }
+    }
+    missing = [...agg.values()].filter((e) => e.creators.size >= 2).sort((a, b) => b.creators.size - a.creators.size).slice(0, 8).map((e) => ({ ...e, creators: e.creators.size }));
+  }
+  // Neighbors already found for this creator (by anyone in the house, or this user)
+  const { data: hoodRow } = await admin.from("neighborhoods").select("id,candidates,user_id").eq("creator_id", creator.id).eq("status", "done").order("created_at", { ascending: false }).limit(5);
+  const hood = (hoodRow || []).find((h) => (h.candidates || []).length > 0 && (h.user_id === user?.id || seesAll));
+  const neighbors = hood ? ((hood.candidates || []) as any[]).slice(0, 3).map((c) => ({ id: hood.id, handle: c.handle, platform: c.platform, name: c.display_name, avatar: c.avatar_url })) : [];
   const timeline: TL[] = cards.filter((c) => !c.is_self_brand && c.site_status !== "dead").map((c) => ({ brand_id: c.brand_id, brand: c.brand, category: c.category, months: [...(monthsBy.get(c.brand_id) || [])], why: whyBy.get(c.brand_id)?.why || null, season: whyBy.get(c.brand_id)?.season || null, repeat: !!c.repeat_partner, deals: Number(c.deals) }));
   const whyMap: Record<string, { why: string; season: string | null }> = Object.fromEntries((insights || []).map((i) => [i.brand_id, { why: i.why, season: i.season }]));
   const { data: roster } = user ? await admin.from("roster_creators").select("id,name,handle,platform,followers").eq("user_id", user.id).order("name") : { data: [] };
@@ -76,12 +93,12 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
               <span>{fmt(creator.followers)} {p === "youtube" ? "subscribers" : "followers"}</span>
               <span>printed {creator.last_scanned_at ? new Date(creator.last_scanned_at).toLocaleDateString() : "never"}</span>
             </div>
-            {user && <ShareBar url={`${process.env.NEXT_PUBLIC_APP_URL || "https://sponsorprint.com"}/p/${p}/${creator.handle}`} name={creator.display_name || creator.handle} og={`/api/og/print?platform=${p}&handle=${encodeURIComponent(creator.handle)}`} />}
             {user && <div className="pw-actions" data-tour="actions">
               {!active && <Reprint platform={p} handle={creator.handle} />}
               <WatchButton platform={p} handle={creator.handle} initial={watching} />
               <NeighborsButton creatorId={creator.id} />
             </div>}
+            {user && (missing.length > 0 || neighbors.length > 0) && <Missing missing={missing} neighbors={neighbors} lane={creator.category || "this lane"} creatorId={creator.id} platform={p} />}
           </div>
         </div>
         <div className="pw-stats">

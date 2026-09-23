@@ -6,6 +6,7 @@ export const runtime = "nodejs";
 
 // The print as a 1200x630 image: receipt on the right, headline on the left.
 export async function GET(req: NextRequest) {
+  try {
   const platform = req.nextUrl.searchParams.get("platform") || "youtube";
   const handle = req.nextUrl.searchParams.get("handle") || "";
   const d = await publicPrint(platform, handle);
@@ -41,4 +42,8 @@ export async function GET(req: NextRequest) {
     ),
     { width: 1200, height: 630 },
   );
+  } catch (e: any) {
+    console.error("og/print failed", e?.message);
+    return new ImageResponse(<div style={{ width: 1200, height: 630, display: "flex", alignItems: "center", justifyContent: "center", background: "#0b0d12", color: "#fff", fontSize: 40 }}>Sponsorprint</div>, { width: 1200, height: 630 });
+  }
 }
