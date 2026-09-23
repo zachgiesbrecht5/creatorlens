@@ -86,14 +86,21 @@ export async function classifyBrands(sb: SupabaseClient, ids?: string[], limit =
   const cols = "id,name,key,domain,website,site_title,site_description,site_status,site_checked_at";
   let q = sb.from("brands").select(cols).is("classified_at", null).eq("is_junk", false).eq("category_locked", false).order("deal_count", { ascending: false }).limit(limit);
   if (ids?.length) q = sb.from("brands").select(cols).in("id", ids).is("classified_at", null).eq("is_junk", false).eq("category_locked", false);
-  const { data: all } = await q;
-  // wait for the site check so the prompt has real brand info
-  const brands = (all || []).filter((b) => b.site_checked_at);
+  const { data: brands0 } = await q;
+  // caption evidence per brand: the model can tell STARFACE is skincare from "pimple patches" even when the site is thin
+  const evidenceBy = new Map<string, string>();
+  if (brands0?.length) {
+    const { data: ev } = await sb.from("partnerships").select("brand_id,evidence").in("brand_id", brands0.map((b) => b.id)).neq("status", "rejected").limit(600);
+    for (const e of ev || []) { const cur = evidenceBy.get(e.brand_id) || ""; if (cur.length < 220 && e.evidence) evidenceBy.set(e.brand_id, (cur + " · " + String(e.evidence).replace(/\s+/g, " ")).slice(0, 240)); }
+  }
+  const all = brands0;
+  // classify once the site check has run, or when captions already say what the brand sells
+  const brands = (all || []).filter((b) => b.site_checked_at || (evidenceBy.get(b.id) || "").length > 30);
   if (!brands.length) return 0;
 
   const out = await ask(
-    `You categorise sponsor brands for a creator-marketing database. For each item decide what the BRAND SELLS, judged only from its name, domain, site title and site description. Categories: ${JSON.stringify(CATS)}. Rules: Airbnb/hotels/airlines = Travel; drinkware and kitchen = Home; supplements and hydration = Wellness; apparel = Fashion; activewear = Fitness; SaaS and commerce tools = Business; toys and kids products = Baby or Parenting. Reply "JUNK" when the name is not a real company (a person, a song, a URL fragment, a generic word, a platform like YouTube). Reply with JSON only: {"<id>": {"category": "<category|JUNK>", "confidence": <0..1>}, ...}. Use confidence under 0.6 when the site info is missing and the name alone is ambiguous.`,
-    brands.map((b) => `${b.id} | name: ${b.name} | domain: ${b.domain || b.website || "unknown"} | site title: ${b.site_title || "n/a"} | site description: ${(b.site_description || "n/a").slice(0, 160)}`).join("\n"),
+    `You categorise sponsor brands for a creator-marketing database. For each item decide what the BRAND SELLS, judged from its name, domain, site title, site description and, most usefully, how creators mention it in their sponsored captions (the caption usually names the product). Categories: ${JSON.stringify(CATS)}. Rules: Airbnb/hotels/airlines = Travel; drinkware and kitchen = Home; supplements and hydration = Wellness; apparel = Fashion; activewear = Fitness; skincare, makeup and pimple patches = Beauty; SaaS, commerce tools and B2B services = Business (never use Business for consumer products); toys and kids products = Baby or Parenting. Reply "JUNK" when the name is not a real company (a person, a song, a URL fragment, a generic word, a platform like YouTube). Reply with JSON only: {"<id>": {"category": "<category|JUNK>", "confidence": <0..1>}, ...}. Use confidence under 0.6 when the site info is missing and the name alone is ambiguous.`,
+    brands.map((b) => `${b.id} | name: ${b.name} | domain: ${b.domain || b.website || "unknown"} | site title: ${b.site_title || "n/a"} | site description: ${(b.site_description || "n/a").slice(0, 160)} | how creators mention it: ${(evidenceBy.get(b.id) || "n/a").slice(0, 220)}`).join("\n"),
   );
   const now = new Date().toISOString();
   for (const b of brands) {

@@ -71,7 +71,7 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
   if (cat) {
     const { data: idx } = await sb.from("creators").select("handle,display_name,avatar_url,followers,category,platform,external_id").eq("platform", platform).eq("category", cat).not("last_scanned_at", "is", null).order("followers", { ascending: false }).limit(60);
     for (const c of idx || []) {
-      if (picked.length >= 2) break;   // leave room for fresh discoveries
+      if (picked.length >= 1) break;   // at most one familiar face; the rest should be new
       if (seen.has(c.handle.toLowerCase()) || !inBand(c.followers)) continue;
       seen.add(c.handle.toLowerCase());
       picked.push({ platform, handle: c.handle, display_name: c.display_name || c.handle, avatar_url: c.avatar_url, followers: c.followers, reason: `Same lane (${cat}) and a similar audience size. Already in the index.`, cached: true, external_id: c.external_id });

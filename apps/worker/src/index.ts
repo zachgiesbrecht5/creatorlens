@@ -306,12 +306,17 @@ let lastNightly = "";
 let lastReap = 0;
 let neighborhoodBusy = false;
 let lastDiscover = 0;
+let lastClassify = 0;
+let classifyBusy = false;
 async function tick() {
   try { await heartbeat(sb, { worker: WORKER_ID, inFlight, concurrency: CONCURRENCY }); } catch { /* ignore */ }
   const today = new Date().toISOString().slice(0, 10);
   if (lastNightly !== today && new Date().getUTCHours() >= 8) { lastNightly = today; nightly(sb).catch((e) => alert(sb, "nightly failed", { error: String(e?.message || e) })); }
   if (Date.now() - lastReap > 5 * 60000) { lastReap = Date.now(); sb.rpc("requeue_stuck_jobs").then(({ data }) => { if (data) log("requeued stuck jobs:", data); }); }
 
+  // Brand and creator classification runs every two minutes regardless of load; the
+  // old "only when idle" rule starved it once discovery kept the worker busy.
+  if (!classifyBusy && Date.now() - lastClassify > 120e3) { lastClassify = Date.now(); classifyBusy = true; classifyBackfill(sb).catch((e: any) => log("classify failed", e?.message)).finally(() => { classifyBusy = false; }); }
   // Discovery runs hourly (budgeted per platform inside discover()).
   if (Date.now() - lastDiscover > 3600e3) { lastDiscover = Date.now(); discover(sb).catch((e: any) => log("discover failed", e?.message)); }
   // Neighborhood finds run alongside scans (they're short and users are watching).
