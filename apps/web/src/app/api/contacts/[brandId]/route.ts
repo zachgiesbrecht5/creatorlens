@@ -150,24 +150,36 @@ function rootOf(host: string) {
 // with partnership / influencer titles, then reveal the top match's email.
 async function apollo(domain: string) {
   const key = process.env.APOLLO_API_KEY!;
-  const search = await fetch("https://api.apollo.io/api/v1/mixed_people/search", {
-    method: "POST", headers: { "content-type": "application/json", "x-api-key": key },
-    body: JSON.stringify({ q_organization_domains: domain, person_titles: ["influencer marketing", "influencer", "creator partnerships", "creator marketing", "partnerships", "brand partnerships", "social media", "community", "brand marketing", "marketing manager", "marketing director", "head of marketing", "communications", "public relations"], person_seniorities: ["manager", "director", "head", "vp", "senior", "entry"], page: 1, per_page: 10 }),
-  }).catch(() => null);
-  if (!search || !search.ok) return [] as any[];
+  // Apollo's current people search is api_search with q_organization_domains_list (the old
+  // mixed_people/search + q_organization_domains silently returns nothing on new plans).
+  const search = await fetch("https://api.apollo.io/api/v1/mixed_people/api_search", {
+    method: "POST", headers: { "content-type": "application/json", "x-api-key": key, "Cache-Control": "no-cache" },
+    body: JSON.stringify({ q_organization_domains_list: [domain], person_titles: ["influencer marketing", "influencer", "creator partnerships", "creator marketing", "partnerships", "brand partnerships", "social media", "community", "brand marketing", "marketing manager", "marketing director", "head of marketing", "communications", "public relations"], person_seniorities: ["manager", "director", "head", "vp", "senior", "entry", "owner", "founder", "c_suite"], page: 1, per_page: 10 }),
+  }).catch((e) => ({ ok: false, status: 0, text: async () => String(e?.message || e) } as any));
+  if (!search || !search.ok) {
+    const body = await search?.text?.().catch(() => "");
+    console.error("apollo search failed", search?.status, String(body).slice(0, 300));
+    await alertApollo(`search ${search?.status}: ${String(body).slice(0, 200)}`, domain);
+    return [] as any[];
+  }
   const j: any = await search.json();
   const out: any[] = [];
   const ranked = (j.people || []).sort((a: any, b: any) => titleScore(b.title || "") - titleScore(a.title || "")).slice(0, 3);
+  if (!ranked.length) console.log("apollo: no people at", domain);
   for (const p of ranked) {
     const m = await fetch("https://api.apollo.io/api/v1/people/match", {
       method: "POST", headers: { "content-type": "application/json", "x-api-key": key },
       body: JSON.stringify({ id: p.id, reveal_personal_emails: false }),
     }).catch(() => null);
+    if (m && !m.ok) { const b = await m.text().catch(() => ""); console.error("apollo match failed", m.status, b.slice(0, 200)); await alertApollo(`match ${m.status}: ${b.slice(0, 200)}`, domain); continue; }
     const mj: any = m && m.ok ? await m.json() : null;
     const email = mj?.person?.email;
     if (email) out.push({ name: p.name, email, title: p.title, confidence: mj.person.email_status === "verified" ? 95 : 70, source: "apollo", source_url: p.linkedin_url || null });
   }
   return out;
+}
+async function alertApollo(detail: string, domain: string) {
+  try { await supabaseAdmin().from("alerts").insert({ source: "apollo", message: "Apollo call failed", detail: { domain, detail } }); } catch { /* best effort */ }
 }
 
 // House brands of the big groups: staff email lives at the parent. Cheap first
