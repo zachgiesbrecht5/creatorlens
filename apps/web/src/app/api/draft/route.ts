@@ -56,7 +56,18 @@ export async function POST(req: NextRequest) {
     ...(others || []).map((o: any) => o.creators).filter(Boolean).map((c: any) => ({ name: nice(c), followers: fmtK(c.followers), category: null }))]
     .filter((p) => p.name).slice(0, 2);
 
+  // The pitched creator's own past partners, from their print if they're in the index (real names only).
+  const { data: mineRow } = await admin.from("creators").select("id").eq("platform", mine.platform === "youtube" ? "youtube" : "instagram").ilike("handle", String(mine.handle || "").replace(/^@/, "")).maybeSingle();
+  const { data: mineWall } = mineRow ? await admin.from("brand_wall").select("brand,deals,last_seen").eq("creator_id", mineRow.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").order("last_seen", { ascending: false }).limit(6) : { data: [] };
+  const ownPartners = (mineWall || []).map((w) => w.brand).filter((b) => b.toLowerCase() !== brand.name.toLowerCase()).slice(0, 3);
+  const { data: brandRow } = await admin.from("brands").select("category,site_title,site_description").eq("id", brandId).maybeSingle();
+  const q = Math.floor(new Date().getMonth() / 3) + 1;
+  const askQuarter = q === 4 ? `Q1 ${new Date().getFullYear() + 1}` : `Q${q + 1}`;
+  const senderFirst = (profile.full_name || "").trim().split(/\s+/)[0] || "";
   const facts = {
+    askQuarter,
+    creatorOwnPartners: ownPartners,
+    brandWhatTheySell: [brandRow?.category, brandRow?.site_title, (brandRow?.site_description || "").slice(0, 200)].filter(Boolean).join(" · ") || null,
     sender: { name: profile.full_name, email: gc?.email || profile.email || null, org: org?.name || null, signOff: profile.signature || null },
     creatorBeingPitched: { name: mine.name, handle: mine.handle, platform: mine.platform, followers: mine.followers, niche: mine.niche, pitchAngle: mine.pitch_angle, mediaKit: mine.media_kit_url, profileUrl: profileUrlFor(mine.platform, mine.handle) },
     recipient: { email: toEmail, name: contact?.name || null, title: contact?.title || null },
@@ -69,25 +80,39 @@ export async function POST(req: NextRequest) {
   const msg = await client.messages.create({
     model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
     max_tokens: 900,
-    system: `You write brand-partnership pitch emails for a talent manager (the sender) who represents creatorBeingPitched. The sender does NOT represent proofCreator; proofCreator's deal with this brand is only evidence that the brand invests in creators of this kind. Never imply the sender manages proofCreator and never ask to "rebook" them. Lead with why creatorBeingPitched fits this brand, using pitchAngle and niche. Social proof: mention that the brand has worked with creators like <proofPoints name> in ONE clause at most, using the display name exactly as given; never write an @handle, a lowercase username, or a URL in the prose, and never describe the proof creator's content or family. Follow the sender's STYLE GUIDE exactly; it overrides everything else about tone and structure. Use only the FACTS given; never invent numbers, past deals, or names. Never quote a rate. Keep it under 170 words. The body MUST start with a greeting on its own line: "Hi <recipient first name>," when recipient.name is known, otherwise "Hi <brand> team,". Then a blank line, then the pitch: at most three short paragraphs and 120 words total. Paragraph 1: one concrete idea for what creatorBeingPitched would make for this brand (from pitchAngle). Paragraph 2: who the creator is in one or two lines, ending with their profile link on its own line in the form "Profile: <profileUrl>" (and "Media kit: <mediaKit>" on the next line if mediaKit is present). Paragraph 3: one clause of social proof (proofPoints, by display name) and one question asking about their plans or budget range. No bullet points, no hype words, no exclamation marks. Do NOT add a sign-off or signature; those are appended automatically. Output strictly as JSON: {"subject": string, "body": string}. Plain text body, no markdown.`,
+    system: `You write one brand-partnership pitch email from a talent manager (the sender) to a brand, for creatorBeingPitched. Follow this exact structure; it is tuned on thousands of sent pitches and a reply-rate audit, so do not improvise the shape.
+
+LINE 1 (greeting): "Hi <recipient first name>!" if recipient.name is known, otherwise "Hi <brand> team!".
+PARAGRAPH 1 (four sentences, in this order):
+  1. Intro: "I'm <sender first name>, <sender role> of <sender org>." (use sender.name and sender.org; if org is missing, "I'm <first name>, a talent manager.")
+  2. CONCEPT sentence: name a specific video or post that does not exist yet, in this creator's own format, built on a concrete detail about what THIS brand sells (use brandWhatTheySell and brandDealsWithProofCreator). Where possible tie it to a dated moment ("for December houseguests", "before back to school", "for the ${"$"}{askQuarter} launch window"). Never "could be a strong fit" or "your customers are her audience". This sentence earns the reply.
+  3. CREDIBILITY sentence: who the creator is and why they are the right person to tell that story; include their follower count and market HERE and never earlier (e.g. "... and @handle reaches 202K on Instagram out of LA"). Write the handle exactly as creatorBeingPitched.handle with the @.
+  4. PROOF sentence: "She/He/They has recently partnered with brands like A and B." using ONLY creatorOwnPartners. If that list is empty, use one clause of social proof about the brand instead: "You've worked with creators like <proofPoints name>" (display name exactly as given, never a handle), or omit the sentence entirely. Never invent partners or numbers.
+PARAGRAPH 2 (the ask, verbatim, adjust only pronoun/name/quarter): "Are you booking paid creator partnerships for ${"$"}{askQuarter}? Would love to make something happen with <creator first name>. Happy to send over <his/her/their> media kit and rates!"
+OPTIONAL, only when recipient.title is adjacent to influencer/partnerships (e.g. PR, brand, social, community): add one final line: "I realize influencer partnerships may not fall under your scope directly, if there's a better person on the team I should be connecting with, I'd really appreciate the nudge in the right direction."
+
+Rules: plain text; no bullet points; no em dashes or en dashes anywhere; no hype words (excited, amazing, perfect, incredible, love to explore); at most one exclamation mark outside the greeting and the ask; no rates or numbers other than the follower count and real view counts; never describe the proof creator's content or family; do not add a sign-off or signature (appended automatically); under 140 words. If the sender has a STYLE GUIDE in the user message, apply it only to word choice, not to the structure above. Output strictly JSON: {"subject": string, "body": string}.`,
     messages: [{ role: "user", content: `STYLE GUIDE:\n${style}\n\nFACTS:\n${JSON.stringify(facts, null, 2)}` }],
   });
   const text = msg.content.map((c) => (c.type === "text" ? c.text : "")).join("");
   let parsed: { subject: string; body: string };
   try { parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)); } catch { return NextResponse.json({ error: "Model returned an unreadable draft; try again" }, { status: 502 }); }
   // Subject is always "<creator> x <brand>", nothing clever.
-  parsed.subject = `${mine.name} x ${brand.name}`;
+  const h = String(mine.handle || "").replace(/^@/, "");
+  parsed.subject = h && mine.platform !== "youtube" ? `@${h} x ${brand.name}` : `${mine.name} x ${brand.name}`;
   // Profile link guard: the brand must be able to click through to the creator.
   const purl = profileUrlFor(mine.platform, mine.handle);
-  if (purl && !parsed.body.includes(purl)) parsed.body = parsed.body.trimEnd() + `\n\nProfile: ${purl}${mine.media_kit_url ? `\nMedia kit: ${mine.media_kit_url}` : ""}`;
-  // No handles in prose, ever.
-  parsed.body = parsed.body.replace(/@([a-z0-9_.]{3,})/gi, (_m, h) => (h.toLowerCase() === String(creator.handle).toLowerCase() ? nice(creator) : h));
+  if (purl && !parsed.body.includes(purl) && !parsed.body.toLowerCase().includes(`@${h.toLowerCase()}`)) parsed.body = parsed.body.trimEnd() + `\n\nProfile: ${purl}`;
+  // The proof creator is never named by handle; the pitched creator's own handle stays (the template links it).
+  parsed.body = parsed.body.replace(/@([a-z0-9_.]{3,})/gi, (_m, hh) => (hh.toLowerCase() === String(creator.handle).toLowerCase() ? nice(creator) : `@${hh}`));
   // Greeting guard: if the model skipped it, add one.
   const firstName = (contact?.name || "").trim().split(/\s+/)[0] || "";
-  if (!/^\s*(hi|hey|hello|dear)\b/i.test(parsed.body)) parsed.body = `Hi ${firstName || brand.name + " team"},\n\n` + parsed.body.trimStart();
+  if (!/^\s*(hi|hey|hello|dear)\b/i.test(parsed.body)) parsed.body = `Hi ${firstName || brand.name + " team"}!\n\n` + parsed.body.trimStart();
   // Strip any sign-off the model added anyway, then append the user's own.
   parsed.body = parsed.body.replace(/\n+\s*(best|thanks|cheers|regards|rooting for you|talk soon)[,!.]?\s*(\n.*)?$/i, "").trimEnd();
   const signOff = (profile.signature || "Best").replace(/,\s*$/, "") + ",";
+  // strip any dash the model slipped in
+  parsed.body = parsed.body.replace(/\s[\u2013\u2014]\s/g, ", ").replace(/[\u2013\u2014]/g, ",");
   // In the Gmail compose window Gmail inserts the user's real (formatted) signature itself,
   // so we only add the sign-off line there. A Gmail API draft gets no automatic signature,
   // so we append the plain-text one from Settings.
@@ -95,7 +120,7 @@ export async function POST(req: NextRequest) {
   const bodyForCompose = parsed.body + "\n\n" + signOff;
   // API drafts: the user's REAL Gmail signature (HTML, imported when they connected Gmail); plain-text block only as a fallback
   const bodyForApi = parsed.body + "\n\n" + signOff + (profile.signature_html ? "" : "\n" + plainSig);
-  const htmlForApi = bodyToHtml(parsed.body + "\n\n" + signOff, profile.signature_html || null);
+  const htmlForApi = bodyToHtml(parsed.body + "\n\n" + signOff, profile.signature_html || null, h && purl ? { handle: h, url: purl } : null);
   parsed.body = bodyForApi;
 
   // a pasted address becomes a private contact for this user only (never shared)

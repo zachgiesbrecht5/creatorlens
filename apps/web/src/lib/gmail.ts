@@ -32,8 +32,9 @@ export async function fetchGmailSignature(accessToken: string): Promise<{ email:
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 /** Plain text pitch -> simple HTML paragraphs, then the user's real signature HTML underneath. */
-export function bodyToHtml(body: string, signatureHtml?: string | null) {
-  const paras = body.trim().split(/\n{2,}/).map((p) => `<p style="margin:0 0 1em 0">${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
+export function bodyToHtml(body: string, signatureHtml?: string | null, link?: { handle: string; url: string } | null) {
+  const linkify = (t: string) => (link ? t.replace(new RegExp(`@${link.handle.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}`, "gi"), `<a href="${link.url}" target="_blank">@${link.handle}</a>`) : t);
+  const paras = body.trim().split(/\n{2,}/).map((p) => `<p style="margin:0 0 1em 0">${linkify(esc(p)).replace(/\n/g, "<br>")}</p>`).join("");
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222">${paras}${signatureHtml ? `<div>${signatureHtml}</div>` : ""}</div>`;
 }
 
