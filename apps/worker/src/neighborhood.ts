@@ -5,7 +5,7 @@
 // platform (cheap lookups) and keep the ones that fit; (4) queue free prints.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { resolveChannel, lookupIgProfile, recentVideoIds, type IgToken } from "@creatorlens/engine";
+import { resolveChannel, lookupIgProfile, recentVideoIds, searchVideoChannels, type IgToken } from "@creatorlens/engine";
 import { alert } from "./observe";
 
 const MODEL = process.env.ANTHROPIC_NEIGHBORHOOD_MODEL || "claude-haiku-4-5";
@@ -65,6 +65,27 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
   const liked = (fb || []).filter((f) => f.verdict === "like").map((f) => "@" + f.handle);
   const passed = (fb || []).filter((f) => f.verdict === "pass").map((f) => "@" + f.handle);
 
+  // 0. co-sponsor graph (free, and the best signal there is): creators paid by the
+  //    same brands as this one. Proven-paid, same lane by definition.
+  const { data: seedRow } = await sb.from("creators").select("id").eq("platform", platform).ilike("handle", handle).maybeSingle();
+  if (seedRow) {
+    const { data: myBrands } = await sb.from("brand_wall").select("brand_id").eq("creator_id", seedRow.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low");
+    const bids = (myBrands || []).map((b) => b.brand_id);
+    if (bids.length) {
+      const { data: shared } = await sb.from("brand_wall").select("creator_id,brand,creators!inner(id,handle,display_name,avatar_url,followers,platform,external_id,last_scanned_at)").in("brand_id", bids).neq("creator_id", seedRow.id).eq("creators.platform", platform).limit(600);
+      const tally = new Map<string, { c: any; brands: Set<string> }>();
+      for (const row of (shared || []) as any[]) { const c = row.creators; if (!c) continue; const e = tally.get(c.id) || tally.set(c.id, { c, brands: new Set() }).get(c.id)!; e.brands.add(row.brand); }
+      const ranked = [...tally.values()].filter((e) => inBand(e.c.followers) && !seen.has(String(e.c.handle).toLowerCase())).sort((a, b) => b.brands.size - a.brands.size);
+      for (const e of ranked) {
+        if (picked.length >= 2) break;   // leave one slot for a fresh face
+        seen.add(String(e.c.handle).toLowerCase());
+        const bl = [...e.brands].slice(0, 3).join(", ");
+        picked.push({ platform, handle: e.c.handle, display_name: e.c.display_name || e.c.handle, avatar_url: e.c.avatar_url, followers: e.c.followers, reason: `Paid by the same brands as ${r.name}: ${bl}.`, cached: !!e.c.last_scanned_at, external_id: e.c.external_id });
+      }
+      if (picked.length) log(handle, "co-sponsor graph gave", picked.length);
+    }
+  }
+
   // 1. our index: same category, similar size, same platform
   const { data: rosterCat } = await sb.from("creators").select("category").eq("platform", platform).ilike("handle", handle).maybeSingle();
   const cat = rosterCat?.category || null;
@@ -92,6 +113,44 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
       picked.push({ platform, handle: c.handle, display_name: c.display_name || c.handle, avatar_url: c.avatar_url, followers: c.followers, reason: c.reason || `Same lane (${laneKey}), similar size.`, media: (c.media as any) || [], bio: c.bio, external_id: c.external_id });
     }
     if (picked.length >= 3) log(handle, "served from lane cache", laneKey, band);
+  }
+
+  // 1c. YouTube's own search (quota units, no dollars): channels making videos on the
+  //     seed's topic, sized by the band. Only when the free tiers left a gap.
+  if (platform === "youtube" && YT_KEY && picked.length < 3 && (cat || r.niche)) {
+    try {
+      const q = `${cat || r.niche} ${platform === "youtube" ? "channel" : ""} sponsored`;
+      const chans = await searchVideoChannels(YT_KEY, q, 20);
+      for (const ch of chans) {
+        if (picked.length >= 3) break;
+        const key = ch.channelId.toLowerCase();
+        if (seen.has(key)) continue;
+        const full = await resolveChannel(YT_KEY, ch.channelId);
+        if (!full || !inBand(full.subs)) continue;
+        const hh = (full.handle || full.id).replace(/^@/, "");
+        if (seen.has(hh.toLowerCase())) continue;
+        seen.add(key); seen.add(hh.toLowerCase());
+        picked.push({ platform, handle: hh, display_name: full.title, avatar_url: full.thumbnail || null, followers: full.subs ?? null, reason: `Makes ${cat || r.niche} videos with sponsors, similar size.`, external_id: full.id });
+      }
+      if (picked.length) log(handle, "youtube search filled to", picked.length);
+    } catch (e: any) { log("yt search tier failed", e?.message); }
+  }
+
+  // 1d. Instagram: who the seed tags in their own captions (collabs are the same lane), verified cheaply
+  if (platform === "instagram" && picked.length < 3 && seedRow) {
+    const { data: me } = await sb.from("creators").select("mentions").eq("id", seedRow.id).maybeSingle();
+    const ment = ((me?.mentions || []) as { handle: string; count: number }[]).filter((m) => !seen.has(m.handle.toLowerCase())).slice(0, 8);
+    const tok = ment.length ? await houseIgToken(sb) : null;
+    for (const m of ment) {
+      if (picked.length >= 3 || !tok) break;
+      try {
+        const p = await lookupIgProfile(tok, m.handle);
+        if (!p || !inBand(p.followers) || p.followers < 5000) continue;
+        seen.add(p.username.toLowerCase());
+        picked.push({ platform, handle: p.username, display_name: p.name, avatar_url: p.avatar, followers: p.followers, reason: `${r.name} tags them in ${m.count} post${m.count === 1 ? "" : "s"}: a collab partner in the same lane.`, media: p.media || [], bio: p.biography || null });
+      } catch { /* not a professional account, skip */ }
+    }
+    if (picked.length) log(handle, "mentions tier filled to", picked.length);
   }
 
   // 2. candidates: first reuse what the agent already found for this same seed creator

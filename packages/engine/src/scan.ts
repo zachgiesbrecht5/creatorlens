@@ -37,6 +37,8 @@ export interface ScanResult {
   itemsChecked: number;
   rows: PartnershipRow[];
   quotaUnits: number;
+  /** Instagram only: accounts this creator @mentions in captions (collabs, friends), with counts. */
+  mentions?: { handle: string; count: number }[];
 }
 
 export interface YtScanOptions { lookbackDays?: number; maxVideos?: number }
@@ -86,10 +88,19 @@ export async function scanInstagram(token: IgToken, username: string, maxPosts =
     }
   }
   rows.sort((a, b) => b.confidenceScore - a.confidenceScore);
+  // @mentions that aren't the creator or a detected sponsor: the free "who do they collab with" signal
+  const brandKeys = new Set(rows.map((r) => r.brand.toLowerCase().replace(/[^a-z0-9]/g, "")));
+  const counts = new Map<string, number>();
+  for (const p of posts) for (const m of String(p.caption || "").matchAll(/(^|[^\w@])@([a-z0-9_.]{2,30})/gi)) {
+    const h = m[2].toLowerCase().replace(/\.$/, "");
+    if (h === profile.username.toLowerCase() || brandKeys.has(h.replace(/[^a-z0-9]/g, ""))) continue;
+    counts.set(h, (counts.get(h) || 0) + 1);
+  }
+  const mentions = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25).map(([handle, count]) => ({ handle, count }));
   return {
     platform: "instagram",
     creator: profileToCreator(profile),
-    itemsChecked: posts.length, rows, quotaUnits: Math.ceil(posts.length / 50) || 1,
+    itemsChecked: posts.length, rows, quotaUnits: Math.ceil(posts.length / 50) || 1, mentions,
   };
 }
 
