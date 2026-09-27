@@ -69,6 +69,10 @@ export default async function Queue() {
   const anonTotal = byAnon.size, signedUp = [...byAnon.values()].filter((e) => e.user).length, returning = [...byAnon.values()].filter((e) => e.days.size >= 2).length;
   const whoAll = new Map((outsiders || []).map((p) => [p.id, p.full_name || p.email]));
   const crRows = (cr || []).map((c: any) => ({ id: c.id, scope: c.scope, note: c.note, created_at: c.created_at, brand: c.brands?.name || "?", creator: c.creators?.handle || "?", by: whoAll.get(c.user_id) || "someone" }));
+  const { data: people } = await admin.from("profiles").select("id,email,full_name,plan,founding,created_at,last_seen_at").order("created_at", { ascending: false }).limit(20);
+  const pids = (people || []).map((p) => p.id);
+  const { data: acts } = pids.length ? await admin.from("events").select("user_id,name").in("user_id", pids).in("name", ["print", "print_cached", "draft", "reveal", "neighborhood", "checkout_started", "upgraded"]) : { data: [] };
+  const count = (uid: string, ...names: string[]) => (acts || []).filter((a) => a.user_id === uid && names.includes(a.name)).length;
   const workerAge = hb?.last_seen ? (Date.now() - new Date(hb.last_seen).getTime()) / 60000 : null;
   const funnel = (rows: { name: string; user_id: string | null }[] | null) => {
     const by: Record<string, Set<string>> = {};
@@ -164,7 +168,13 @@ export default async function Queue() {
         <div className="font-mono text-[11px] text-dim">{outsideIds.length} outside account{outsideIds.length === 1 ? "" : "s"}</div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="card overflow-x-auto">
+        <div className="card mb-6 overflow-x-auto">
+        <div className="flex items-baseline justify-between px-4 pt-4"><div className="label">People · newest first</div><div className="num text-[10.5px] text-dim">signups ping the alert webhook when ALERT_WEBHOOK_URL is set</div></div>
+        <table className="tbl"><thead><tr><th>Who</th><th>Plan</th><th>Joined</th><th>Last seen</th><th className="text-right">Prints</th><th className="text-right">Reveals</th><th className="text-right">Drafts</th><th className="text-right">Neighborhoods</th></tr></thead>
+          <tbody>{(people || []).map((p) => <tr key={p.id}><td><div className="font-medium">{p.full_name || "(no name)"}</div><div className="num text-[10.5px] text-muted">{p.email}</div></td><td className="num text-[11px]">{p.plan}{p.founding ? " · founder" : ""}</td><td className="num text-[11px] text-muted">{new Date(p.created_at).toLocaleDateString()}</td><td className="num text-[11px] text-muted">{p.last_seen_at ? new Date(p.last_seen_at).toLocaleDateString() : "never"}</td><td className="num text-right">{count(p.id, "print", "print_cached")}</td><td className="num text-right">{count(p.id, "reveal")}</td><td className="num text-right">{count(p.id, "draft")}</td><td className="num text-right">{count(p.id, "neighborhood")}</td></tr>)}</tbody>
+        </table>
+      </div>
+      <div className="card overflow-x-auto">
           <div className="border-b border-line px-4 py-3 text-sm font-medium">Creators they unlocked</div>
           <table className="tbl">
             <thead><tr><th>Creator</th><th>By</th><th>When</th></tr></thead>

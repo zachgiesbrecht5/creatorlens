@@ -300,6 +300,7 @@ import { explainCreatorDeals, insightsBackfill } from "./insights";
 import { runNeighborhoods } from "./neighborhood";
 import { runBrandScans } from "./brandscan";
 import { discover } from "./discover";
+import { announceSignups } from "./signups";
 import { heartbeat, alert, nightly } from "./observe";
 
 let lastNightly = "";
@@ -317,6 +318,7 @@ async function tick() {
   // Brand and creator classification runs every two minutes regardless of load; the
   // old "only when idle" rule starved it once discovery kept the worker busy.
   if (!classifyBusy && Date.now() - lastClassify > 120e3) { lastClassify = Date.now(); classifyBusy = true; classifyBackfill(sb).catch((e: any) => log("classify failed", e?.message)).finally(() => { classifyBusy = false; }); }
+  announceSignups(sb).catch(() => {});
   // Discovery runs hourly (budgeted per platform inside discover()).
   if (Date.now() - lastDiscover > 3600e3) { lastDiscover = Date.now(); discover(sb).catch((e: any) => log("discover failed", e?.message)); }
   // Neighborhood finds run alongside scans (they're short and users are watching).
