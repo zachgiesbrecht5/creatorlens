@@ -7,7 +7,7 @@ export function HoodView({ hoodId: initial, seed }: { hoodId: string; seed: { na
   const [startId, setStartId] = useState(initial);
   const { hood, rounds, searching, hoodId } = useHood(startId, seed?.creatorId ? { creatorId: seed.creatorId } : undefined);
   const printing = !!hood && (hood.status !== "done" || hood.candidates.some((c) => c.print_status !== "done" && c.print_status !== "failed"));
-  const lcd = searching ? `ROUND ${rounds + 1}: LOOKING FURTHER…` : !hood ? "SCANNING THE LANE…" : hood.status === "failed" ? "NO NEIGHBORS FOUND" : hood.status !== "done" ? "SCANNING THE LANE…" : printing ? `PRINTING ${hood.candidates.filter((c) => c.print_status === "done").length + 1}/${hood.candidates.length}` : `${hood.candidates.filter((c) => c.brands > 0).length} WITH DEALS ✓`;
+  const lcd = searching ? `ROUND ${rounds + 1}: LOOKING FURTHER…` : !hood ? "SCANNING THE LANE…" : hood.status === "failed" ? (/usage limits|spend limit|credit/i.test(String(hood.error || "")) ? "MODEL BUDGET REACHED" : "NO NEIGHBORS FOUND") : hood.status !== "done" ? "SCANNING THE LANE…" : printing ? `PRINTING ${hood.candidates.filter((c) => c.print_status === "done").length + 1}/${hood.candidates.length}` : `${hood.candidates.filter((c) => c.brands > 0).length} WITH DEALS ✓`;
   const fmt = (n: number | null) => (n == null ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
   async function again() {
     if (!seed?.creatorId) return;

@@ -7,6 +7,13 @@ import { SwipeDeck } from "@/components/SwipeDeck";
 // The three-card neighborhood reveal, usable from Start or from any print.
 export type Cand = { platform: string; handle: string; display_name: string; avatar_url: string | null; followers: number | null; reason: string; print_status: string; brands: number; top: string[]; media?: { url: string; kind: string; thumb: string | null }[]; bio?: string | null; verdict?: "like" | "pass" };
 export type Hood = { id: string; status: string; error?: string | null; candidates: Cand[] };
+const friendlyError = (e?: string | null) => {
+  const t = String(e || "");
+  if (/usage limits|spend limit|credit balance|billing/i.test(t)) return "model spend limit reached: raise the monthly limit in the Anthropic console";
+  if (/rate limit|429/i.test(t)) return "the platform is rate-limiting right now, try again in a few minutes";
+  if (/No healthy Instagram/i.test(t)) return "Instagram calls are cooling down, try again shortly";
+  return "nothing close enough this round; try find three more";
+};
 const fmt = (n: number | null | undefined) => (n == null ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
 
 const MIN_GOOD = 2;      // neighbors with at least one brand before we stop
@@ -76,7 +83,7 @@ export function HoodCards({ hood, from }: { hood: Hood | null; from?: string }) 
       {([...(hood?.candidates || []), ...Array(Math.max(0, 3 - (hood?.candidates.length || 0))).fill(null)] as (Cand | null)[]).map((c, i) => (
         <div key={c ? c.handle : `blank-${i}`} className={`st-card ${c ? "st-card-in" : ""} ${c?.print_status === "done" ? "st-card-done" : ""} ${c && verdicts[c.handle] === "pass" ? "st-card-pass" : ""} ${c && verdicts[c.handle] === "like" ? "st-card-like" : ""}`} style={{ animationDelay: `${i * 220}ms` }}>
           {!c ? (
-            <div className="st-card-wait"><span className="st-dots"><i /><i /><i /></span>{hood?.status === "failed" ? "nothing close enough" : "searching the lane"}</div>
+            <div className="st-card-wait"><span className="st-dots"><i /><i /><i /></span>{hood?.status === "failed" ? (i === 0 ? friendlyError(hood.error) : "") : "searching the lane"}</div>
           ) : (
             <>
               <div className="st-card-top">
