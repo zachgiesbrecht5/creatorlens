@@ -7,7 +7,7 @@ export function Journey({ s, compact = false }: { s: JourneyState; compact?: boo
   const steps = [
     { k: "roster", done: s.roster, title: "Add your roster", tip: "Type the handle of a creator you represent.", href: "/start" },
     { k: "neighborhood", done: s.neighborhood, title: "Meet the neighborhood", tip: "Three creators in their lane, printed. Free plans get 5 of these a month. See who pays them.", href: "/start" },
-    { k: "pitched", done: s.pitched, title: "Pitch a brand", tip: "Open a print, pick a brand, hit Pitch. The email lands in your Gmail drafts.", href: "/start" },
+    { k: "pitched", done: s.pitched, title: "Pitch a brand", tip: "Open one of your creators: their missing opportunities each have a contact and a Pitch button.", href: "/creators" },
     { k: "searched", done: s.searched, title: "Print anyone", tip: "Search any creator from the home page. Your morning drop keeps three new ones coming each day.", href: "/" },
   ];
   const cur = steps.findIndex((x) => !x.done);

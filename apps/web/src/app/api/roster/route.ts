@@ -32,6 +32,16 @@ export async function POST(req: NextRequest) {
   if (dup) { const { data } = await admin.from("roster_creators").update({ name: row.name, followers: row.followers, avatar_url: row.avatar_url, bio: row.bio }).eq("id", dup.id).select("*").single(); return NextResponse.json({ creator: data, existed: true }); }
   const { data, error } = await admin.from("roster_creators").insert(row).select("*").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // print them in the background (free) so their page has a lane and a map right away
+  try {
+    const { data: known } = await admin.from("creators").select("id,last_scanned_at").eq("platform", platform).ilike("handle", row.handle).maybeSingle();
+    const fresh = known?.last_scanned_at && Date.now() - new Date(known.last_scanned_at).getTime() < 14 * 864e5;
+    await admin.from("creator_access").upsert({ user_id: profile.id, platform, handle: String(row.handle).toLowerCase() }, { onConflict: "user_id,platform,handle", ignoreDuplicates: true });
+    if (!fresh) {
+      const { data: q } = await admin.from("scan_jobs").select("id").eq("platform", platform).ilike("handle", row.handle).in("status", ["queued", "running", "rate_limited"]).limit(1);
+      if (!q?.length) await admin.from("scan_jobs").insert({ user_id: profile.id, platform, handle: row.handle, priority: 1, source: "roster" });
+    }
+  } catch { /* best effort */ }
   track(profile.id, "roster_add", { platform, handle: row.handle });
   return NextResponse.json({ creator: data });
 }

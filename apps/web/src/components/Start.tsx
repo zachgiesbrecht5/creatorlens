@@ -146,8 +146,8 @@ export function Start({ initialRoster, isHouse }: { initialRoster: Roster[]; isH
           <HoodCards hood={hood} from="/start" />
           {hood?.status === "done" && hood.candidates.every((c) => c.print_status === "done") && (
             <div className="st-next">
-              <span><b>Step 3.</b> Open the print with the most brands, pick one, and hit Pitch. The email lands in your Gmail drafts with {current.name} as the creator.</span>
-              {(() => { const best = [...hood.candidates].sort((a, b) => (b.brands || 0) - (a.brands || 0))[0]; return best ? <Link href={`/c/${best.platform}/${best.handle}?pitch=${current.id}`} className="btn-dark !py-1.5 !text-[12px]">pitch from {best.display_name}'s print →</Link> : <Link href="/brands?scope=mine" className="btn-dark !py-1.5 !text-[12px]">every brand across these prints →</Link>; })()}
+              <span><b>Step 3.</b> These neighbors' brands are {current.name}'s missing opportunities. Open {current.name}'s page, pick a brand, and hit Pitch: the email lands in your Gmail drafts.</span>
+              <Link href={`/creators/${current.id}`} className="btn-dark !py-1.5 !text-[12px]">see who's paying {current.name}'s lane →</Link>
             </div>
           )}
         </section>

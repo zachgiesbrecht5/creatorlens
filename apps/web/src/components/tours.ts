@@ -14,3 +14,9 @@ export const START_TOUR: TourStep[] = [
   { key: "add", title: "Who do you represent?", body: "Type a creator's handle. We fill in the name, size and photo from the platform." },
   { key: "machine", title: "Then the printer goes looking", body: "Three creators in their lane, printed for free. Each card shows how many brands pay them." },
 ];
+
+export const CREATOR_TOUR: TourStep[] = [
+  { key: "map", title: "Who has paid them", body: "Two years of their disclosed deals. Hover a dot for why the brand booked them then." },
+  { key: "lane", title: "Missing opportunities", body: "Brands paying other creators in this lane that haven't paid yours. Ranked by how many lane creators they book. Green means a contact is already on file." },
+  { key: "row", title: "Open a row to pitch", body: "The proof creators, the contact, and Pitch, with your creator already selected. Two clicks to a Gmail draft." },
+];

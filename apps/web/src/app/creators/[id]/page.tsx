@@ -4,6 +4,8 @@ import { currentProfile, supabaseAdmin } from "@/lib/supabase";
 import { PrintTimeline, type TL } from "@/components/PrintTimeline";
 import { LaneWall, type LaneBrand } from "@/components/LaneWall";
 import { LocationField } from "@/components/LocationField";
+import { Tour } from "@/components/Tour";
+import { CREATOR_TOUR } from "@/components/tours";
 
 // A roster creator's page: who has paid them (their map), and the brands paying
 // their lane that haven't paid them yet, each one click from a contact and a
@@ -67,19 +69,20 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
           {r.pitch_angle && <p className="mt-3 max-w-3xl text-[13.5px] leading-relaxed text-muted">{r.pitch_angle}</p>}
           <div className="mt-3 flex flex-wrap items-center gap-3 text-[12px]">
             <span className="num text-muted">based in</span><LocationField id={r.id} initial={r.location} />
-            {me ? <Link href={`/c/${platform}/${me.handle}`} className="btn-ghost !py-1 !text-[12px]">open the full print →</Link> : <Link href={`/?print=${platform}:${handle}`} className="btn-dark !py-1 !text-[12px]">print {r.name} first →</Link>}
+            {me ? <Link href={`/c/${platform}/${me.handle}`} className="btn-ghost !py-1 !text-[12px]">open the full print →</Link> : <span className="num text-[11px] text-muted"><span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> printing {r.name} now; refresh in a minute</span>}
           </div>
         </div>
         <div className="cp-stats"><div><b>{myBrands.length}</b><span>paid them</span></div><div><b>{laneBrands.length}</b><span>in the lane, not yet</span></div><div><b>{laneBrands.filter((b) => b.contacts > 0).length}</b><span>with a contact</span></div></div>
       </div>
 
-      {timeline.length > 0 && <div className="card mt-6 px-5 pb-3 pt-2"><PrintTimeline items={timeline} /></div>}
+      <Tour id="creator" steps={CREATOR_TOUR} />
+      {timeline.length > 0 && <div className="card mt-6 px-5 pb-3 pt-2" data-tour="map"><PrintTimeline items={timeline} /></div>}
 
-      <section className="mt-8">
+      <section className="mt-8" data-tour="lane">
         <div className="mb-3 flex items-end justify-between gap-4">
           <div><div className="label">Missing opportunities</div><h2 className="h2">Brands paying {lane || "this lane"} creators, not {r.name} yet</h2><p className="mt-1 text-[13px] text-muted">Ranked by how many creators in the lane they book. Open one for the contact and a pitch written for {r.name}.</p></div>
         </div>
-        {lane ? <LaneWall brands={laneBrands} roster={{ id: r.id, name: r.name, handle: r.handle, platform: r.platform, followers: r.followers }} /> : <div className="card p-6 text-[13px] text-muted">Print {r.name} first so we know their lane; the missing-opportunities list is built from it.</div>}
+        {lane ? <LaneWall brands={laneBrands} roster={{ id: r.id, name: r.name, handle: r.handle, platform: r.platform, followers: r.followers }} /> : <div className="card p-6 text-[13px] text-muted">{me ? `${r.name} is printed but not classified yet; the lane appears once classification finishes (a minute or two).` : `${r.name}'s print is running; the lane and this list appear when it lands.`}</div>}
       </section>
     </div>
   );

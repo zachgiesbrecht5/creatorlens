@@ -28,11 +28,11 @@ export function LaneWall({ brands, roster }: { brands: LaneBrand[]; roster: Rost
     <div className="lw">
       <div className="lw-tools"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="filter brands or categories" className="input-flat !w-72 !py-1.5 text-[13px]" /><span className="num text-[11px] text-dim">{shown.length} brands</span></div>
       <div className="lw-head"><span>brand</span><span>who they pay in the lane</span><span>deals</span><span>last</span><span>contact</span></div>
-      {shown.map((b) => {
+      {shown.map((b, idx) => {
         const isOpen = open === b.brand_id;
         const proof = b.creators[0];
         return (
-          <div key={b.brand_id} className={`lw-row ${isOpen ? "lw-open" : ""}`}>
+          <div key={b.brand_id} className={`lw-row ${isOpen ? "lw-open" : ""}`} {...(idx === 0 ? { "data-tour": "row" } : {})}>
             <button className="lw-line" onClick={() => { setOpen(isOpen ? null : b.brand_id); if (!isOpen) load(b.brand_id); }}>
               <span className="lw-brand">{dom(b.website) ? <img src={`https://www.google.com/s2/favicons?domain=${dom(b.website)}&sz=64`} alt="" /> : <span className="lw-fav-blank" />}<span className="min-w-0"><span className="block truncate text-[15px] font-semibold tracking-tight">{b.brand}</span><span className="num block text-[10.5px] text-muted">{b.category || ""}</span></span></span>
               <span className="lw-people">{b.creators.map((c) => <span key={c.id} className="lw-person" title={`${c.name} · ${fmtK(c.followers)}`}>{c.avatar ? <img src={c.avatar} alt="" /> : <span className="lw-fav-blank" style={{ borderRadius: "50%" }} />}</span>)}<span className="num ml-2 text-[11px] text-muted">{b.creators.length} creator{b.creators.length === 1 ? "" : "s"}</span></span>
