@@ -78,6 +78,22 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
     }
   }
 
+  // 1b. lane cache: candidates already found for this platform + category + size band
+  //     (any seed in the lane, last 14 days). One search serves the whole lane.
+  const band = size < 25e3 ? "xs" : size < 1e5 ? "s" : size < 5e5 ? "m" : size < 2e6 ? "l" : "xl";
+  const laneKey: string | null = cat || r.niche || null;
+  if (laneKey) {
+    const { data: cachedLane } = await sb.from("lane_candidates").select("handle,display_name,avatar_url,followers,reason,media,bio,external_id").eq("platform", platform).eq("category", laneKey).eq("band", band).gte("created_at", new Date(Date.now() - 14 * 864e5).toISOString()).order("created_at", { ascending: false }).limit(40);
+    for (const c of cachedLane || []) {
+      if (picked.length >= 3) break;
+      const hh = String(c.handle).toLowerCase();
+      if (seen.has(hh)) continue;
+      seen.add(hh);
+      picked.push({ platform, handle: c.handle, display_name: c.display_name || c.handle, avatar_url: c.avatar_url, followers: c.followers, reason: c.reason || `Same lane (${laneKey}), similar size.`, media: (c.media as any) || [], bio: c.bio, external_id: c.external_id });
+    }
+    if (picked.length >= 3) log(handle, "served from lane cache", laneKey, band);
+  }
+
   // 2. candidates: first reuse what the agent already found for this same seed creator
   //    (any user, last 30 days) so repeat lookups cost nothing, then ask the agent for the rest.
   const seedKey = `${platform}:${handle}`;
@@ -135,6 +151,11 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
   }
   await sb.from("neighborhoods").update({ error: null, candidates: [], cost_usd: usage?.cost_usd ?? 0, debug: { candidates: [...agentCands, ...reused.filter((c) => !agentCands.some((a) => a.handle === c.handle))].slice(0, 30), usage, reused: reused.length } }).eq("id", id);
   for (const u of unverified) { if (picked.length >= 3) break; if (!picked.some((p) => p.handle.toLowerCase() === u.handle.toLowerCase())) picked.push(u); }
+  // remember every verified candidate for the lane, so the next creator in it costs nothing
+  if (laneKey) {
+    const rows = picked.filter((p) => p.followers != null).map((p) => ({ platform, category: laneKey, band, handle: p.handle, display_name: p.display_name, avatar_url: p.avatar_url, followers: p.followers, reason: p.reason, media: p.media || [], bio: p.bio || null, external_id: p.external_id || null }));
+    if (rows.length) await sb.from("lane_candidates").upsert(rows, { onConflict: "platform,category,band,handle", ignoreDuplicates: true }).then(() => {});
+  }
   // Empty round but names exist? Everything was filtered as "already shown". Better to
   // re-show the strongest names than to hand back three blank cards.
   if (!picked.length) {
