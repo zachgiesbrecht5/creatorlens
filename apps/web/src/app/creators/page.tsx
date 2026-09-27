@@ -52,7 +52,7 @@ export default async function Creators() {
               {roster.map((r) => (
                 <div key={r.id} className="flex items-start gap-3 py-3">
                   <div className="flex-1">
-                    <div className="text-sm font-medium">{r.name} {r.handle && <span className="font-mono text-[11px] text-muted">@{r.handle}</span>} {r.platform && r.platform !== "multi" && <span className="pill ml-1">{r.platform}</span>}</div>
+                    <div className="text-sm font-medium"><Link href={`/creators/${r.id}`} className="hover:text-accent">{r.name}</Link> {r.handle && <span className="font-mono text-[11px] text-muted">@{r.handle}</span>} {r.platform && r.platform !== "multi" && <span className="pill ml-1">{r.platform}</span>}</div>
                     <div className="mt-0.5 text-xs text-muted">{[r.followers ? `${Intl.NumberFormat().format(r.followers)} followers` : null, r.niche].filter(Boolean).join(" · ")}</div>
                     {r.pitch_angle && <div className="mt-1 text-xs leading-relaxed text-dim">{r.pitch_angle}</div>}
                     <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted"><span className="num">based in</span><LocationField id={r.id} initial={(r as any).location || null} /></div>
