@@ -30,7 +30,7 @@ async function scanOne(sb: SupabaseClient, id: string, brandId: string, requeste
   const found: any[] = [];
   const seen = new Set<string>();
   if (YT_KEY) {
-    for (const q of [`#${slug}Partner`, `"sponsored by ${brand.name}"`]) {
+    for (const q of [`#${slug}Partner`, `"sponsored by ${brand.name}"`, `"${brand.name}" sponsor`]) {
       try {
         const chans = await searchVideoChannels(YT_KEY, q, 25);
         for (const c of chans) { if (seen.has(c.channelId)) continue; seen.add(c.channelId); found.push({ platform: "youtube", handle: c.channelId, external_id: c.channelId, title: c.title, video_title: c.videoTitle, video_id: c.videoId, published_at: c.publishedAt, query: q, queued: false }); }
@@ -45,7 +45,8 @@ async function scanOne(sb: SupabaseClient, id: string, brandId: string, requeste
   let queued = 0;
   for (const f of found.sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)))) {
     if (queued >= MAX_PRINTS) break;
-    const { data: known } = await sb.from("creators").select("id,last_scanned_at").eq("platform", "youtube").eq("external_id", f.external_id).maybeSingle();
+    const { data: known } = await sb.from("creators").select("id,last_scanned_at,handle").eq("platform", "youtube").eq("external_id", f.external_id).maybeSingle();
+    f.known = !!known?.last_scanned_at; f.creator_handle = known?.handle || null;
     if (known?.last_scanned_at && Date.now() - new Date(known.last_scanned_at).getTime() < 30 * 864e5) { f.queued = "cached"; continue; }
     const { data: existing } = await sb.from("scan_jobs").select("id").eq("platform", "youtube").eq("handle", f.external_id).in("status", ["queued", "running", "rate_limited"]).limit(1);
     if (existing?.length) { f.queued = true; continue; }

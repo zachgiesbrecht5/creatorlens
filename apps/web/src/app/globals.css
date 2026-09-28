@@ -341,3 +341,10 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 .lw-proof-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border: 1px solid #e4e6ea; border-radius: 999px; background: #fff; font-size: 12px; font-weight: 500; }
 .lw-proof-chip img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; } .lw-proof-chip:hover { border-color: #0b0d12; }
 @media (max-width: 860px) { .lw-head { display: none; } .lw-line { grid-template-columns: 1fr; gap: 6px; } }
+
+/* brand scan results */
+.bs-list { margin-top: 12px; border: 1px solid #e4e6ea; border-radius: 10px; overflow: hidden; }
+.bs-head, .bs-row { display: grid; grid-template-columns: minmax(200px, 1.2fr) minmax(200px, 1.6fr) 60px 150px; gap: 12px; align-items: center; padding: 8px 12px; }
+.bs-head { font-family: var(--font-mono); font-size: 10px; color: #8b93a1; border-bottom: 1px dashed #d9dce2; background: #fbfbfa; }
+.bs-row { border-bottom: 1px solid #f2f4f7; } .bs-row:last-child { border-bottom: 0; }
+@media (max-width: 860px) { .bs-head { display: none; } .bs-row { grid-template-columns: 1fr; gap: 4px; } }

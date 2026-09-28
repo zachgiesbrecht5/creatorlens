@@ -23,6 +23,20 @@ export async function GET(req: NextRequest) {
   const { profile } = await currentAccess();
   if (!profile) return NextResponse.json({ error: "Sign in" }, { status: 401 });
   const id = req.nextUrl.searchParams.get("id");
-  const { data } = await supabaseAdmin().from("brand_scans").select("id,status,found,ig_pulse,error").eq("id", id).single();
-  return NextResponse.json(data || { error: "not found" });
+  const admin = supabaseAdmin();
+  const { data } = await admin.from("brand_scans").select("id,status,found,ig_pulse,error,brand_id").eq("id", id).single();
+  if (!data) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const found = (data.found || []) as any[];
+  const ext = found.map((f) => f.external_id).filter(Boolean);
+  const { data: creators } = ext.length ? await admin.from("creators").select("id,handle,external_id,display_name,avatar_url,followers,last_scanned_at,category") .in("external_id", ext) : { data: [] };
+  const { data: jobs } = ext.length ? await admin.from("scan_jobs").select("handle,status").in("handle", ext).order("created_at", { ascending: false }) : { data: [] };
+  const ids = (creators || []).map((c) => c.id);
+  const { data: booked } = ids.length ? await admin.from("brand_wall").select("creator_id,deals").eq("brand_id", data.brand_id).in("creator_id", ids) : { data: [] };
+  const rows = found.map((f) => {
+    const c = (creators || []).find((x) => x.external_id === f.external_id);
+    const job = (jobs || []).find((j) => j.handle === f.external_id);
+    const deal = (booked || []).find((b) => b.creator_id === c?.id);
+    return { ...f, print_status: c?.last_scanned_at ? "done" : job?.status || (f.queued === "cached" ? "done" : "queued"), handle: c?.handle || f.external_id, display_name: c?.display_name || f.title, avatar_url: c?.avatar_url || null, followers: c?.followers ?? null, category: c?.category || null, confirmed_deals: deal ? Number(deal.deals) : 0, new_to_index: !f.known };
+  });
+  return NextResponse.json({ id: data.id, status: data.status, found: rows, ig_pulse: data.ig_pulse, error: data.error });
 }
