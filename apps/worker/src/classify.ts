@@ -7,6 +7,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordSpend, optionalBudgetOpen } from "./spend";
 import { CATEGORIES, matchCategory, type Category } from "@creatorlens/engine";
 
 const MODEL = process.env.ANTHROPIC_CLASSIFY_MODEL || "claude-haiku-4-5";
@@ -20,10 +21,11 @@ const norm = (s: string | null | undefined): Category => {
   return (CATEGORIES as readonly string[]).includes(t) ? (t as Category) : matchCategory(t);
 };
 
-async function ask(system: string, user: string): Promise<any | null> {
+async function ask(sb: SupabaseClient, system: string, user: string): Promise<any | null> {
   if (!client) return null;
   try {
     const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0, system, messages: [{ role: "user", content: user }] });
+    recordSpend(sb, "classify", MODEL, (msg as any).usage).catch(() => {});
     const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
     const m = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
     return m ? JSON.parse(m[0]) : null;
@@ -46,7 +48,7 @@ export async function classifyCreator(sb: SupabaseClient, creatorId: string, for
 
   let category: Category = matchCategory(c.bio || "");
   let ownBrands: string[] = [];
-  const out = await ask(
+  const out = await ask(sb,
     `You classify social media creators for a sponsorship database. Reply with JSON only: {"category": <one of ${JSON.stringify(CATS)}>, "own_brands": [<names of brands, product lines, companies or agencies this creator OWNS or FOUNDED, taken only from the bio; [] if none>]}. Pick the single vertical a brand marketer would file this creator under. "Lifestyle" only when nothing more specific fits.`,
     `Platform: ${c.platform}\nName: ${c.display_name || ""}\nHandle: @${c.handle}\nBio: ${(c.bio || "").slice(0, 800)}\nRecent sponsored content titles:\n${sample.map((t) => "- " + String(t).slice(0, 120)).join("\n") || "(none)"}`,
   );
@@ -98,7 +100,7 @@ export async function classifyBrands(sb: SupabaseClient, ids?: string[], limit =
   const brands = (all || []).filter((b) => b.site_checked_at || (evidenceBy.get(b.id) || "").length > 30);
   if (!brands.length) return 0;
 
-  const out = await ask(
+  const out = await ask(sb,
     `You categorise sponsor brands for a creator-marketing database. For each item decide what the BRAND SELLS, judged from its name, domain, site title, site description and, most usefully, how creators mention it in their sponsored captions (the caption usually names the product). Categories: ${JSON.stringify(CATS)}. Rules: Airbnb/hotels/airlines = Travel; drinkware and kitchen = Home; supplements and hydration = Wellness; apparel = Fashion; activewear = Fitness; skincare, makeup and pimple patches = Beauty; SaaS, commerce tools and B2B services = Business (never use Business for consumer products); toys and kids products = Baby or Parenting. Reply "JUNK" when the name is not a real company (a person, a song, a URL fragment, a generic word, a platform like YouTube). Reply with JSON only: {"<id>": {"category": "<category|JUNK>", "confidence": <0..1>}, ...}. Use confidence under 0.6 when the site info is missing and the name alone is ambiguous.`,
     brands.map((b) => `${b.id} | name: ${b.name} | domain: ${b.domain || b.website || "unknown"} | site title: ${b.site_title || "n/a"} | site description: ${(b.site_description || "n/a").slice(0, 160)} | how creators mention it: ${(evidenceBy.get(b.id) || "n/a").slice(0, 220)}`).join("\n"),
   );
@@ -146,6 +148,7 @@ export async function rollupVerticals(sb: SupabaseClient, brandIds: string[]) {
 
 // ── Idle backfill ──────────────────────────────────────────────
 export async function classifyBackfill(sb: SupabaseClient) {
+  if (!(await optionalBudgetOpen(sb))) return;
   const { data: cs } = await sb.from("creators").select("id").is("classified_at", null).order("last_scanned_at", { ascending: false }).limit(3);
   for (const c of cs || []) await classifyCreator(sb, c.id);
   const n = await classifyBrands(sb);

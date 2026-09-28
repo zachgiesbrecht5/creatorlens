@@ -4,6 +4,7 @@
 // re-run only when the creator has brands without an insight.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordSpend, optionalBudgetOpen } from "./spend";
 
 const MODEL = process.env.ANTHROPIC_INSIGHTS_MODEL || "claude-haiku-4-5";
 const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "PASTE_ME" ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
@@ -25,6 +26,7 @@ export async function explainCreatorDeals(sb: SupabaseClient, creatorId: string)
 Reply ONLY with JSON: {"items":[{"n":1,"why":"...","season":"..."|null}, ...]}`;
   const user = `Creator: ${creator.display_name || creator.handle} (@${creator.handle}, ${creator.platform}, ${creator.followers || "?"} followers, niche: ${creator.category || "?"})\nBio: ${String(creator.bio || "").slice(0, 200)}\n\nBrands:\n${lines}`;
   const msg = await client.messages.create({ model: MODEL, max_tokens: 2500, temperature: 0.3, system, messages: [{ role: "user", content: user }] });
+    recordSpend(sb, "insights", MODEL, (msg as any).usage).catch(() => {});
   const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
   const m = text.match(/\{[\s\S]*\}/);
   if (!m) throw new Error("no JSON from insights model");
@@ -39,6 +41,7 @@ Reply ONLY with JSON: {"items":[{"n":1,"why":"...","season":"..."|null}, ...]}`;
 /** Idle-time backfill: creators scanned but not yet explained. */
 export async function insightsBackfill(sb: SupabaseClient, limit = 2): Promise<number> {
   if (!client) return 0;
+  if (!(await optionalBudgetOpen(sb))) return 0;
   const { data } = await sb.from("creators").select("id").not("last_scanned_at", "is", null).is("insights_at", null).order("last_scanned_at", { ascending: false }).limit(limit);
   let n = 0;
   for (const c of data || []) { try { n += await explainCreatorDeals(sb, c.id); } catch (e: any) { log("failed", c.id, e?.message); await sb.from("creators").update({ insights_at: new Date().toISOString() }).eq("id", c.id); } }

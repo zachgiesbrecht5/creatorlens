@@ -6,6 +6,7 @@
 // neighborhood uses, verified on the platform, size-banded.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordSpend, optionalBudgetOpen } from "./spend";
 import { resolveChannel, lookupIgProfile, type IgToken } from "@creatorlens/engine";
 import { alert } from "./observe";
 
@@ -49,6 +50,7 @@ async function seeds(sb: SupabaseClient): Promise<Seed[]> {
 
 export async function discover(sb: SupabaseClient): Promise<number> {
   if (!client) return 0;
+  if (!(await optionalBudgetOpen(sb))) { log("daily model budget reached, discovery paused"); return 0; }
   const day = new Date().toISOString().slice(0, 10);
   const hourAgo = new Date(Date.now() - 3600e3).toISOString();
   // what's already been queued this hour, per platform
@@ -70,6 +72,7 @@ export async function discover(sb: SupabaseClient): Promise<number> {
       const sys = `You find creators similar to a given creator for a talent manager. Return 6 candidates on the SAME platform, same content lane, roughly the same audience size (within 4x), real and active. Never the creator themselves. Reply ONLY with JSON: {"candidates":[{"handle":"...","why":"<one sentence>"}]}`;
       const user = `Platform: ${s.platform}\nCreator: ${s.name} (@${s.handle})\nAudience: ${s.followers || "unknown"}\nNiche: ${s.niche || "unknown"}\nBio: ${String(s.bio || "").slice(0, 300)}`;
       const msg = await client.messages.create({ model: MODEL, max_tokens: 1200, temperature: 0.5, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 } as any], messages: [{ role: "user", content: user }] });
+    recordSpend(sb, "discover", MODEL, (msg as any).usage).catch(() => {});
       const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
       const m = text.match(/\{[\s\S]*\}/); if (!m) continue;
       const cands: { handle: string; why: string }[] = JSON.parse(m[0]).candidates || [];

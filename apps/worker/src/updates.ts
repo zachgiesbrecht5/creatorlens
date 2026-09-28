@@ -6,6 +6,7 @@
 // app; nothing goes out on its own.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordSpend, optionalBudgetOpen } from "./spend";
 
 const MODEL = process.env.ANTHROPIC_UPDATES_MODEL || "claude-sonnet-4-5";
 const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "PASTE_ME" ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
@@ -42,6 +43,7 @@ export async function writeCreatorUpdates(sb: SupabaseClient, force = false): Pr
     const sys = `You write a short monthly update from a talent manager to a creator they represent, in the manager's voice. Plain text, warm, direct, no hype, no exclamation marks, no bullet points, under 160 words. Structure: greeting with the creator's first name; one line naming the month; then short labelled lines only for sections that have content: "Pitched:", "In conversation:", "Closed:", "Passed:", "On the radar:" (brands starting to book creators in their lane). Include dollar amounts only where given. End with a one-line sign-off from the manager's first name, no signature block.${profile?.pitch_style ? `\nManager's style notes: ${String(profile.pitch_style).slice(0, 400)}` : ""}`;
     const user = `Manager: ${profile?.full_name || "the manager"}\nCreator: ${r.name} (@${r.handle})\nMonth: ${label}\n\nOutreach this month (brand · stage · value · note · date):\n${shown.map((x) => `${x.brand} · ${x.stage} · ${x.value != null ? "$" + Number(x.value).toLocaleString() : "-"} · ${x.note || "-"} · ${x.when}`).join("\n") || "(none)"}\n\nBrands that started booking creators in their lane this month: ${lane.join(", ") || "(none)"}\nSponsorship deals signed in their market this month (worth mentioning as "on the radar", we are pitching them): ${sigLines.join("; ") || "(none)"}`;
     const msg = await client.messages.create({ model: MODEL, max_tokens: 700, temperature: 0.4, system: sys, messages: [{ role: "user", content: user }] });
+    recordSpend(sb, "updates", MODEL, (msg as any).usage).catch(() => {});
     const body = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("").trim();
     const subject = `${label}: your update from ${profile?.full_name?.split(" ")[0] || "your manager"}`;
     await sb.from("creator_updates").upsert({ user_id: r.user_id, roster_creator_id: r.id, month: monthKey, subject, body, status: "draft" }, { onConflict: "roster_creator_id,month" });

@@ -5,6 +5,7 @@
 // platform (cheap lookups) and keep the ones that fit; (4) queue free prints.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordSpend, optionalBudgetOpen } from "./spend";
 import { resolveChannel, lookupIgProfile, recentVideoIds, searchVideoChannels, type IgToken } from "@creatorlens/engine";
 import { alert } from "./observe";
 
@@ -14,6 +15,19 @@ const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[neighbo
 const YT_KEY = process.env.YT_API_KEY || "";
 
 type Cand = { platform: "youtube" | "instagram"; handle: string; display_name: string; avatar_url: string | null; followers: number | null; reason: string; job_id?: string | null; cached?: boolean; external_id?: string | null; media?: { url: string; kind: string; thumb: string | null }[]; bio?: string | null };
+
+// The model's reply after web search is prose + JSON + citations; a greedy {...} grab
+// often spans stray braces and fails to parse. Try the JSON first, then fall back to
+// pulling "handle"/"why" pairs, then bare @handles, so a paid search never returns nothing.
+function extractCandidates(text: string): { handle: string; why: string }[] {
+  const tryParse = (t: string) => { try { const j = JSON.parse(t); return Array.isArray(j?.candidates) ? j.candidates : Array.isArray(j) ? j : null; } catch { return null; } };
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/); if (fenced) { const r = tryParse(fenced[1].trim()); if (r?.length) return r; }
+  const start = text.indexOf('{"candidates"'); if (start >= 0) { let depth = 0; for (let i = start; i < text.length; i++) { if (text[i] === "{") depth++; else if (text[i] === "}") { depth--; if (!depth) { const r = tryParse(text.slice(start, i + 1)); if (r?.length) return r; break; } } } }
+  const pairs = [...text.matchAll(/"handle"\s*:\s*"@?([A-Za-z0-9_.]{2,40})"[^}]*?"why"\s*:\s*"([^"]{0,300})"/g)].map((m) => ({ handle: m[1], why: m[2] }));
+  if (pairs.length) return pairs;
+  const bare = [...new Set([...text.matchAll(/@([A-Za-z0-9_.]{3,30})/g)].map((m) => m[1].replace(/\.$/, "")))];
+  return bare.slice(0, 8).map((h) => ({ handle: h, why: "Named by the lane search as a similar creator." }));
+}
 
 export async function runNeighborhoods(sb: SupabaseClient, limit = 1): Promise<number> {
   const { data: jobs } = await sb.from("neighborhoods").select("id,user_id,roster_creator_id,creator_id,exclude").eq("status", "queued").order("created_at").limit(limit);
@@ -198,15 +212,15 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
   if (client && picked.length < 3) {
     const sys = `You find creators similar to a given creator for a talent manager. Return 8 candidates on the SAME platform who are clearly in the same content lane and roughly the same audience size (within 4x). Prefer active, real accounts. Use web search to verify handles exist. Never return the creator themselves, and never return mega-celebrities unless the input creator is one. Reply ONLY with JSON: {"candidates":[{"handle":"...","why":"<one sentence on the overlap>"}]}`;
     const user = `Platform: ${platform}\nCreator: ${r.name} (@${handle})\nAudience: ${size || "unknown"} ${platform === "youtube" ? "subscribers" : "followers"}\nNiche: ${r.niche || cat || "unknown"}\nBio: ${String(r.bio || "").slice(0, 300)}\nAngle: ${String(r.pitch_angle || "").slice(0, 300)}${liked.length ? `\n\nThe manager said these ARE a match for the lane (find more like them): ${liked.slice(0, 12).join(", ")}` : ""}${passed.length ? `\nThe manager said these are NOT a match (avoid this kind): ${passed.slice(0, 12).join(", ")}` : ""}${avoid.length ? `\n\nDo NOT return any of these (already shown): ${avoid.map((h) => "@" + h).join(", ")}. Find different people.` : ""}`;
-    const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0.4, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 } as any], messages: [{ role: "user", content: user }] });
+    const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0.4, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 2 } as any], messages: [{ role: "user", content: user }] });
+    recordSpend(sb, "neighborhood", MODEL, (msg as any).usage).catch(() => {});
     const u: any = msg.usage || {};
     const input = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
     const searches = u.server_tool_use?.web_search_requests || 0;
     // Haiku 4.5: $1/M input, $5/M output; web search $10 per 1,000
     usage = { input, output: u.output_tokens || 0, searches, cost_usd: +(input / 1e6 * 1 + (u.output_tokens || 0) / 1e6 * 5 + searches * 0.01).toFixed(4) };
     const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
-    const m = text.match(/\{[\s\S]*\}/);
-    try { agentCands = m ? (JSON.parse(m[0]).candidates || []) : []; } catch { agentCands = []; }
+    agentCands = extractCandidates(text);
     log(handle, "model candidates:", agentCands.map((c) => c.handle).join(", ") || "(none)", "| cost $" + usage.cost_usd);
     await verify(agentCands);
   }

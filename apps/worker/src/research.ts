@@ -6,6 +6,7 @@
 // email through Hunter. Everything filed carries the URL it came from.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordSpend, optionalBudgetOpen } from "./spend";
 import { alert } from "./observe";
 
 const MODEL = process.env.ANTHROPIC_RESEARCH_MODEL || "claude-haiku-4-5";
@@ -58,6 +59,7 @@ Reply ONLY with JSON: {"parent_company": string|null, "email_domain": string|nul
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: maxUses } as any],
       messages: [{ role: "user", content: user }],
     });
+    recordSpend(sb, "research", model, (msg as any).usage).catch(() => {});
     const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
     const m = text.match(/\{[\s\S]*\}/);
     return m ? (JSON.parse(m[0]) as Finding & { email_domain?: string | null }) : null;

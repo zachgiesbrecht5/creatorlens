@@ -5,9 +5,10 @@
 // pitch this week" instead of an inbound email two months later.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordSpend, optionalBudgetOpen } from "./spend";
 import { alert } from "./observe";
 
-const MODEL = process.env.ANTHROPIC_SIGNALS_MODEL || "claude-sonnet-4-5";
+const MODEL = process.env.ANTHROPIC_SIGNALS_MODEL || "claude-haiku-4-5";
 const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "PASTE_ME" ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[signals]", ...a);
 
@@ -25,6 +26,7 @@ type Found = { brand: string; brand_domain: string | null; property: string; pro
 
 export async function findSignals(sb: SupabaseClient): Promise<number> {
   if (!client) return 0;
+  if (!(await optionalBudgetOpen(sb))) return 0;
   // regional queries for every market people's rosters live in
   const { data: locs } = await sb.from("roster_creators").select("region,location").not("region", "is", null);
   const regions = [...new Set((locs || []).map((l) => l.region).filter(Boolean))].slice(0, 12);
@@ -34,6 +36,7 @@ export async function findSignals(sb: SupabaseClient): Promise<number> {
     try {
       const sys = `You research sponsorship announcements for a creator talent agency. Use web search to find announcements from the last 60 days where a BRAND signed a sponsorship with a sports team, league, athlete, event, festival, venue or tour. For each real one return: brand (the sponsor, not the property), brand_domain if known, property, property_type (team|league|event|festival|venue|athlete|tour|other), market (the city/metro the property is based in, or "National (US)"/"National (CA)" for leagues), region (the state/province two-letter code, or the country code for national), category (the brand's category: Finance, Food, Beverage, Auto, Tech, Telecom, Retail, Apparel, Beauty, Travel, Insurance, Health, Gaming, Home, Other), announced_at (YYYY-MM-DD), url (the announcement or credible article), source (prnewswire|businesswire|sbj|sportico|fos|adweek|adage|team|brand|other), summary (one sentence), activation_note (one sentence on what creator activation this kind of deal usually involves and when, e.g. "regional creator campaigns typically launch 4-8 weeks after signing, around home games"). Skip renewals older than 60 days and skip agencies. Reply ONLY with JSON: {"signals":[...]} up to 8.`;
       const msg = await client.messages.create({ model: MODEL, max_tokens: 3000, temperature: 0.2, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 } as any], messages: [{ role: "user", content: `Query: ${q}\nToday: ${new Date().toISOString().slice(0, 10)}` }] });
+    recordSpend(sb, "signals", MODEL, (msg as any).usage).catch(() => {});
       const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
       const m = text.match(/\{[\s\S]*\}/); if (!m) continue;
       const list: Found[] = (JSON.parse(m[0]).signals || []).filter((x: Found) => x?.url && x?.brand && x?.property);

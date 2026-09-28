@@ -5,9 +5,10 @@
 // window to pitch the new person).
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordSpend, optionalBudgetOpen } from "./spend";
 import { alert } from "./observe";
 
-const MODEL = process.env.ANTHROPIC_HIRING_MODEL || "claude-sonnet-4-5";
+const MODEL = process.env.ANTHROPIC_HIRING_MODEL || "claude-haiku-4-5";
 const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "PASTE_ME" ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[hiring]", ...a);
 
@@ -24,11 +25,13 @@ type Found = { company: string; domain: string | null; title: string; seniority:
 
 export async function findHiring(sb: SupabaseClient): Promise<number> {
   if (!client) return 0;
+  if (!(await optionalBudgetOpen(sb))) return 0;
   let inserted = 0;
   for (const q of QUERIES) {
     try {
       const sys = `You research job postings for a creator talent agency. Use web search to find CURRENT public postings (career pages, Greenhouse, Lever, Ashby, Workable, Indeed) for the query. For each real posting return: company (the brand, not the recruiter), the company's website domain if you can tell, exact title, seniority (coordinator|manager|senior|director|head|vp), location, the posting URL, the posting date if shown (YYYY-MM-DD) and a one-sentence summary of what the role implies about the brand's creator program (budget, platforms, launch). Skip agencies and talent management companies. Reply ONLY with JSON: {"postings":[{...}]}, up to 8.`;
       const msg = await client.messages.create({ model: MODEL, max_tokens: 2500, temperature: 0.2, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 6 } as any], messages: [{ role: "user", content: `Query: ${q}\nToday: ${new Date().toISOString().slice(0, 10)}` }] });
+    recordSpend(sb, "hiring", MODEL, (msg as any).usage).catch(() => {});
       const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
       const m = text.match(/\{[\s\S]*\}/); if (!m) continue;
       const list: Found[] = (JSON.parse(m[0]).postings || []).filter((p: Found) => p?.url && p?.company && p?.title);

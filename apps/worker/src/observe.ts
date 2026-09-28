@@ -2,6 +2,7 @@
 // optional Slack/Discord webhook via ALERT_WEBHOOK_URL), and a nightly snapshot
 // of row counts plus a JSON export of the core tables to the `backups` bucket.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { spentToday, DAILY_BUDGET } from "./spend";
 import { keepWatch } from "./watch";
 import { discover } from "./discover";
 import { findHiring } from "./hiring";
@@ -13,6 +14,7 @@ import { writeCreatorUpdates } from "./updates";
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[observe]", ...a);
 
 export async function heartbeat(sb: SupabaseClient, detail: Record<string, unknown> = {}) {
+  try { detail = { ...detail, model_spend_today_usd: await spentToday(sb), model_daily_budget_usd: DAILY_BUDGET }; } catch { /* best effort */ }
   await sb.from("heartbeats").upsert({ source: "worker", last_seen: new Date().toISOString(), detail }, { onConflict: "source" });
 }
 

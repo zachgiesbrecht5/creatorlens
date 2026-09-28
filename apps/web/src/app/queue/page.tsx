@@ -92,6 +92,12 @@ export default async function Queue() {
           <div className="label">worker</div>
           <div className="mt-1 text-lg font-semibold">{workerAge == null ? "never seen" : workerAge < 2 ? "alive" : `${Math.round(workerAge)} min ago`}</div>
           {(workerAge == null || workerAge > 10) && <div className="text-[11px] text-bad">no heartbeat; check Railway</div>}
+          {(hb?.detail as any)?.model_spend_today_usd != null && (() => { const spent = Number((hb!.detail as any).model_spend_today_usd), cap = Number((hb!.detail as any).model_daily_budget_usd || 0); const pct = cap ? Math.min(100, Math.round((spent / cap) * 100)) : 0; return (
+            <div className="mt-3">
+              <div className="flex items-baseline justify-between num text-[11px]"><span className="text-muted">model spend today</span><span className={pct >= 80 ? "text-warn" : "text-fg"}>${spent.toFixed(2)} of ${cap}</span></div>
+              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface2"><div className={`h-full ${pct >= 80 ? "bg-warn" : "bg-ok"}`} style={{ width: `${pct}%` }} /></div>
+              {pct >= 80 && <div className="num mt-1 text-[10.5px] text-warn">optional jobs paused until midnight UTC; clicks still run</div>}
+            </div>); })()}
         </div>
         <div className={`card p-4 ${alerts?.length ? "border-warn/40" : ""}`}>
           <div className="label">alerts</div>
