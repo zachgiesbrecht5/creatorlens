@@ -25,6 +25,12 @@ const WORKER_ID = `${process.env.RAILWAY_REPLICA_ID || process.env.HOSTNAME || "
 let inFlight = 0;
 
 const brandKey = (name: string) => name.toLowerCase().replace(/^@/, "").replace(/[^a-z0-9]/g, "");
+// Strip lone UTF-16 surrogates (an emoji cut in half by slice()) and null bytes; Postgres
+// rejects the whole batch as "invalid input syntax for type json" otherwise.
+function cleanText<T>(v: T): T {
+  if (typeof v !== "string") return v;
+  return (v as string).replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "").replace(/(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "$1").replace(/\u0000/g, "") as unknown as T;
+}
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
 
 // ── Token pool for Instagram ───────────────────────────────────
@@ -70,8 +76,8 @@ async function ensureLearnedAliases() {
 async function persist(job: any, result: ScanResult) {
   const c = result.creator;
   const { data: creator, error: ce } = await sb.from("creators").upsert({
-    platform: result.platform, external_id: c.externalId, handle: c.handle, display_name: c.displayName,
-    followers: c.followers, avatar_url: c.avatar, bio: c.bio, last_scanned_at: new Date().toISOString(),
+    platform: result.platform, external_id: c.externalId, handle: c.handle, display_name: cleanText(c.displayName),
+    followers: c.followers, avatar_url: c.avatar, bio: cleanText(c.bio), last_scanned_at: new Date().toISOString(),
   }, { onConflict: "platform,external_id" }).select("id,scan_count,first_scanned_by").single();
   if (ce || !creator) throw new Error("creator upsert failed: " + ce?.message);
   await sb.from("creators").update({ scan_count: (creator.scan_count ?? 0) + 1, first_scanned_by: creator.first_scanned_by ?? job.user_id }).eq("id", creator.id);
@@ -89,10 +95,10 @@ async function persist(job: any, result: ScanResult) {
   // partnerships (upsert on creator+brand+content so rescans refresh rather than duplicate)
   const rows = result.rows.map((r) => ({
     creator_id: creator.id, brand_id: brandIds.get(brandKey(r.brand)), platform: r.platform,
-    content_id: r.contentId, content_title: r.contentTitle, content_url: r.contentUrl,
+    content_id: r.contentId, content_title: cleanText(r.contentTitle), content_url: r.contentUrl,
     published_at: r.publishedAt || null, views: r.views, thumbnail: r.thumbnail,
     confidence_score: r.confidenceScore, confidence_label: r.confidenceLabel,
-    signal_type: r.signalType, evidence: r.evidence, scanned_at: new Date().toISOString(),
+    signal_type: r.signalType, evidence: cleanText(r.evidence), scanned_at: new Date().toISOString(),
   })).filter((r) => r.brand_id);
   // The same brand can be detected twice in one piece of content (e.g. title +
   // description). Postgres rejects duplicate keys within a single upsert, so

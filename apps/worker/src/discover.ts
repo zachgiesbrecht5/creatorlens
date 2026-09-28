@@ -99,6 +99,6 @@ export async function discover(sb: SupabaseClient): Promise<number> {
     } catch (e: any) { log("seed failed", s.handle, e?.message); }
   }
   if (queued) log("queued", queued, "discoveries");
-  else await alert(sb, "discover queued nothing", { seeds: "none verified" }).catch(() => {});
+  else log("queued nothing this hour (budget, limits, or no verified seeds)");
   return queued;
 }

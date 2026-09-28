@@ -53,6 +53,6 @@ export async function findHiring(sb: SupabaseClient): Promise<number> {
     catch { /* leave open */ }
   }
   log("inserted", inserted);
-  if (!inserted) await alert(sb, "hiring agent found nothing new", {}).catch(() => {});
+  if (!inserted) log("nothing new this week");
   return inserted;
 }
