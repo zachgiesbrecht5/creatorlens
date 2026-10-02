@@ -3,22 +3,32 @@ import { redirect } from "next/navigation";
 import { currentProfile, supabaseAdmin } from "@/lib/supabase";
 import { WatchButton } from "@/components/WatchButton";
 import { MarkSeen } from "@/components/MarkSeen";
+import { WatchFilter } from "@/components/WatchFilter";
 
 export const metadata = { title: "Watchlist | Sponsorprint" };
 const fmt = (n: number | null) => (n == null ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
 
-export default async function Watchlist() {
+export default async function Watchlist({ searchParams }: { searchParams: Promise<{ for?: string }> }) {
+  const sp = await searchParams; const filterFor = sp.for || "all";
   const profile = await currentProfile();
   if (!profile) redirect("/login?next=/watchlist");
   const admin = supabaseAdmin();
   const [{ data: watches }, { data: events }] = await Promise.all([
-    admin.from("watchlist").select("platform,handle,known_brands,added_at,last_checked_at").eq("user_id", profile.id).order("added_at", { ascending: false }),
-    admin.from("watch_events").select("id,platform,handle,new_brands,seen,created_at").eq("user_id", profile.id).order("created_at", { ascending: false }).limit(50),
+    admin.from("watchlist").select("platform,handle,known_brands,added_at,last_checked_at,roster_creator_id").eq("user_id", profile.id).order("added_at", { ascending: false }),
+    admin.from("watch_events").select("id,platform,handle,new_brands,seen,created_at,roster_creator_id").eq("user_id", profile.id).order("created_at", { ascending: false }).limit(80),
   ]);
-  const handles = (watches || []).map((w) => w.handle);
+  const { data: rosterRows } = await admin.from("roster_creators").select("id,name,avatar_url").eq("user_id", profile.id).order("name");
+  const rosterList = rosterRows || [];
+  const matches = (rid: string | null) => filterFor === "all" || (filterFor === "none" ? !rid : rid === filterFor);
+  const allWatches = watches || [];
+  const watchesShown = allWatches.filter((w) => matches(w.roster_creator_id));
+  const eventsShown = (events || []).filter((e) => matches(e.roster_creator_id));
+  const counts: Record<string, number> = { all: allWatches.length, none: allWatches.filter((w) => !w.roster_creator_id).length };
+  for (const r of rosterList) counts[r.id] = allWatches.filter((w) => w.roster_creator_id === r.id).length;
+  const handles = watchesShown.map((w) => w.handle);
   const { data: creators } = handles.length ? await admin.from("creators").select("platform,handle,display_name,avatar_url,followers,last_scanned_at").or(handles.map((h) => `handle.ilike.${h}`).join(",")) : { data: [] };
   const cr = (p: string, h: string) => (creators || []).find((c) => c.platform === p && c.handle.toLowerCase() === h.toLowerCase());
-  const unseen = (events || []).filter((e) => !e.seen);
+  const unseen = eventsShown.filter((e) => !e.seen);
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-6 flex items-end justify-between gap-4">
@@ -30,9 +40,10 @@ export default async function Watchlist() {
         {unseen.length > 0 && <MarkSeen />}
       </div>
 
-      {events && events.length > 0 && (
+      <WatchFilter roster={rosterList.map((r) => ({ id: r.id, name: r.name, avatar: r.avatar_url }))} counts={counts} active={filterFor} />
+      {eventsShown.length > 0 && (
         <div className="card mb-8 divide-y divide-line">
-          {events.map((e) => {
+          {eventsShown.map((e) => {
             const c = cr(e.platform, e.handle); const nb = e.new_brands as { brand: string; brand_id: string; deals: number }[];
             return (
               <div key={e.id} className={`flex items-start gap-3 p-4 ${e.seen ? "opacity-70" : ""}`}>
@@ -49,18 +60,19 @@ export default async function Watchlist() {
       )}
 
       <div className="card overflow-x-auto">
-        <table className="tbl"><thead><tr><th>Creator</th><th>Size</th><th className="text-right">Brands</th><th>Last print</th><th>Next</th><th></th></tr></thead>
+        <table className="tbl"><thead><tr><th>Creator</th><th>For</th><th>Size</th><th className="text-right">Brands</th><th>Last print</th><th>Next</th><th></th></tr></thead>
           <tbody>
-            {(watches || []).map((w) => { const c = cr(w.platform, w.handle); const last = c?.last_scanned_at ? new Date(c.last_scanned_at) : null; const next = last ? new Date(last.getTime() + 7 * 864e5) : null; return (
+            {watchesShown.map((w) => { const c = cr(w.platform, w.handle); const forR = rosterList.find((r) => r.id === w.roster_creator_id); const last = c?.last_scanned_at ? new Date(c.last_scanned_at) : null; const next = last ? new Date(last.getTime() + 7 * 864e5) : null; return (
               <tr key={w.platform + w.handle}>
                 <td><div className="flex items-center gap-3">{c?.avatar_url ? <img src={c.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" /> : <div className="h-8 w-8 rounded-full bg-surface2" />}<div><Link href={`/c/${w.platform}/${w.handle}`} className="font-medium hover:text-accent">{c?.display_name || `@${w.handle}`}</Link><div className="num text-[10.5px] text-dim">@{w.handle} · {w.platform === "youtube" ? "YouTube" : "Instagram"}</div></div></div></td>
+                <td className="text-[12px]">{forR ? forR.name : <span className="text-dim">general</span>}</td>
                 <td className="num">{fmt(c?.followers ?? null)}</td>
                 <td className="num text-right">{(w.known_brands as string[]).length}</td>
                 <td className="num text-[12px] text-muted">{last ? last.toLocaleDateString() : "not yet"}</td>
                 <td className="num text-[12px] text-muted">{next ? (next < new Date() ? "tonight" : next.toLocaleDateString()) : "tonight"}</td>
-                <td className="num text-[11px]"><WatchButton platform={w.platform} handle={w.handle} initial /></td>
+                <td className="num text-[11px]"><WatchButton platform={w.platform} handle={w.handle} initial roster={rosterList.map((r) => ({ id: r.id, name: r.name }))} initialFor={w.roster_creator_id || null} /></td>
               </tr>); })}
-            {!watches?.length && <tr><td colSpan={6} className="py-8 text-center text-muted">Nothing watched yet. Open any print and click "watch".</td></tr>}
+            {!watchesShown.length && <tr><td colSpan={7} className="py-8 text-center text-muted">{allWatches.length ? "Nothing filed under this creator yet. On any print, click watch and pick who it is for." : "Nothing watched yet. Open any print and click watch."}</td></tr>}
           </tbody>
         </table>
       </div>

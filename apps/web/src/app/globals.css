@@ -348,3 +348,9 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 .bs-head { font-family: var(--font-mono); font-size: 10px; color: #8b93a1; border-bottom: 1px dashed #d9dce2; background: #fbfbfa; }
 .bs-row { border-bottom: 1px solid #f2f4f7; } .bs-row:last-child { border-bottom: 0; }
 @media (max-width: 860px) { .bs-head { display: none; } .bs-row { grid-template-columns: 1fr; gap: 4px; } }
+
+/* watchlist filter chips */
+.wf-chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px 5px 6px; border: 1px solid #e4e6ea; border-radius: 999px; background: #fff; font-size: 12.5px; font-weight: 500; }
+.wf-chip img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
+.wf-chip em { font-style: normal; font-family: var(--font-mono); font-size: 10px; color: #8b93a1; }
+.wf-chip:hover { border-color: #0b0d12; } .wf-on { border-color: #0b0d12; background: #0b0d12; color: #fff; } .wf-on em { color: #c9ced6; }

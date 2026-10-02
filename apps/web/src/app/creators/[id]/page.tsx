@@ -6,6 +6,7 @@ import { LaneWall, type LaneBrand } from "@/components/LaneWall";
 import { LocationField } from "@/components/LocationField";
 import { Tour } from "@/components/Tour";
 import { CREATOR_TOUR } from "@/components/tours";
+import { laneDigest } from "@/lib/lane-digest";
 
 // A roster creator's page: who has paid them (their map), and the brands paying
 // their lane that haven't paid them yet, each one click from a contact and a
@@ -57,6 +58,8 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
     laneBrands = ([...agg.values()] as any[]).map((e) => ({ ...e, creators: [...e._c.values()].sort((a, b) => (b.followers || 0) - (a.followers || 0)).slice(0, 4), contacts: cc.get(e.brand_id) || 0 })).filter((e) => e.creators.length >= 1).sort((a, b) => b.creators.length - a.creators.length || String(b.last).localeCompare(String(a.last))).slice(0, 60) as LaneBrand[];
   }
 
+  const digest = await laneDigest(profile.id, r.id, 30);
+  const fmtK2 = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-3 num text-[11px] text-dim"><Link href="/creators" className="hover:text-accent">← my creators</Link></div>
@@ -90,6 +93,32 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
           {perf.formats?.length > 0 && <div className="num mt-3 text-[11px] text-muted">by format: {perf.formats.map((f: any) => `${f.kind} ${f.count} posts, avg ${fmtN(f.avg)}`).join(" · ")}</div>}
         </section>); })()}
       {timeline.length > 0 && <div className="card mt-6 px-5 pb-3 pt-2" data-tour="map"><PrintTimeline items={timeline} /></div>}
+
+      <section className="mt-8">
+        <div className="mb-3 flex items-end justify-between gap-4">
+          <div><div className="label">In the lane, last 30 days</div><h2 className="h2">What's working for creators like {r.name}</h2><p className="mt-1 text-[13px] text-muted">From the {digest.creators.length} creator{digest.creators.length === 1 ? "" : "s"} watched under {r.name}. Best posts relative to each creator's own median, recurring hooks, and brands they picked up. This feeds {r.name}'s monthly update.</p></div>
+          <Link href={`/watchlist?for=${r.id}`} className="btn-ghost !py-1.5 !text-[12px]">manage the lane →</Link>
+        </div>
+        {!digest.creators.length ? (
+          <div className="card p-6 text-[13px] text-muted">No one is watched under {r.name} yet. Open a neighbor's print, click watch, and pick {r.name}; their top posts and new sponsors will show here every week.</div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
+            <div className="card divide-y divide-line">
+              {digest.posts.length === 0 && <div className="p-5 text-[13px] text-muted">Nothing from the last 30 days yet; re-print the watched creators to refresh.</div>}
+              {digest.posts.slice(0, 8).map((p) => (
+                <a key={p.url} href={p.url} target="_blank" rel="noreferrer" className="flex items-start gap-3 p-3.5 hover:bg-surface2/60">
+                  <div className="num w-16 flex-none text-right"><div className="text-[15px] font-semibold">{fmtK2(p.metric)}</div><div className="text-[10px] text-ok">{p.mult ? `${p.mult}x their median` : `#${p.rank}`}</div></div>
+                  <div className="min-w-0"><div className="truncate text-[13px] font-medium">{p.on_screen ? p.on_screen : p.hook || p.title}</div>{p.on_screen && <div className="truncate text-[11.5px] text-muted">caption: {p.hook || p.title}</div>}<div className="num text-[10.5px] text-muted">{p.creator} · {new Date(p.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {p.kind}{p.sponsored ? " · sponsored" : ""}</div></div>
+                </a>
+              ))}
+            </div>
+            <div className="space-y-4">
+              <div className="card p-4"><div className="label mb-2">Hooks that work in the lane</div>{digest.hooks.length ? <ul className="space-y-1 text-[13px]">{digest.hooks.map((h) => <li key={h.hook} className="flex justify-between gap-3"><span>"{h.hook}"</span><span className="num text-[11px] text-muted">{h.count} posts · avg {fmtK2(h.avg)}</span></li>)}</ul> : <div className="text-[12.5px] text-muted">Shapes appear once a few watched prints have landed.</div>}</div>
+              <div className="card p-4"><div className="label mb-2">New sponsors in the lane</div>{digest.newBrands.length ? <ul className="space-y-1 text-[13px]">{digest.newBrands.slice(0, 8).map((b, i) => <li key={i} className="flex justify-between gap-3"><span>{b.brand_id ? <Link href={`/brands/${b.brand_id}`} className="font-medium hover:text-accent">{b.brand}</Link> : <span className="font-medium">{b.brand}</span>} <span className="text-muted">paid {b.creator}</span></span><span className="num text-[11px] text-muted">{new Date(b.when).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span></li>)}</ul> : <div className="text-[12.5px] text-muted">None flagged in the last 30 days.</div>}</div>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="mt-8" data-tour="lane">
         <div className="mb-3 flex items-end justify-between gap-4">

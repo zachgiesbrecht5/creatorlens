@@ -46,7 +46,7 @@ export interface TopPost { title: string; url: string; published_at: string; met
 export interface Performance { top: TopPost[]; median: number; metric_label: string; formats: { kind: string; count: number; avg: number }[]; hooks: { hook: string; count: number; avg: number }[]; window_days: number; items: number }
 
 // A one-line "hook": the first clause of a caption/title, trimmed to something a manager can quote.
-const hookOf = (t: string) => String(t || "").replace(/\s+/g, " ").split(/(?<=[.!?])\s|\n|\s\|\s/)[0].trim().slice(0, 80);
+const hookOf = (t: string) => { const first = String(t || "").split(/\r?\n/).map((l) => l.trim()).find((l) => l.length > 0) || ""; return first.replace(/\s+/g, " ").split(/(?<=[.!?])\s|\s\|\s/)[0].trim().slice(0, 90); };
 const hookShape = (t: string) => {
   const h = hookOf(t).toLowerCase();
   if (/^how to|^how i/.test(h)) return "How to";

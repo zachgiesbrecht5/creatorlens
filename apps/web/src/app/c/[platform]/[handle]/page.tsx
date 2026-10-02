@@ -46,8 +46,9 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
   const { data: hides } = user ? await admin.from("partnership_hides").select("brand_id").eq("user_id", user.id).eq("creator_id", creator.id) : { data: [] };
   const hidden = new Set((hides || []).map((h: any) => h.brand_id));
   const cards = ((wall || []) as WallCard[]).filter((c) => !c.is_junk && !hidden.has(c.brand_id));
-  const { data: watchRow } = user ? await admin.from("watchlist").select("handle").eq("user_id", user.id).eq("platform", p).eq("handle", creator.handle.toLowerCase()).maybeSingle() : { data: null };
+  const { data: watchRow } = user ? await admin.from("watchlist").select("handle,roster_creator_id").eq("user_id", user.id).eq("platform", p).eq("handle", creator.handle.toLowerCase()).maybeSingle() : { data: null };
   const watching = !!watchRow;
+  const watchFor = watchRow?.roster_creator_id || null;
   // the map: every dated deal by brand, plus the "why then" lines
   const [{ data: dealMonths }, { data: insights }] = await Promise.all([
     admin.from("partnerships").select("brand_id,published_at").eq("creator_id", creator.id).neq("status", "rejected").not("published_at", "is", null).limit(1000),
@@ -95,7 +96,7 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
             </div>
             {user && <div className="pw-actions" data-tour="actions">
               {!active && <Reprint platform={p} handle={creator.handle} />}
-              <WatchButton platform={p} handle={creator.handle} initial={watching} />
+              <WatchButton platform={p} handle={creator.handle} initial={watching} roster={(roster || []).map((r) => ({ id: r.id, name: r.name }))} initialFor={watchFor} />
               <NeighborsButton creatorId={creator.id} />
               {unlocked && <a href={`/api/print/pdf?platform=${p}&handle=${encodeURIComponent(creator.handle)}`} className="btn-like" title="PDF with recurring sponsors, every disclosed deal, and clickable links to the posts">download PDF ↓</a>}
             </div>}

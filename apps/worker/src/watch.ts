@@ -9,7 +9,7 @@ const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[watch]"
 const WEEK = 7 * 864e5;
 
 export async function keepWatch(sb: SupabaseClient): Promise<number> {
-  const { data: watches } = await sb.from("watchlist").select("user_id,platform,handle,known_brands");
+  const { data: watches } = await sb.from("watchlist").select("user_id,platform,handle,known_brands,roster_creator_id");
   let events = 0, queued = 0;
   for (const w of watches || []) {
     const { data: c } = await sb.from("creators").select("id,last_scanned_at").eq("platform", w.platform).ilike("handle", w.handle).maybeSingle();
@@ -18,7 +18,7 @@ export async function keepWatch(sb: SupabaseClient): Promise<number> {
       const known = new Set((w.known_brands || []) as string[]);
       const fresh = (wall || []).filter((b) => !known.has(b.brand));
       if (fresh.length && known.size > 0) {   // first check just baselines
-        await sb.from("watch_events").insert({ user_id: w.user_id, platform: w.platform, handle: w.handle, new_brands: fresh.map((b) => ({ brand: b.brand, brand_id: b.brand_id, deals: b.deals })) });
+        await sb.from("watch_events").insert({ user_id: w.user_id, platform: w.platform, handle: w.handle, roster_creator_id: w.roster_creator_id || null, new_brands: fresh.map((b) => ({ brand: b.brand, brand_id: b.brand_id, deals: b.deals })) });
         events++;
       }
       await sb.from("watchlist").update({ known_brands: (wall || []).map((b) => b.brand), last_checked_at: new Date().toISOString() }).eq("user_id", w.user_id).eq("platform", w.platform).eq("handle", w.handle);

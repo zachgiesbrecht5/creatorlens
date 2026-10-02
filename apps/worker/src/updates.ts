@@ -39,9 +39,28 @@ export async function writeCreatorUpdates(sb: SupabaseClient, force = false): Pr
     // regional sponsorship signals matched to this creator
     const { data: sigm } = await sb.from("signal_matches").select("signals(brand,property,market,announced_at)").eq("roster_creator_id", r.id).gte("created_at", monthStart.toISOString()).limit(5);
     const sigLines = (sigm || []).map((m: any) => m.signals ? `${m.signals.brand} signed ${m.signals.property}${m.signals.market ? ` (${m.signals.market})` : ""}` : null).filter(Boolean) as string[];
-    if (!shown.length && !lane.length && !sigLines.length && !force) { log("nothing to say for", r.name); continue; }
-    const sys = `You write a short monthly update from a talent manager to a creator they represent, in the manager's voice. Plain text, warm, direct, no hype, no exclamation marks, no bullet points, under 160 words. Structure: greeting with the creator's first name; one line naming the month; then short labelled lines only for sections that have content: "Pitched:", "In conversation:", "Closed:", "Passed:", "On the radar:" (brands starting to book creators in their lane). Include dollar amounts only where given. End with a one-line sign-off from the manager's first name, no signature block.${profile?.pitch_style ? `\nManager's style notes: ${String(profile.pitch_style).slice(0, 400)}` : ""}`;
-    const user = `Manager: ${profile?.full_name || "the manager"}\nCreator: ${r.name} (@${r.handle})\nMonth: ${label}\n\nOutreach this month (brand · stage · value · note · date):\n${shown.map((x) => `${x.brand} · ${x.stage} · ${x.value != null ? "$" + Number(x.value).toLocaleString() : "-"} · ${x.note || "-"} · ${x.when}`).join("\n") || "(none)"}\n\nBrands that started booking creators in their lane this month: ${lane.join(", ") || "(none)"}\nSponsorship deals signed in their market this month (worth mentioning as "on the radar", we are pitching them): ${sigLines.join("; ") || "(none)"}`;
+    // what's working in their lane: the creators watched under them, best recent posts vs their own median, recurring hooks
+    const { data: watches } = await sb.from("watchlist").select("platform,handle").eq("user_id", r.user_id).eq("roster_creator_id", r.id);
+    const laneLines: string[] = []; const hookAgg = new Map<string, { count: number; sum: number }>();
+    if (watches?.length) {
+      const { data: lc } = await sb.from("creators").select("handle,display_name,performance").or(watches.map((w) => `and(platform.eq.${w.platform},handle.ilike.${w.handle})`).join(","));
+      const picks: { line: string; score: number }[] = [];
+      for (const c of lc || []) {
+        const perf = c.performance as any; if (!perf?.top) continue;
+        for (const t of (perf.top as any[]).slice(0, 5)) {
+          if (String(t.published_at) < monthStart.toISOString()) continue;
+          const mult = perf.median >= 1000 ? t.metric / perf.median : 0;
+          const hook = t.on_screen || t.hook || String(t.title).slice(0, 80);
+          picks.push({ line: `${c.display_name || c.handle}: "${hook}" (${t.kind}, ${Math.round(t.metric / 1000)}K ${perf.metric_label}${mult ? `, ${mult.toFixed(1)}x their median` : ""}${t.sponsored ? ", sponsored" : ""})`, score: mult || t.metric / 1e6 });
+        }
+        for (const h of (perf.hooks || []) as any[]) { if (h.hook === "Other") continue; const e = hookAgg.get(h.hook) || hookAgg.set(h.hook, { count: 0, sum: 0 }).get(h.hook)!; e.count += h.count; e.sum += h.avg * h.count; }
+      }
+      laneLines.push(...picks.sort((a, b) => b.score - a.score).slice(0, 4).map((p) => p.line));
+    }
+    const hookLine = [...hookAgg.entries()].sort((a, b) => b[1].sum / b[1].count - a[1].sum / a[1].count).slice(0, 3).map(([h, v]) => `"${h}" (${v.count} posts)`).join(", ");
+    if (!shown.length && !lane.length && !sigLines.length && !laneLines.length && !force) { log("nothing to say for", r.name); continue; }
+    const sys = `You write a short monthly update from a talent manager to a creator they represent, in the manager's voice. Plain text, warm, direct, no hype, no exclamation marks, no bullet points, under 160 words. If lane performance data is provided, add one short paragraph "what we're seeing in your lane" naming one or two specific posts/hooks from creators like them and one idea worth testing, phrased as a suggestion the creator can ignore, never as instruction. Structure: greeting with the creator's first name; one line naming the month; then short labelled lines only for sections that have content: "Pitched:", "In conversation:", "Closed:", "Passed:", "On the radar:" (brands starting to book creators in their lane). Include dollar amounts only where given. End with a one-line sign-off from the manager's first name, no signature block.${profile?.pitch_style ? `\nManager's style notes: ${String(profile.pitch_style).slice(0, 400)}` : ""}`;
+    const user = `Manager: ${profile?.full_name || "the manager"}\nCreator: ${r.name} (@${r.handle})\nMonth: ${label}\n\nOutreach this month (brand · stage · value · note · date):\n${shown.map((x) => `${x.brand} · ${x.stage} · ${x.value != null ? "$" + Number(x.value).toLocaleString() : "-"} · ${x.note || "-"} · ${x.when}`).join("\n") || "(none)"}\n\nBrands that started booking creators in their lane this month: ${lane.join(", ") || "(none)"}\nSponsorship deals signed in their market this month (worth mentioning as "on the radar", we are pitching them): ${sigLines.join("; ") || "(none)"}\n\nWhat's working in their lane this month (creators like them, their best posts vs their own median; the quoted text is the hook):\n${laneLines.join("\n") || "(none)"}\nHook shapes performing in the lane: ${hookLine || "(none)"}`;
     const msg = await client.messages.create({ model: MODEL, max_tokens: 700, temperature: 0.4, system: sys, messages: [{ role: "user", content: user }] });
     recordSpend(sb, "updates", MODEL, (msg as any).usage).catch(() => {});
     const body = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("").trim();
