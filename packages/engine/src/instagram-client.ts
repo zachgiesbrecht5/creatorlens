@@ -24,6 +24,7 @@ export interface IgPost {
   comments: number;
   mediaType: string;
   cover?: string | null;
+  video?: string | null;
 }
 
 export interface IgToken {
@@ -94,7 +95,7 @@ export async function fetchIgCreator(token: IgToken, username: string, maxPosts 
     if (!m?.data?.length) break;
     for (const p of m.data) {
       posts.push({ id: p.id, caption: p.caption || "", permalink: p.permalink || "", timestamp: p.timestamp || "",
-        likes: Number(p.like_count || 0), comments: Number(p.comments_count || 0), mediaType: p.media_type || "", cover: p.thumbnail_url || (p.media_type === "IMAGE" || p.media_type === "CAROUSEL_ALBUM" ? p.media_url : null) || null });
+        likes: Number(p.like_count || 0), comments: Number(p.comments_count || 0), mediaType: p.media_type || "", cover: p.thumbnail_url || (p.media_type === "IMAGE" || p.media_type === "CAROUSEL_ALBUM" ? p.media_url : null) || null, video: p.media_type === "VIDEO" ? p.media_url || null : null });
     }
     after = m.paging?.cursors?.after || null;
     if (!after || m.data.length < pageSize) break;

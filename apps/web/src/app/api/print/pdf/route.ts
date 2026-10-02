@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 // A print as a PDF a manager can send to a brand: recurring sponsors, every
 // disclosed sponsor with a clickable link to the post, and the most recent
 // sponsored posts. Links are real PDF link annotations.
-const sane = (s: string) => String(s || "").replace(/[^\x20-\x7E]/g, "").trim();
+const sane = (s: string) => String(s || "").replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'").replace(/[\u2013\u2014]/g, "-").replace(/[^\x20-\x7E]/g, "").trim();
 const fmtK = (n: number | null) => (!n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
 const mon = (d: string | null) => (d ? new Date(d).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "");
 
@@ -46,23 +46,31 @@ export async function GET(req: NextRequest) {
   const totalDeals = rows.reduce((s, r) => s + Number(r.deals || 0), 0);
   text(`${rows.length} brands   ·   ${totalDeals} disclosed deals   ·   ${repeats.length} recurring`, M, 12, bold); y -= 18; rule();
 
-  // what's performing
-  const perf = (c as any).performance as { top: { title: string; url: string; published_at: string; metric: number; metric_label: string; kind: string; hook: string; sponsored: boolean }[]; median: number; metric_label: string; formats: { kind: string; count: number; avg: number }[]; hooks: { hook: string; count: number; avg: number }[]; items: number } | null;
+  // what's performing: one block per post, the hook first (spoken > on-video > on-screen > caption), the numbers under it
+  const perf = (c as any).performance as { top: any[]; median: number; metric_label: string; formats: { kind: string; count: number; avg: number }[]; hooks: { hook: string; count: number; avg: number }[]; items: number } | null;
   const fmtN = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
+  const wrap = (t: string, f: typeof font, size: number, width: number) => { const words = sane(t).split(" "); const lines: string[] = []; let cur = ""; for (const w of words) { const next = cur ? cur + " " + w : w; if (f.widthOfTextAtSize(next, size) > width && cur) { lines.push(cur); cur = w; } else cur = next; } if (cur) lines.push(cur); return lines; };
   if (perf?.top?.length) {
     text("WHAT'S PERFORMING", M, 9, mono, muted); y -= 14;
-    text(`${perf.items} posts in the window  ·  median ${fmtN(perf.median)} ${perf.metric_label}  ·  top ${Math.min(6, perf.top.length)} below, each vs the median`, M, 9, font, muted); y -= 16;
+    text(`${perf.items} posts in the window  ·  median ${fmtN(perf.median)} ${perf.metric_label}  ·  top ${Math.min(6, perf.top.length)}`, M, 9, font, muted); y -= 18;
     perf.top.slice(0, 6).forEach((t, k) => {
-      newPageIfNeeded();
-      // a multiple of the median only reads well when the median is a real number; otherwise rank it
+      newPageIfNeeded(60);
       const mult = perf.median >= 1000 ? `${(t.metric / perf.median).toFixed(1)}x median` : `#${k + 1} of ${perf.items}`;
-      const left = `${fmtN(t.metric)} ${perf.metric_label}`;
-      text(left, M, 10, bold); const lw = bold.widthOfTextAtSize(left, 10);
-      text(mult, M + lw + 10, 9, mono, green); const mw = mono.widthOfTextAtSize(mult, 9);
-      text(`${mon(t.published_at)}  ·  ${t.kind}${t.sponsored ? "  ·  sponsored" : ""}`, M + lw + mw + 22, 9, mono, muted); y -= 12;
-      link(sane(t.hook || t.title).slice(0, 95), M, 9.5, t.url); y -= 12;
-      if ((t as any).on_screen) { text(`on screen: "${sane((t as any).on_screen).slice(0, 90)}"`, M, 8.5, font, muted); y -= 12; }
-      y -= 3;
+      // left column: the number; right column: hook lines
+      const colX = M + 92;
+      text(fmtN(t.metric), M, 16, bold); y -= 11; text(perf.metric_label, M, 8, mono, muted); y += 11;
+      page.drawText(mult, { x: M, y: y - 22, size: 8, font: mono, color: green });
+      const primary = t.spoken || t.on_video || t.on_screen || t.hook || t.title;
+      const primaryLabel = t.spoken ? "said" : t.on_video ? "on video" : t.on_screen ? "on cover" : "caption";
+      const lines = wrap(`\u201C${primary}\u201D`, bold, 11, 612 - M - colX);
+      let yy = y;
+      for (const ln of lines.slice(0, 2)) { page.drawText(sane(ln), { x: colX, y: yy, size: 11, font: bold, color: ink }); yy -= 14; }
+      page.drawText(`${primaryLabel}  ·  ${mon(t.published_at)}  ·  ${t.kind}${t.sponsored ? "  ·  sponsored" : ""}`, { x: colX, y: yy, size: 8, font: mono, color: muted }); yy -= 11;
+      if (t.spoken && (t.on_video || t.on_screen)) { page.drawText(sane(`on screen: \u201C${(t.on_video || t.on_screen).slice(0, 90)}\u201D`), { x: colX, y: yy, size: 8.5, font, color: muted }); yy -= 11; }
+      if ((t.spoken || t.on_video || t.on_screen) && t.hook) { page.drawText(sane(`caption: ${t.hook.slice(0, 95)}`), { x: colX, y: yy, size: 8.5, font, color: muted }); yy -= 11; }
+      const lw = font.widthOfTextAtSize("open post", 8); page.drawText("open post", { x: colX, y: yy, size: 8, font, color: blue }); page.drawLine({ start: { x: colX, y: yy - 1.5 }, end: { x: colX + lw, y: yy - 1.5 }, thickness: 0.5, color: blue }); links.push({ page, x: colX, y: yy - 3, w: lw, h: 11, url: t.url }); yy -= 10;
+      y = Math.min(yy, y - 34) - 8;
+      page.drawLine({ start: { x: M, y: y + 2 }, end: { x: 612 - M, y: y + 2 }, thickness: 0.4, color: rgb(0.92, 0.93, 0.95) }); y -= 6;
     });
     if (perf.formats?.length) { text("By format: " + perf.formats.map((f) => `${f.kind} ${f.count} posts, avg ${fmtN(f.avg)}`).join("   ·   "), M, 8.5, font, muted); y -= 12; }
     const hooks = (perf.hooks || []).filter((h) => h.hook !== "Other").slice(0, 4);

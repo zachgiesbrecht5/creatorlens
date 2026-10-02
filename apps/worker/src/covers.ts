@@ -43,7 +43,7 @@ export async function readCovers(sb: SupabaseClient, creatorId: string): Promise
   let n = 0;
   for (const it of items) { const idx = it.n - 1; if (top[idx]) { top[idx].on_screen = it.text ? String(it.text).replace(/\s+/g, " ").trim().slice(0, 140) : ""; n++; } }
   // covers from Instagram's CDN expire; drop the URL once read so nothing links to a dead image
-  for (const t of top) if (t.cover && /cdninstagram|fbcdn/.test(t.cover)) t.cover = null;
+  for (const t of top) if (t.cover && /cdninstagram|fbcdn/.test(t.cover)) t.cover = null;   // (video urls are cleared by hooks.ts after use)
   await sb.from("creators").update({ performance: { ...perf, top: [...top, ...(perf.top || []).slice(8)] } }).eq("id", creatorId);
   log(creatorId, "read", n, "covers");
   return n;

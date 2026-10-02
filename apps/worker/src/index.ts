@@ -139,7 +139,7 @@ async function persist(job: any, result: ScanResult) {
       await sb.from("creators").update({ performance: result.performance }).eq("id", creator.id);
       const pf = result.performance;
       await sb.from("performance_snapshots").insert({ creator_id: creator.id, items: pf.items, median: pf.median, metric_label: pf.metric_label, top: pf.top.slice(0, 5).map((t) => ({ title: t.title.slice(0, 120), url: t.url, published_at: t.published_at, metric: t.metric, kind: t.kind, hook: t.hook, sponsored: t.sponsored })), hooks: pf.hooks, formats: pf.formats }).then(() => {});
-      readCovers(sb, creator.id).catch((e: any) => log("covers failed", e?.message));
+      readCovers(sb, creator.id).then(() => readHooks(sb, creator.id)).catch((e: any) => log("covers/hooks failed", e?.message));
     }
     if (job.source === "discover") await sb.from("creators").update({ is_public: true, discovered_at: new Date().toISOString(), discover_reason: job.note || null }).eq("id", creator.id);
     // resolve sites for new brands first so the classifier sees the brand's own page (cap per scan; backfill gets the rest)
@@ -314,6 +314,7 @@ import { runNeighborhoods } from "./neighborhood";
 import { runBrandScans } from "./brandscan";
 import { discover } from "./discover";
 import { readCovers } from "./covers";
+import { readHooks } from "./hooks";
 import { announceSignups } from "./signups";
 import { heartbeat, alert, nightly } from "./observe";
 

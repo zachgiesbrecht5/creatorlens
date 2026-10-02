@@ -25,7 +25,7 @@ export async function laneDigest(userId: string, rosterCreatorId: string, days =
     const name = c.display_name || c.handle;
     (perf.top as any[]).forEach((t, i) => {
       if (String(t.published_at) < since) return;
-      posts.push({ creator: name, handle: c.handle, platform: c.platform, title: t.title, hook: t.hook, on_screen: t.on_screen || null, url: t.url, metric: t.metric, metric_label: perf.metric_label, mult: perf.median >= 1000 ? +(t.metric / perf.median).toFixed(1) : null, rank: i + 1, published_at: t.published_at, kind: t.kind, sponsored: !!t.sponsored });
+      posts.push({ creator: name, handle: c.handle, platform: c.platform, title: t.title, hook: t.hook, on_screen: t.spoken || t.on_video || t.on_screen || null, url: t.url, metric: t.metric, metric_label: perf.metric_label, mult: perf.median >= 1000 ? +(t.metric / perf.median).toFixed(1) : null, rank: i + 1, published_at: t.published_at, kind: t.kind, sponsored: !!t.sponsored });
     });
     for (const h of (perf.hooks || []) as any[]) { if (h.hook === "Other") continue; const e = hookAgg.get(h.hook) || hookAgg.set(h.hook, { count: 0, sum: 0 }).get(h.hook)!; e.count += h.count; e.sum += h.avg * h.count; }
   }

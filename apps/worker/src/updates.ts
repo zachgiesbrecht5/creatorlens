@@ -50,7 +50,7 @@ export async function writeCreatorUpdates(sb: SupabaseClient, force = false): Pr
         for (const t of (perf.top as any[]).slice(0, 5)) {
           if (String(t.published_at) < monthStart.toISOString()) continue;
           const mult = perf.median >= 1000 ? t.metric / perf.median : 0;
-          const hook = t.on_screen || t.hook || String(t.title).slice(0, 80);
+          const hook = t.spoken || t.on_video || t.on_screen || t.hook || String(t.title).slice(0, 80);
           picks.push({ line: `${c.display_name || c.handle}: "${hook}" (${t.kind}, ${Math.round(t.metric / 1000)}K ${perf.metric_label}${mult ? `, ${mult.toFixed(1)}x their median` : ""}${t.sponsored ? ", sponsored" : ""})`, score: mult || t.metric / 1e6 });
         }
         for (const h of (perf.hooks || []) as any[]) { if (h.hook === "Other") continue; const e = hookAgg.get(h.hook) || hookAgg.set(h.hook, { count: 0, sum: 0 }).get(h.hook)!; e.count += h.count; e.sum += h.avg * h.count; }
