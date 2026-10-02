@@ -36,7 +36,7 @@ async function transcribe(wav: Buffer): Promise<string | null> {
 
 export async function readHooks(sb: SupabaseClient, creatorId: string): Promise<number> {
   if (!DEEPGRAM && !OPENAI && !client) return 0;
-  if (!(await optionalBudgetOpen(sb))) return 0;
+  const modelOk = client ? await optionalBudgetOpen(sb).catch(() => false) : false;
   const { data: c } = await sb.from("creators").select("performance,platform").eq("id", creatorId).single();
   if (c?.platform !== "instagram") return 0;
   const perf = c.performance as any;
@@ -64,15 +64,17 @@ export async function readHooks(sb: SupabaseClient, creatorId: string): Promise<
       } catch (e: any) { log("clip failed", t.url, String(e?.message || e).slice(0, 120)); t.spoken = t.spoken ?? ""; }
     }
     // burned-in captions: one vision call for all frames
-    if (client && frames.length) {
+    if (client && modelOk && frames.length) {
       const content: any[] = [];
       for (const f of frames) { content.push({ type: "text", text: `Post ${f.i + 1}:` }); content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: f.data } }); }
       content.push({ type: "text", text: `These are frames from the first seconds of short videos, grouped by post number. For each post, transcribe the on-video caption/overlay text exactly as written (ignore platform UI, usernames, and watermarks). Combine the frames of a post into one string in order, without repeating text that appears in more than one frame. null if none. Reply ONLY with JSON: {"items":[{"n":1,"text":"..."|null}]}` });
-      const msg = await client.messages.create({ model: MODEL, max_tokens: 900, temperature: 0, messages: [{ role: "user", content }] });
-      recordSpend(sb, "hooks", MODEL, (msg as any).usage, creatorId).catch(() => {});
-      const text = msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join("");
-      const m = text.match(/\{[\s\S]*\}/);
-      try { for (const it of (m ? JSON.parse(m[0]).items || [] : [])) { const idx = it.n - 1; if (top[idx]) top[idx].on_video = it.text ? String(it.text).replace(/\s+/g, " ").trim().slice(0, 240) : ""; } } catch { /* ignore */ }
+      try {
+        const msg = await client.messages.create({ model: MODEL, max_tokens: 900, temperature: 0, messages: [{ role: "user", content }] });
+        recordSpend(sb, "hooks", MODEL, (msg as any).usage, creatorId).catch(() => {});
+        const text = msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join("");
+        const m = text.match(/\{[\s\S]*\}/);
+        for (const it of (m ? JSON.parse(m[0]).items || [] : [])) { const idx = it.n - 1; if (top[idx]) top[idx].on_video = it.text ? String(it.text).replace(/\s+/g, " ").trim().slice(0, 240) : ""; }
+      } catch (e: any) { log("frame read skipped:", String(e?.message || e).slice(0, 120)); }
     }
   } finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
   for (const t of top) if (t.video) t.video = null;   // CDN links expire; never keep them
