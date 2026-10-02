@@ -29,7 +29,7 @@ export async function spentToday(sb: SupabaseClient): Promise<number> {
 
 /** True when optional work may run. Reserves the last 20% of the day's budget for what people click. */
 export async function optionalBudgetOpen(sb: SupabaseClient): Promise<boolean> {
-  if (modelPaused()) return false;
+  if (modelPaused() || errorPaused()) return false;
   const spent = await spentToday(sb);
   return spent < DAILY_BUDGET * 0.8;
 }
@@ -47,3 +47,12 @@ export function noteModelError(e: unknown): boolean {
   return false;
 }
 export function modelPaused(): boolean { return Date.now() < pausedUntil; }
+
+/** Strip lone UTF-16 surrogates (half-cut emoji) and null bytes; they make a request body invalid JSON. */
+export function cleanForModel(v: string): string {
+  return String(v || "").replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "").replace(/(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "$1").replace(/\u0000/g, "");
+}
+// Any repeated model error (not just billing) backs off for 10 minutes so an idle loop can't hammer the API.
+let errorPausedUntil = 0;
+export function noteAnyModelError(): void { errorPausedUntil = Date.now() + 10 * 60e3; }
+export function errorPaused(): boolean { return Date.now() < errorPausedUntil; }

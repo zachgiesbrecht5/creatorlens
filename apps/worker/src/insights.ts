@@ -4,7 +4,7 @@
 // re-run only when the creator has brands without an insight.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recordSpend, optionalBudgetOpen, noteModelError } from "./spend";
+import { recordSpend, optionalBudgetOpen, noteModelError, cleanForModel } from "./spend";
 
 const MODEL = process.env.ANTHROPIC_INSIGHTS_MODEL || "claude-haiku-4-5";
 const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "PASTE_ME" ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
@@ -25,7 +25,7 @@ export async function explainCreatorDeals(sb: SupabaseClient, creatorId: string)
   const system = `You explain creator sponsorships to a talent manager. For each brand, write ONE sentence (max 22 words) on why this brand likely booked this creator at that time: connect the brand's category to the creator's audience and the season or calendar moment (holiday gifting, back to school, tax season, New Year fitness, summer travel, product launch, Prime Day, Super Bowl, Father's/Mother's Day, etc.). Be concrete and plausible, never invent facts you can't infer from the data; if the timing has no obvious hook, say what the content fit is instead. Also give a 2-4 word "season" tag or null.
 Reply ONLY with JSON: {"items":[{"n":1,"why":"...","season":"..."|null}, ...]}`;
   const user = `Creator: ${creator.display_name || creator.handle} (@${creator.handle}, ${creator.platform}, ${creator.followers || "?"} followers, niche: ${creator.category || "?"})\nBio: ${String(creator.bio || "").slice(0, 200)}\n\nBrands:\n${lines}`;
-  const msg = await client.messages.create({ model: MODEL, max_tokens: 2500, temperature: 0.3, system, messages: [{ role: "user", content: user }] });
+  const msg = await client.messages.create({ model: MODEL, max_tokens: 2500, temperature: 0.3, system, messages: [{ role: "user", content: cleanForModel(user) }] });
     recordSpend(sb, "insights", MODEL, (msg as any).usage).catch(() => {});
   const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
   const m = text.match(/\{[\s\S]*\}/);

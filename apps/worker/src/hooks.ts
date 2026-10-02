@@ -52,9 +52,15 @@ export async function readHooks(sb: SupabaseClient, creatorId: string): Promise<
   try {
     for (const { t, i } of todo) {
       try {
-        const mp4 = path.join(dir, `${i}.mp4`), wav = path.join(dir, `${i}.wav`);
-        // first SECONDS only: stream-copy the head of the file, then split audio + 3 frames
-        await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", "0", "-t", String(SECONDS), "-i", t.video, "-c", "copy", mp4]);
+        const src = path.join(dir, `${i}-src.mp4`), mp4 = path.join(dir, `${i}.mp4`), wav = path.join(dir, `${i}.wav`);
+        // download the reel (the static ffmpeg can't read https), then cut the first SECONDS locally
+        const r = await fetch(t.video, { signal: AbortSignal.timeout(20000), headers: { "user-agent": "Mozilla/5.0" } });
+        if (!r.ok) throw new Error(`download ${r.status}`);
+        const len = Number(r.headers.get("content-length") || 0);
+        if (len > 60_000_000) throw new Error("video too large");
+        await fs.writeFile(src, Buffer.from(await r.arrayBuffer()));
+        await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", "0", "-t", String(SECONDS), "-i", src, "-c", "copy", mp4]);
+        await fs.rm(src, { force: true });
         await run("ffmpeg", ["-y", "-loglevel", "error", "-i", mp4, "-vn", "-ac", "1", "-ar", "16000", "-f", "wav", wav]);
         const text = await transcribe(await fs.readFile(wav));
         t.spoken = text == null ? null : text.replace(/\s+/g, " ").trim().slice(0, 240);
@@ -64,7 +70,7 @@ export async function readHooks(sb: SupabaseClient, creatorId: string): Promise<
           await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", String(sec), "-i", mp4, "-frames:v", "1", "-vf", "scale=540:-1", jpg]).catch(() => {});
           try { frames.push({ i, data: (await fs.readFile(jpg)).toString("base64") }); } catch { /* no frame */ }
         }
-      } catch (e: any) { log("clip failed", t.url, String(e?.message || e).slice(0, 120)); t.spoken = t.spoken ?? ""; }
+      } catch (e: any) { log("clip failed", t.url, String(e?.message || e).replace(/\s+/g, " ").slice(-160)); t.spoken = t.spoken ?? ""; }
     }
     // burned-in captions: one vision call for all frames
     if (client && modelOk && frames.length) {

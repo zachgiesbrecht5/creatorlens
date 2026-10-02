@@ -5,7 +5,7 @@
 // platform (cheap lookups) and keep the ones that fit; (4) queue free prints.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recordSpend, optionalBudgetOpen, noteModelError } from "./spend";
+import { recordSpend, optionalBudgetOpen, noteModelError, cleanForModel } from "./spend";
 import { resolveChannel, lookupIgProfile, recentVideoIds, searchVideoChannels, type IgToken } from "@creatorlens/engine";
 import { alert } from "./observe";
 
@@ -213,7 +213,7 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
   if (client && picked.length < 3) {
     const sys = `You find creators similar to a given creator for a talent manager. Return 8 candidates on the SAME platform who are clearly in the same content lane and roughly the same audience size (within 4x). Prefer active, real accounts. Use web search to verify handles exist. Never return the creator themselves, and never return mega-celebrities unless the input creator is one. Reply ONLY with JSON: {"candidates":[{"handle":"...","why":"<one sentence on the overlap>"}]}`;
     const user = `Platform: ${platform}\nCreator: ${r.name} (@${handle})\nAudience: ${size || "unknown"} ${platform === "youtube" ? "subscribers" : "followers"}\nNiche: ${r.niche || cat || "unknown"}\nBio: ${String(r.bio || "").slice(0, 300)}\nAngle: ${String(r.pitch_angle || "").slice(0, 300)}${liked.length ? `\n\nThe manager said these ARE a match for the lane (find more like them): ${liked.slice(0, 12).join(", ")}` : ""}${passed.length ? `\nThe manager said these are NOT a match (avoid this kind): ${passed.slice(0, 12).join(", ")}` : ""}${avoid.length ? `\n\nDo NOT return any of these (already shown): ${avoid.map((h) => "@" + h).join(", ")}. Find different people.` : ""}`;
-    const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0.4, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 2 } as any], messages: [{ role: "user", content: user }] });
+    const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0.4, system: sys, tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 2 } as any], messages: [{ role: "user", content: cleanForModel(user) }] });
     recordSpend(sb, "neighborhood", MODEL, (msg as any).usage).catch(() => {});
     const u: any = msg.usage || {};
     const input = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);

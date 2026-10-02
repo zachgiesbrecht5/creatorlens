@@ -7,7 +7,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recordSpend, optionalBudgetOpen, noteModelError } from "./spend";
+import { recordSpend, optionalBudgetOpen, noteModelError, noteAnyModelError, cleanForModel } from "./spend";
 import { CATEGORIES, matchCategory, type Category } from "@creatorlens/engine";
 
 const MODEL = process.env.ANTHROPIC_CLASSIFY_MODEL || "claude-haiku-4-5";
@@ -24,13 +24,13 @@ const norm = (s: string | null | undefined): Category => {
 async function ask(sb: SupabaseClient, system: string, user: string): Promise<any | null> {
   if (!client) return null;
   try {
-    const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0, system, messages: [{ role: "user", content: user }] });
+    const msg = await client.messages.create({ model: MODEL, max_tokens: 1500, temperature: 0, system: cleanForModel(system), messages: [{ role: "user", content: cleanForModel(user) }] });
     recordSpend(sb, "classify", MODEL, (msg as any).usage).catch(() => {});
     const text = msg.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
     const m = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
     return m ? JSON.parse(m[0]) : null;
   } catch (e: any) {
-    if (!noteModelError(e)) log("model call failed:", e?.message);
+    if (!noteModelError(e)) { noteAnyModelError(); log("model call failed:", String(e?.message || "").slice(0, 200), "(backing off 10 min)"); }
     return null;
   }
 }
