@@ -7,8 +7,9 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
+import ffmpegStatic from "ffmpeg-static";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recordSpend, optionalBudgetOpen } from "./spend";
+import { recordSpend, optionalBudgetOpen, noteModelError } from "./spend";
 
 const MODEL = process.env.ANTHROPIC_COVERS_MODEL || "claude-haiku-4-5";
 const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "PASTE_ME" ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
@@ -16,7 +17,9 @@ const DEEPGRAM = process.env.DEEPGRAM_API_KEY || "";
 const OPENAI = process.env.OPENAI_API_KEY || "";
 const SECONDS = Number(process.env.HOOK_SECONDS || 6);
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[hooks]", ...a);
-const run = (cmd: string, args: string[]) => new Promise<void>((res, rej) => execFile(cmd, args, { timeout: 60000 }, (e) => (e ? rej(e) : res())));
+// ffmpeg: the bundled static binary (installs with npm, no build-system dependency), falling back to a system one
+const FFMPEG = (ffmpegStatic as unknown as string) || "ffmpeg";
+const run = (_cmd: string, args: string[]) => new Promise<void>((res, rej) => execFile(FFMPEG, args, { timeout: 60000 }, (e) => (e ? rej(e) : res())));
 
 async function transcribe(wav: Buffer): Promise<string | null> {
   if (DEEPGRAM) {

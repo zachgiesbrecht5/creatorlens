@@ -5,7 +5,7 @@
 // platform (cheap lookups) and keep the ones that fit; (4) queue free prints.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recordSpend, optionalBudgetOpen } from "./spend";
+import { recordSpend, optionalBudgetOpen, noteModelError } from "./spend";
 import { resolveChannel, lookupIgProfile, recentVideoIds, searchVideoChannels, type IgToken } from "@creatorlens/engine";
 import { alert } from "./observe";
 
@@ -38,6 +38,7 @@ export async function runNeighborhoods(sb: SupabaseClient, limit = 1): Promise<n
     catch (e: any) {
       log("failed", j.id, e?.message);
       const msg = String(e?.message || e);
+      noteModelError(e);
       if (/credit balance|usage limits/i.test(msg)) { const day = new Date().toISOString().slice(0, 10); const { data: dup } = await sb.from("alerts").select("id").eq("message", "Anthropic account needs credits").gte("created_at", `${day}T00:00:00Z`).limit(1); if (!dup?.length) await alert(sb, "Anthropic account needs credits", { detail: "Model calls are refused: add credits or raise the monthly limit at console.anthropic.com. Neighborhoods, drafts, research and classification are paused until then." }); }
       else await alert(sb, "neighborhood failed", { id: j.id, error: msg.slice(0, 300) });
       await sb.from("neighborhoods").update({ status: "failed", error: String(e?.message || e).slice(0, 400), finished_at: new Date().toISOString() }).eq("id", j.id);

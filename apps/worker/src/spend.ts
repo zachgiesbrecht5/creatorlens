@@ -29,6 +29,21 @@ export async function spentToday(sb: SupabaseClient): Promise<number> {
 
 /** True when optional work may run. Reserves the last 20% of the day's budget for what people click. */
 export async function optionalBudgetOpen(sb: SupabaseClient): Promise<boolean> {
+  if (modelPaused()) return false;
   const spent = await spentToday(sb);
   return spent < DAILY_BUDGET * 0.8;
 }
+
+// Circuit breaker: after a billing refusal, pause optional model work for an hour
+// instead of retrying every few seconds. Clicks still try (they fail fast and say why).
+let pausedUntil = 0;
+export function noteModelError(e: unknown): boolean {
+  const msg = String((e as any)?.message || e || "");
+  if (/credit balance|usage limits|billing/i.test(msg)) {
+    if (Date.now() > pausedUntil) console.log(new Date().toISOString(), "[spend] Anthropic refused (billing); pausing optional model work for 60 min");
+    pausedUntil = Date.now() + 60 * 60e3;
+    return true;
+  }
+  return false;
+}
+export function modelPaused(): boolean { return Date.now() < pausedUntil; }

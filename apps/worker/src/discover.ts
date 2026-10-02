@@ -6,7 +6,7 @@
 // neighborhood uses, verified on the platform, size-banded.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recordSpend, optionalBudgetOpen } from "./spend";
+import { recordSpend, optionalBudgetOpen, noteModelError } from "./spend";
 import { resolveChannel, lookupIgProfile, type IgToken } from "@creatorlens/engine";
 import { alert } from "./observe";
 

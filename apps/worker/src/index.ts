@@ -141,7 +141,7 @@ async function persist(job: any, result: ScanResult) {
       await sb.from("performance_snapshots").insert({ creator_id: creator.id, items: pf.items, median: pf.median, metric_label: pf.metric_label, top: pf.top.slice(0, 5).map((t) => ({ title: t.title.slice(0, 120), url: t.url, published_at: t.published_at, metric: t.metric, kind: t.kind, hook: t.hook, sponsored: t.sponsored })), hooks: pf.hooks, formats: pf.formats }).then(() => {});
       // spoken hooks (Deepgram) and cover/frame reads (Anthropic) are independent; neither blocks the other
       readHooks(sb, creator.id).catch((e: any) => log("hooks failed", String(e?.message || e).slice(0, 160)));
-      readCovers(sb, creator.id).catch((e: any) => log("covers failed", String(e?.message || e).slice(0, 160)));
+      readCovers(sb, creator.id).catch((e: any) => { if (!noteModelError(e)) log("covers failed", String(e?.message || e).slice(0, 160)); });
     }
     if (job.source === "discover") await sb.from("creators").update({ is_public: true, discovered_at: new Date().toISOString(), discover_reason: job.note || null }).eq("id", creator.id);
     // resolve sites for new brands first so the classifier sees the brand's own page (cap per scan; backfill gets the rest)
@@ -317,6 +317,7 @@ import { runBrandScans } from "./brandscan";
 import { discover } from "./discover";
 import { readCovers } from "./covers";
 import { readHooks } from "./hooks";
+import { noteModelError } from "./spend";
 import { announceSignups } from "./signups";
 import { heartbeat, alert, nightly } from "./observe";
 

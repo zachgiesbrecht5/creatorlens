@@ -7,7 +7,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recordSpend, optionalBudgetOpen } from "./spend";
+import { recordSpend, optionalBudgetOpen, noteModelError } from "./spend";
 import { CATEGORIES, matchCategory, type Category } from "@creatorlens/engine";
 
 const MODEL = process.env.ANTHROPIC_CLASSIFY_MODEL || "claude-haiku-4-5";
@@ -30,7 +30,7 @@ async function ask(sb: SupabaseClient, system: string, user: string): Promise<an
     const m = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
     return m ? JSON.parse(m[0]) : null;
   } catch (e: any) {
-    log("model call failed:", e?.message);
+    if (!noteModelError(e)) log("model call failed:", e?.message);
     return null;
   }
 }

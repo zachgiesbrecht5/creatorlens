@@ -3,7 +3,7 @@
 // cent and a half. Budget-gated like other optional work.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recordSpend, optionalBudgetOpen } from "./spend";
+import { recordSpend, optionalBudgetOpen, noteModelError } from "./spend";
 
 const MODEL = process.env.ANTHROPIC_COVERS_MODEL || "claude-haiku-4-5";
 const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "PASTE_ME" ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
