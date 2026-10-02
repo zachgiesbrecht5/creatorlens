@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { LaneMap } from "@/components/LaneMap";
 import { HoodCards, useHood } from "@/components/HoodCards";
 import { PrinterMachine } from "@/components/PrinterMachine";
 
@@ -28,6 +29,7 @@ export function HoodView({ hoodId: initial, seed }: { hoodId: string; seed: { na
       <section className="st-hood">
         <div className="st-hood-head"><div className="text-[17px] font-semibold tracking-tight">Neighbors</div>{hood?.status === "done" && seed?.creatorId && <button onClick={again} className="btn-ghost !py-1.5 !text-[12px]">find three more ↻</button>}</div>
         <HoodCards hood={hood} from={`/n/${hoodId}`} />
+        <LaneMap hoodId={hoodId} refreshKey={(hood?.candidates || []).filter((c: any) => c.print_status === "done").length} />
         {rounds > 1 && <div className="num mt-3 text-[11px] text-dim">round {rounds}: the first picks had no disclosed deals, so the printer kept looking and kept the ones that did.</div>}
       </section>
     </div>

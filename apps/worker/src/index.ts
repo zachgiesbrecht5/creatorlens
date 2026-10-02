@@ -135,6 +135,7 @@ async function persist(job: any, result: ScanResult) {
     await sb.from("scan_jobs").update({ status: "done", finished_at: new Date().toISOString(), rows_found: result.rows.length }).eq("id", job.id);
     classifyCreator(sb, creator.id, true).then(() => explainCreatorDeals(sb, creator.id)).catch((e: any) => log("enrich failed", e?.message));
     if (result.mentions?.length) await sb.from("creators").update({ mentions: result.mentions }).eq("id", creator.id);
+    if (result.performance) await sb.from("creators").update({ performance: result.performance }).eq("id", creator.id);
     if (job.source === "discover") await sb.from("creators").update({ is_public: true, discovered_at: new Date().toISOString(), discover_reason: job.note || null }).eq("id", creator.id);
     // resolve sites for new brands first so the classifier sees the brand's own page (cap per scan; backfill gets the rest)
     const { data: fresh } = await sb.from("brands").select("id,key,name,domain,website,website_locked,name_locked").in("id", touched).is("site_checked_at", null).order("deal_count", { ascending: false }).limit(12);

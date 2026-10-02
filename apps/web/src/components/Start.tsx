@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PrinterMachine } from "@/components/PrinterMachine";
+import { LaneMap } from "@/components/LaneMap";
 import { HoodCards } from "@/components/HoodCards";
 import { Tour } from "@/components/Tour";
 import { START_TOUR } from "@/components/tours";
@@ -144,6 +145,7 @@ export function Start({ initialRoster, isHouse }: { initialRoster: Roster[]; isH
           </div>
 
           <HoodCards hood={hood} from="/start" />
+        <LaneMap hoodId={hood?.id || null} refreshKey={(hood?.candidates || []).filter((c: any) => c.print_status === "done").length} />
           {hood?.status === "done" && hood.candidates.every((c) => c.print_status === "done") && (
             <div className="st-next">
               <span><b>Step 3.</b> These neighbors' brands are {current.name}'s missing opportunities. Open {current.name}'s page, pick a brand, and hit Pitch: the email lands in your Gmail drafts.</span>

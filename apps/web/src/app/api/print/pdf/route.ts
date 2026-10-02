@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const { profile, admin: seesAll } = await currentAccess();
   if (!profile) return NextResponse.json({ error: "Sign in" }, { status: 401 });
   const admin = supabaseAdmin();
-  const { data: c } = await admin.from("creators").select("id,platform,handle,display_name,followers,category,last_scanned_at").eq("platform", platform).ilike("handle", handle).maybeSingle();
+  const { data: c } = await admin.from("creators").select("id,platform,handle,display_name,followers,category,last_scanned_at,performance").eq("platform", platform).ilike("handle", handle).maybeSingle();
   if (!c) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!(await canSeeCreator(profile.id, seesAll, c))) return NextResponse.json({ error: "Unlock this print first" }, { status: 403 });
   const { data: wall } = await admin.from("brand_wall").select("brand_id,brand,category,deals,first_seen,last_seen,repeat_partner,content_url,best_label").eq("creator_id", c.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).order("last_seen", { ascending: false });
@@ -45,6 +45,23 @@ export async function GET(req: NextRequest) {
   text(`${platform === "youtube" ? "YouTube" : "Instagram"} @${sane(c.handle)}  ·  ${fmtK(c.followers)} ${platform === "youtube" ? "subscribers" : "followers"}${c.category ? `  ·  ${sane(c.category)}` : ""}  ·  printed ${c.last_scanned_at ? new Date(c.last_scanned_at).toLocaleDateString("en-US") : ""}`, M, 10, mono, muted); y -= 22;
   const totalDeals = rows.reduce((s, r) => s + Number(r.deals || 0), 0);
   text(`${rows.length} brands   ·   ${totalDeals} disclosed deals   ·   ${repeats.length} recurring`, M, 12, bold); y -= 18; rule();
+
+  // what's performing
+  const perf = (c as any).performance as { top: { title: string; url: string; published_at: string; metric: number; metric_label: string; kind: string; hook: string; sponsored: boolean }[]; median: number; metric_label: string; formats: { kind: string; count: number; avg: number }[]; hooks: { hook: string; count: number; avg: number }[]; items: number } | null;
+  const fmtN = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
+  if (perf?.top?.length) {
+    text("WHAT'S PERFORMING", M, 9, mono, muted); y -= 14;
+    text(`${perf.items} posts in the window  ·  median ${fmtN(perf.median)} ${perf.metric_label}  ·  top ${Math.min(6, perf.top.length)} below, each vs the median`, M, 9, font, muted); y -= 16;
+    for (const t of perf.top.slice(0, 6)) {
+      newPageIfNeeded();
+      const mult = perf.median ? (t.metric / perf.median).toFixed(1) + "x" : "";
+      text(`${fmtN(t.metric)} ${perf.metric_label}`, M, 10, bold); text(mult, M + 95, 9, mono, green); text(`${mon(t.published_at)}  ·  ${t.kind}${t.sponsored ? "  ·  sponsored" : ""}`, M + 130, 9, mono, muted); y -= 12;
+      link(sane(t.hook || t.title).slice(0, 95), M, 9.5, t.url); y -= 15;
+    }
+    if (perf.formats?.length) { text("By format: " + perf.formats.map((f) => `${f.kind} ${f.count} posts, avg ${fmtN(f.avg)}`).join("   ·   "), M, 8.5, font, muted); y -= 12; }
+    if (perf.hooks?.length) { text("Hooks that work: " + perf.hooks.slice(0, 4).map((h) => `"${h.hook}" (${h.count}, avg ${fmtN(h.avg)})`).join("   ·   "), M, 8.5, font, muted); y -= 12; }
+    y -= 6; rule();
+  }
 
   // recurring sponsors
   text("RECURRING SPONSORS", M, 9, mono, muted); y -= 16;

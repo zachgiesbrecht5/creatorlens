@@ -23,7 +23,7 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
   const handle = String(r.handle || "").replace(/^@/, "");
 
   // their own print, if they're in the index
-  const { data: me } = handle ? await admin.from("creators").select("id,category,display_name,avatar_url,followers,last_scanned_at,handle").eq("platform", platform).ilike("handle", handle).maybeSingle() : { data: null };
+  const { data: me } = handle ? await admin.from("creators").select("id,category,display_name,avatar_url,followers,last_scanned_at,handle,performance").eq("platform", platform).ilike("handle", handle).maybeSingle() : { data: null };
   let timeline: TL[] = []; let myBrands: { id: string; name: string; deals: number; last: string | null }[] = [];
   if (me) {
     const [{ data: wall }, { data: months }, { data: why }] = await Promise.all([
@@ -76,6 +76,19 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
       </div>
 
       <Tour id="creator" steps={CREATOR_TOUR} />
+      {(me as any)?.performance?.top?.length > 0 && (() => { const perf = (me as any).performance; const fmtN = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n)); return (
+        <section className="card mt-6 p-5">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2"><div><div className="label">What's performing</div><div className="text-[13px] text-muted">{perf.items} posts in the window · median {fmtN(perf.median)} {perf.metric_label}. Top posts vs the median, with the hook that carried them.</div></div><div className="num text-[11px] text-dim">{perf.hooks?.slice(0, 3).map((h: any) => `"${h.hook}" ×${h.count}`).join(" · ")}</div></div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {perf.top.slice(0, 6).map((t: any) => (
+              <a key={t.url} href={t.url} target="_blank" rel="noreferrer" className="flex items-start gap-3 rounded-lg border border-line p-3 hover:border-fg">
+                <div className="num w-20 flex-none text-right"><div className="text-[15px] font-semibold text-fg">{fmtN(t.metric)}</div><div className="text-[10px] text-ok">{perf.median ? (t.metric / perf.median).toFixed(1) + "x median" : ""}</div></div>
+                <div className="min-w-0"><div className="truncate text-[13px] font-medium">{t.hook || t.title}</div><div className="num text-[10.5px] text-muted">{new Date(t.published_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })} · {t.kind}{t.sponsored ? " · sponsored" : ""}</div></div>
+              </a>
+            ))}
+          </div>
+          {perf.formats?.length > 0 && <div className="num mt-3 text-[11px] text-muted">by format: {perf.formats.map((f: any) => `${f.kind} ${f.count} posts, avg ${fmtN(f.avg)}`).join(" · ")}</div>}
+        </section>); })()}
       {timeline.length > 0 && <div className="card mt-6 px-5 pb-3 pt-2" data-tour="map"><PrintTimeline items={timeline} /></div>}
 
       <section className="mt-8" data-tour="lane">

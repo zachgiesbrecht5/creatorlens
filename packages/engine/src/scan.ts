@@ -39,6 +39,37 @@ export interface ScanResult {
   quotaUnits: number;
   /** Instagram only: accounts this creator @mentions in captions (collabs, friends), with counts. */
   mentions?: { handle: string; count: number }[];
+  /** Top posts in the window by the platform's main metric, plus a format/hook read. */
+  performance?: Performance;
+}
+export interface TopPost { title: string; url: string; published_at: string; metric: number; metric_label: string; kind: string; hook: string; sponsored: boolean }
+export interface Performance { top: TopPost[]; median: number; metric_label: string; formats: { kind: string; count: number; avg: number }[]; hooks: { hook: string; count: number; avg: number }[]; window_days: number; items: number }
+
+// A one-line "hook": the first clause of a caption/title, trimmed to something a manager can quote.
+const hookOf = (t: string) => String(t || "").replace(/\s+/g, " ").split(/(?<=[.!?])\s|\n|\s\|\s/)[0].trim().slice(0, 80);
+const hookShape = (t: string) => {
+  const h = hookOf(t).toLowerCase();
+  if (/^how to|^how i/.test(h)) return "How to";
+  if (/nobody (told|tells)|no one (told|tells)/.test(h)) return "Nobody told me";
+  if (/things i wish|wish i knew/.test(h)) return "Things I wish I knew";
+  if (/^if (your|you)/.test(h)) return "If your…";
+  if (/^\d+ (things|ways|tips|reasons)/.test(h)) return "Listicle";
+  if (/^pov|^when /.test(h)) return "POV / When";
+  if (/\?$/.test(h)) return "Question";
+  if (/^i |^we /.test(h)) return "First person";
+  return "Other";
+};
+function summarizePerformance(items: { title: string; url: string; published_at: string; metric: number; kind: string; sponsored: boolean }[], metric_label: string, windowDays: number): Performance {
+  const sorted = [...items].sort((a, b) => b.metric - a.metric);
+  const vals = sorted.map((i) => i.metric).sort((a, b) => a - b);
+  const median = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
+  const by = (key: (i: typeof items[number]) => string) => { const m = new Map<string, { count: number; sum: number }>(); for (const i of items) { const k = key(i); const e = m.get(k) || m.set(k, { count: 0, sum: 0 }).get(k)!; e.count++; e.sum += i.metric; } return [...m.entries()].map(([k, v]) => ({ k, count: v.count, avg: Math.round(v.sum / v.count) })).sort((a, b) => b.avg - a.avg); };
+  return {
+    top: sorted.slice(0, 10).map((i) => ({ ...i, metric_label, hook: hookOf(i.title) })),
+    median, metric_label, window_days: windowDays, items: items.length,
+    formats: by((i) => i.kind).map((x) => ({ kind: x.k, count: x.count, avg: x.avg })),
+    hooks: by((i) => hookShape(i.title)).filter((x) => x.count >= 2).map((x) => ({ hook: x.k, count: x.count, avg: x.avg })),
+  };
 }
 
 export interface YtScanOptions { lookbackDays?: number; maxVideos?: number }
@@ -65,12 +96,14 @@ export async function scanYouTube(apiKey: string, handleOrId: string, opts: YtSc
     }
   }
   dropBoilerplate(rows, videos.length);
+  const sponsoredIds = new Set(rows.map((r) => r.contentId));
+  const ytPerf = summarizePerformance(videos.map((v) => ({ title: v.title, url: `https://www.youtube.com/watch?v=${v.id}`, published_at: v.publishedAt, metric: v.views, kind: v.durationSeconds && v.durationSeconds <= 75 ? "short" : "video", sponsored: sponsoredIds.has(v.id) })), "views", opts.lookbackDays ?? 730);
   rows.sort((a, b) => b.confidenceScore - a.confidenceScore);
   return {
     platform: "youtube",
     creator: { externalId: channel.id, handle: channel.handle.replace(/^@/, ""), displayName: channel.title,
       followers: channel.subs, avatar: channel.thumbnail, bio: channel.description },
-    itemsChecked: videos.length, rows, quotaUnits: meter.units,
+    itemsChecked: videos.length, rows, quotaUnits: meter.units, performance: ytPerf,
   };
 }
 
@@ -97,10 +130,12 @@ export async function scanInstagram(token: IgToken, username: string, maxPosts =
     counts.set(h, (counts.get(h) || 0) + 1);
   }
   const mentions = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25).map(([handle, count]) => ({ handle, count }));
+  const sponsoredPosts = new Set(rows.map((r) => r.contentId));
+  const igPerf = summarizePerformance(posts.map((p) => ({ title: String(p.caption || "").slice(0, 200), url: p.permalink, published_at: p.timestamp, metric: p.likes + p.comments * 3, kind: p.mediaType === "VIDEO" ? "reel" : p.mediaType === "CAROUSEL_ALBUM" ? "carousel" : "post", sponsored: sponsoredPosts.has(p.id) })), "engagement", 365);
   return {
     platform: "instagram",
     creator: profileToCreator(profile),
-    itemsChecked: posts.length, rows, quotaUnits: Math.ceil(posts.length / 50) || 1, mentions,
+    itemsChecked: posts.length, rows, quotaUnits: Math.ceil(posts.length / 50) || 1, mentions, performance: igPerf,
   };
 }
 
