@@ -280,6 +280,16 @@ const GEN: Record<string, 1> = { the: 1, this: 1, that: 1, with: 1, from: 1, you
 export function guessBrand(text: string, evIdx: number): string {
   const cands: { name: string; idx: number; rank: number }[] = [];
 
+  // "thank you @brand" / "thanks to brand" / "partnered with brand" / "sponsored by brand" / "in collaboration with brand":
+  // the word right after the disclosure phrase is the brand, even when the @ got stripped.
+  const near = text.slice(Math.max(0, evIdx - 10), evIdx + 160);
+  const pm = near.match(/(?:thank(?:s| you)? (?:to |so much to )?|partner(?:ed|ing)? with |sponsored by |in (?:paid )?(?:partnership|collaboration) with |brought to you by |courtesy of |teamed up with |collab with )@?([a-z0-9][a-z0-9._]{2,30})/i);
+  if (pm) {
+    const raw = pm[1].replace(/[._]+(official|us|usa|uk|global|hq|shop|store|co)$/i, "");
+    const base = raw.replace(/[._]+/g, "").toLowerCase();
+    if (base.length >= 3 && !GEN[base]) cands.push({ name: cap(raw.replace(/[._]+/g, " ")), idx: evIdx, rank: 0 });
+  }
+
   const hre = /(^|[^\w@#.])([a-z0-9]{3,}[._][a-z0-9]{2,}[a-z0-9._]*)/gi;
   let hm2: RegExpExecArray | null;
   while ((hm2 = hre.exec(text)) !== null) {

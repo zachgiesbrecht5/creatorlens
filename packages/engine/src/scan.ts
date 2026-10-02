@@ -68,7 +68,7 @@ function summarizePerformance(items: { title: string; url: string; published_at:
     top: sorted.slice(0, 10).map((i) => ({ ...i, metric_label, hook: hookOf(i.title) })),
     median, metric_label, window_days: windowDays, items: items.length,
     formats: by((i) => i.kind).map((x) => ({ kind: x.k, count: x.count, avg: x.avg })),
-    hooks: by((i) => hookShape(i.title)).filter((x) => x.count >= 2).map((x) => ({ hook: x.k, count: x.count, avg: x.avg })),
+    hooks: by((i) => hookShape(i.title)).filter((x) => x.count >= 2 && x.k !== "Other").map((x) => ({ hook: x.k, count: x.count, avg: x.avg })),
   };
 }
 

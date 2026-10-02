@@ -52,16 +52,21 @@ export async function GET(req: NextRequest) {
   if (perf?.top?.length) {
     text("WHAT'S PERFORMING", M, 9, mono, muted); y -= 14;
     text(`${perf.items} posts in the window  ·  median ${fmtN(perf.median)} ${perf.metric_label}  ·  top ${Math.min(6, perf.top.length)} below, each vs the median`, M, 9, font, muted); y -= 16;
-    for (const t of perf.top.slice(0, 6)) {
+    perf.top.slice(0, 6).forEach((t, k) => {
       newPageIfNeeded();
-      const mult = perf.median ? (t.metric / perf.median).toFixed(1) + "x" : "";
-      text(`${fmtN(t.metric)} ${perf.metric_label}`, M, 10, bold); text(mult, M + 95, 9, mono, green); text(`${mon(t.published_at)}  ·  ${t.kind}${t.sponsored ? "  ·  sponsored" : ""}`, M + 130, 9, mono, muted); y -= 12;
+      // a multiple of the median only reads well when the median is a real number; otherwise rank it
+      const mult = perf.median >= 1000 ? `${(t.metric / perf.median).toFixed(1)}x median` : `#${k + 1} of ${perf.items}`;
+      const left = `${fmtN(t.metric)} ${perf.metric_label}`;
+      text(left, M, 10, bold); const lw = bold.widthOfTextAtSize(left, 10);
+      text(mult, M + lw + 10, 9, mono, green); const mw = mono.widthOfTextAtSize(mult, 9);
+      text(`${mon(t.published_at)}  ·  ${t.kind}${t.sponsored ? "  ·  sponsored" : ""}`, M + lw + mw + 22, 9, mono, muted); y -= 12;
       link(sane(t.hook || t.title).slice(0, 95), M, 9.5, t.url); y -= 12;
       if ((t as any).on_screen) { text(`on screen: "${sane((t as any).on_screen).slice(0, 90)}"`, M, 8.5, font, muted); y -= 12; }
       y -= 3;
-    }
+    });
     if (perf.formats?.length) { text("By format: " + perf.formats.map((f) => `${f.kind} ${f.count} posts, avg ${fmtN(f.avg)}`).join("   ·   "), M, 8.5, font, muted); y -= 12; }
-    if (perf.hooks?.length) { text("Hooks that work: " + perf.hooks.slice(0, 4).map((h) => `"${h.hook}" (${h.count}, avg ${fmtN(h.avg)})`).join("   ·   "), M, 8.5, font, muted); y -= 12; }
+    const hooks = (perf.hooks || []).filter((h) => h.hook !== "Other").slice(0, 4);
+    if (hooks.length) { text("Hooks that work: " + hooks.map((h) => `"${h.hook}" (${h.count} posts, avg ${fmtN(h.avg)})`).join("   ·   "), M, 8.5, font, muted); y -= 12; }
     y -= 6; rule();
   }
 
@@ -96,7 +101,8 @@ export async function GET(req: NextRequest) {
     link(sane(p.content_title || p.content_url).slice(0, 90), M, 9, p.content_url); y -= 16;
   }
   y -= 4; rule();
-  text("Public posts only, read through the official YouTube and Instagram APIs. Disclosed deals (#ad, #partner, paid partnership, sponsored by). Not a complete record of any brand's spending.", M, 7.5, font, muted);
+  text("Public posts only, read through the official YouTube and Instagram APIs. Disclosed deals (#ad, #partner, paid partnership,", M, 7.5, font, muted); y -= 10;
+  text("sponsored by). Not a complete record of any brand's spending.", M, 7.5, font, muted);
   y -= 12; text("sponsorprint.com", M, 8, mono, green);
 
   // link annotations
