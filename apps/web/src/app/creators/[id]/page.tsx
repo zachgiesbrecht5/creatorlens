@@ -83,7 +83,7 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
             {perf.top.slice(0, 6).map((t: any) => (
               <a key={t.url} href={t.url} target="_blank" rel="noreferrer" className="flex items-start gap-3 rounded-lg border border-line p-3 hover:border-fg">
                 <div className="num w-20 flex-none text-right"><div className="text-[15px] font-semibold text-fg">{fmtN(t.metric)}</div><div className="text-[10px] text-ok">{perf.median ? (t.metric / perf.median).toFixed(1) + "x median" : ""}</div></div>
-                <div className="min-w-0"><div className="truncate text-[13px] font-medium">{t.hook || t.title}</div><div className="num text-[10.5px] text-muted">{new Date(t.published_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })} · {t.kind}{t.sponsored ? " · sponsored" : ""}</div></div>
+                <div className="min-w-0"><div className="truncate text-[13px] font-medium">{t.hook || t.title}</div>{t.on_screen && <div className="truncate text-[11.5px] text-ok">on screen: "{t.on_screen}"</div>}<div className="num text-[10.5px] text-muted">{new Date(t.published_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })} · {t.kind}{t.sponsored ? " · sponsored" : ""}</div></div>
               </a>
             ))}
           </div>

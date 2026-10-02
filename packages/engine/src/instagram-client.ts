@@ -23,6 +23,7 @@ export interface IgPost {
   likes: number;
   comments: number;
   mediaType: string;
+  cover?: string | null;
 }
 
 export interface IgToken {
@@ -71,7 +72,7 @@ export async function lookupIgProfile(token: IgToken, username: string): Promise
 export async function fetchIgCreator(token: IgToken, username: string, maxPosts = 100, pageSize = 50): Promise<{ profile: IgProfile; posts: IgPost[] }> {
   const clean = username.trim().replace(/^@/, "").toLowerCase();
   if (!isValidIgUsername(clean)) throw new Error(`"${username}" is not a valid IG username`);
-  const fields = "id,caption,permalink,timestamp,like_count,comments_count,media_type";
+  const fields = "id,caption,permalink,timestamp,like_count,comments_count,media_type,thumbnail_url,media_url";
   const posts: IgPost[] = [];
   let after: string | null = null;
   let profile: IgProfile | null = null;
@@ -93,7 +94,7 @@ export async function fetchIgCreator(token: IgToken, username: string, maxPosts 
     if (!m?.data?.length) break;
     for (const p of m.data) {
       posts.push({ id: p.id, caption: p.caption || "", permalink: p.permalink || "", timestamp: p.timestamp || "",
-        likes: Number(p.like_count || 0), comments: Number(p.comments_count || 0), mediaType: p.media_type || "" });
+        likes: Number(p.like_count || 0), comments: Number(p.comments_count || 0), mediaType: p.media_type || "", cover: p.thumbnail_url || (p.media_type === "IMAGE" || p.media_type === "CAROUSEL_ALBUM" ? p.media_url : null) || null });
     }
     after = m.paging?.cursors?.after || null;
     if (!after || m.data.length < pageSize) break;

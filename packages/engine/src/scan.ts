@@ -42,7 +42,7 @@ export interface ScanResult {
   /** Top posts in the window by the platform's main metric, plus a format/hook read. */
   performance?: Performance;
 }
-export interface TopPost { title: string; url: string; published_at: string; metric: number; metric_label: string; kind: string; hook: string; sponsored: boolean }
+export interface TopPost { title: string; url: string; published_at: string; metric: number; metric_label: string; kind: string; hook: string; sponsored: boolean; cover?: string | null; on_screen?: string | null }
 export interface Performance { top: TopPost[]; median: number; metric_label: string; formats: { kind: string; count: number; avg: number }[]; hooks: { hook: string; count: number; avg: number }[]; window_days: number; items: number }
 
 // A one-line "hook": the first clause of a caption/title, trimmed to something a manager can quote.
@@ -59,7 +59,7 @@ const hookShape = (t: string) => {
   if (/^i |^we /.test(h)) return "First person";
   return "Other";
 };
-function summarizePerformance(items: { title: string; url: string; published_at: string; metric: number; kind: string; sponsored: boolean }[], metric_label: string, windowDays: number): Performance {
+function summarizePerformance(items: { title: string; url: string; published_at: string; metric: number; kind: string; sponsored: boolean; cover?: string | null }[], metric_label: string, windowDays: number): Performance {
   const sorted = [...items].sort((a, b) => b.metric - a.metric);
   const vals = sorted.map((i) => i.metric).sort((a, b) => a - b);
   const median = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
@@ -97,7 +97,7 @@ export async function scanYouTube(apiKey: string, handleOrId: string, opts: YtSc
   }
   dropBoilerplate(rows, videos.length);
   const sponsoredIds = new Set(rows.map((r) => r.contentId));
-  const ytPerf = summarizePerformance(videos.map((v) => ({ title: v.title, url: `https://www.youtube.com/watch?v=${v.id}`, published_at: v.publishedAt, metric: v.views, kind: v.durationSeconds && v.durationSeconds <= 75 ? "short" : "video", sponsored: sponsoredIds.has(v.id) })), "views", opts.lookbackDays ?? 730);
+  const ytPerf = summarizePerformance(videos.map((v) => ({ title: v.title, url: `https://www.youtube.com/watch?v=${v.id}`, published_at: v.publishedAt, metric: v.views, kind: v.durationSeconds && v.durationSeconds <= 75 ? "short" : "video", sponsored: sponsoredIds.has(v.id), cover: v.thumbnail || `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg` })), "views", opts.lookbackDays ?? 730);
   rows.sort((a, b) => b.confidenceScore - a.confidenceScore);
   return {
     platform: "youtube",
@@ -131,7 +131,7 @@ export async function scanInstagram(token: IgToken, username: string, maxPosts =
   }
   const mentions = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25).map(([handle, count]) => ({ handle, count }));
   const sponsoredPosts = new Set(rows.map((r) => r.contentId));
-  const igPerf = summarizePerformance(posts.map((p) => ({ title: String(p.caption || "").slice(0, 200), url: p.permalink, published_at: p.timestamp, metric: p.likes + p.comments * 3, kind: p.mediaType === "VIDEO" ? "reel" : p.mediaType === "CAROUSEL_ALBUM" ? "carousel" : "post", sponsored: sponsoredPosts.has(p.id) })), "engagement", 365);
+  const igPerf = summarizePerformance(posts.map((p) => ({ title: String(p.caption || "").slice(0, 200), url: p.permalink, published_at: p.timestamp, metric: p.likes + p.comments * 3, kind: p.mediaType === "VIDEO" ? "reel" : p.mediaType === "CAROUSEL_ALBUM" ? "carousel" : "post", sponsored: sponsoredPosts.has(p.id), cover: p.cover || null })), "engagement", 365);
   return {
     platform: "instagram",
     creator: profileToCreator(profile),

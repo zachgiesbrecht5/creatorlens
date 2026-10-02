@@ -56,7 +56,9 @@ export async function GET(req: NextRequest) {
       newPageIfNeeded();
       const mult = perf.median ? (t.metric / perf.median).toFixed(1) + "x" : "";
       text(`${fmtN(t.metric)} ${perf.metric_label}`, M, 10, bold); text(mult, M + 95, 9, mono, green); text(`${mon(t.published_at)}  ·  ${t.kind}${t.sponsored ? "  ·  sponsored" : ""}`, M + 130, 9, mono, muted); y -= 12;
-      link(sane(t.hook || t.title).slice(0, 95), M, 9.5, t.url); y -= 15;
+      link(sane(t.hook || t.title).slice(0, 95), M, 9.5, t.url); y -= 12;
+      if ((t as any).on_screen) { text(`on screen: "${sane((t as any).on_screen).slice(0, 90)}"`, M, 8.5, font, muted); y -= 12; }
+      y -= 3;
     }
     if (perf.formats?.length) { text("By format: " + perf.formats.map((f) => `${f.kind} ${f.count} posts, avg ${fmtN(f.avg)}`).join("   ·   "), M, 8.5, font, muted); y -= 12; }
     if (perf.hooks?.length) { text("Hooks that work: " + perf.hooks.slice(0, 4).map((h) => `"${h.hook}" (${h.count}, avg ${fmtN(h.avg)})`).join("   ·   "), M, 8.5, font, muted); y -= 12; }
