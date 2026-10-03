@@ -153,3 +153,11 @@ describe("dropBoilerplate", () => {
     expect(rows.length).toBe(12);
   });
 });
+
+describe("bare ad disclosures on Instagram", () => {
+  it("catches 'ad' at the start of a caption", () => { expect(detectInstagram("ad\nLoving my new @skims set, link in bio").length).toBeGreaterThan(0); });
+  it("catches 'AD' in caps mid-caption", () => { expect(detectInstagram("Morning routine with @ritual AD because I actually take it").length).toBeGreaterThan(0); });
+  it("catches 'ad' at the end of a line", () => { expect(detectInstagram("Best coffee of my life @lavazza ad").length).toBeGreaterThan(0); });
+  it("catches 'this is an ad'", () => { expect(detectInstagram("this is an ad for @liquidiv and I'd drink it anyway").length).toBeGreaterThan(0); });
+  it("ignores 'ad hoc' and 'add'", () => { expect(detectInstagram("ad hoc plans today, add me on snap").length).toBe(0); });
+});

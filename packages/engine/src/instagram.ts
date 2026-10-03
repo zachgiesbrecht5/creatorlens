@@ -23,6 +23,8 @@ const IG_PATTERNS: { tier: Tier; res: RegExp[] }[] = [
     /paid partnership/gi, /in (?:paid )?partnership with/gi,
     /partner(?:ing|ed)?\s+with/gi, /sponsored by/gi,
     /#\w*partner\b/gi, /#brandpartner/gi, /#ad\W/gi, /\bad\s*[|:]/gi, /\[ad\]/gi, /\(ad\)/gi, /#sponsoredpost/gi, /#paidpartnership/gi, /#paidad/gi,
+    // bare "ad" / "AD" without a hashtag: at the start or end of a line, in caps anywhere, or set off with a dash
+    /(?:^|\n)\s*ad\b(?!\s*(?:hoc|lib|nauseam|infinitum))/gi, /\bad\s*$/gim, /\bAD\b(?!\s*(?:HOC|LIB))/g, /\bad\s*[-\u2013\u2014]\s/gi, /\bthis is an? ad\b/gi, /\b(?:sponsored|paid) (?:post|content|ad)\b/gi,
     /in collaboration with/gi, /#collab\b/gi, /brought to you by/gi, /made possible by/gi ] },
   { tier: { type: "Affiliate / code", score: 5, label: "Medium" }, res: [
     /use (?:my |the )?code/gi, /(?:promo|discount|coupon) code/gi,
