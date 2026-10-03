@@ -1,3 +1,5 @@
+import { laneLaunchesAll } from "@/lib/launches";
+import { LaunchList } from "@/components/LaunchList";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentProfile, supabaseAdmin } from "@/lib/supabase";
@@ -7,6 +9,7 @@ import { LocationField } from "@/components/LocationField";
 export const metadata = { title: "Signals | Sponsorprint" };
 
 export default async function Signals() {
+  const launchesAll = await laneLaunchesAll();
   const profile = await currentProfile();
   if (!profile) redirect("/login?next=/signals");
   const admin = supabaseAdmin();
@@ -19,6 +22,12 @@ export default async function Signals() {
   const noLoc = (roster || []).filter((r) => !r.location);
   return (
     <div className="mx-auto max-w-5xl">
+      {launchesAll.length > 0 && (
+        <section className="mb-8">
+          <div className="mb-3"><div className="label mb-1.5">Brand launches</div><h2 className="h2">What the brands in the index are launching</h2><p className="mt-1 text-sm text-muted">Read weekly from brands' own Instagram. Each carries the second-wave pitch window (4 to 8 weeks after the post) and the seasonal re-push month. Open any of your creators for the launches in their lane with a pitch button.</p></div>
+          <LaunchList launches={launchesAll} roster={null} />
+        </section>
+      )}
       <div className="mb-6"><div className="label mb-1.5">Signals</div><h1 className="h2">Sponsorship deals, matched to your roster</h1><p className="mt-1 text-sm text-muted">Every week the agent reads the wires and trade press for brands that signed a team, league, event or venue. A regional deal means the brand needs creators in that market within 4 to 8 weeks. Matches use each creator's location and lane.</p></div>
       {noLoc.length > 0 && (
         <div className="card mb-6 border-warn/40 p-4">

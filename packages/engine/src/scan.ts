@@ -11,6 +11,8 @@ export type Platform = "youtube" | "instagram";
 export interface PartnershipRow {
   platform: Platform;
   brand: string;
+  /** Instagram handle of the brand, when the caption @mentions it or tags #BrandPartner. */
+  brandHandle?: string | null;
   confidenceScore: number;
   confidenceLabel: "High" | "Medium" | "Low";
   signalType: string;
@@ -110,10 +112,20 @@ export async function scanYouTube(apiKey: string, handleOrId: string, opts: YtSc
 export async function scanInstagram(token: IgToken, username: string, maxPosts = 250): Promise<ScanResult> {
   const { profile, posts } = await fetchIgCreator(token, username, maxPosts);
   const rows: PartnershipRow[] = [];
+  // brand handle: an @mention or #XPartner tag whose letters match the brand name
+  const norm = (x: string) => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const handleFor = (caption: string, brand: string, own: string): string | null => {
+    const b = norm(brand.replace(/\s*\(\?\)$/, "")); if (b.length < 3) return null;
+    const cands = new Set<string>();
+    for (const m of String(caption || "").matchAll(/@([a-z0-9_.]{2,30})/gi)) cands.add(m[1].replace(/\.$/, ""));
+    for (const m of String(caption || "").matchAll(/#([a-z0-9_]{3,40})partner\b/gi)) cands.add(m[1]);
+    for (const h of cands) { const n = norm(h).replace(/(official|us|usa|uk|global|hq|shop|store|co)$/, ""); if (!n || n === norm(own)) continue; if (n === b || n.startsWith(b) || b.startsWith(n) || (n.length >= 5 && b.includes(n))) return h.toLowerCase(); }
+    return null;
+  };
   for (const p of posts) {
     for (const f of detectInstagram(p.caption, profile.username)) {
       rows.push({
-        platform: "instagram", brand: f.brand, confidenceScore: f.score, confidenceLabel: f.label,
+        platform: "instagram", brand: f.brand, brandHandle: handleFor(p.caption, f.brand, profile.username), confidenceScore: f.score, confidenceLabel: f.label,
         signalType: f.type, evidence: f.evidence, isMassSponsor: f.isMassSponsor,
         contentId: p.id, contentTitle: (p.caption || "").substring(0, 80).replace(/\s+/g, " "),
         contentUrl: p.permalink, publishedAt: p.timestamp, views: p.likes, thumbnail: "",

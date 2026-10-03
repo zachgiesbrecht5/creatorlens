@@ -15,9 +15,10 @@ export type ContactInfo = {
 
 // The scanned creator is the EVIDENCE (this brand books creators like them).
 // The pitch is written for one of the user's own roster creators.
-export function ContactCard({ brandId, brand, creator, roster, info, expanded, onLoad, preferRoster }: {
+export type LaunchHint = { product: string | null; kind: string; posted: string; window: string | null; hook: string | null };
+export function ContactCard({ brandId, brand, creator, roster, info, expanded, onLoad, preferRoster, launch }: {
   brandId: string; brand: string; creator: { id: string; handle: string; platform: string; displayName: string };
-  roster: RosterCreator[]; info?: ContactInfo | "loading"; expanded: boolean; onLoad: () => void; preferRoster?: string | null;
+  roster: RosterCreator[]; info?: ContactInfo | "loading"; expanded: boolean; onLoad: () => void; preferRoster?: string | null; launch?: LaunchHint | null;
 }) {
   const [picked, setPicked] = useState<string | null>(null);
   const [rosterId, setRosterId] = useState<string>((preferRoster && roster.find((r) => r.id === preferRoster)?.id) || roster[0]?.id || "");
@@ -36,7 +37,7 @@ export function ContactCard({ brandId, brand, creator, roster, info, expanded, o
     setDrafting(true); setResult(null);
     const r = await fetch("/api/draft", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ brandId, creatorId: creator.id, rosterCreatorId: rosterId, contactId: contact?.id, toEmail: (contact?.email && !contact.email.startsWith("no-email:") ? contact.email : "") || manual }),
+      body: JSON.stringify({ brandId, creatorId: creator.id || null, rosterCreatorId: rosterId, contactId: contact?.id, launch: launch || null, toEmail: (contact?.email && !contact.email.startsWith("no-email:") ? contact.email : "") || manual }),
     });
     const j = await r.json();
     setDrafting(false);

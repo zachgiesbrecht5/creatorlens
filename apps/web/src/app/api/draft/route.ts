@@ -22,7 +22,9 @@ function profileUrlFor(platform: string | null, handle: string | null): string |
 export async function POST(req: NextRequest) {
   const profile = await currentProfile();
   if (!profile) return NextResponse.json({ error: "Sign in" }, { status: 401 });
-  const { brandId, creatorId, rosterCreatorId, contactId, toEmail } = await req.json().catch(() => ({}));
+  const body = await req.json().catch(() => ({}));
+  const { brandId, rosterCreatorId, contactId, toEmail, launch } = body;
+  let creatorId: string | null = body.creatorId || null;
   if (!brandId || !creatorId || !toEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(toEmail)) return NextResponse.json({ error: "Need a brand, a creator, and a valid email" }, { status: 400 });
   const admin = supabaseAdmin();
   const { data: mine } = rosterCreatorId ? await admin.from("roster_creators").select("*").eq("id", rosterCreatorId).eq("user_id", profile.id).maybeSingle() : { data: null };
@@ -33,6 +35,8 @@ export async function POST(req: NextRequest) {
   // a prefilled Gmail compose URL the client opens in a new tab.
   const { data: gc } = await admin.from("google_connections").select("refresh_token,email").eq("user_id", profile.id).maybeSingle();
 
+  if (!creatorId) { const { data: proof } = await admin.from("brand_wall").select("creator_id").eq("brand_id", brandId).eq("is_junk", false).eq("is_self_brand", false).neq("best_label", "Low").order("deals", { ascending: false }).limit(1).maybeSingle(); creatorId = proof?.creator_id || null; }
+  if (!creatorId) return NextResponse.json({ error: "No proof creator for this brand yet; print someone they've paid first" }, { status: 400 });
   const [{ data: brand }, { data: creator }, { data: evidence }, { data: others }, { data: contact }] = await Promise.all([
     admin.from("brands").select("name,domain,deal_count,creator_count").eq("id", brandId).single(),
     admin.from("creators").select("handle,display_name,platform,followers,bio,category,external_id").eq("id", creatorId).single(),
@@ -65,6 +69,7 @@ export async function POST(req: NextRequest) {
   const askQuarter = q === 4 ? `Q1 ${new Date().getFullYear() + 1}` : `Q${q + 1}`;
   const senderFirst = (profile.full_name || "").trim().split(/\s+/)[0] || "";
   const facts = {
+    launch: launch ? { what: [launch.kind, launch.product].filter(Boolean).join(": "), posted: String(launch.posted).slice(0, 10), pitchWindow: launch.window, brandSaid: launch.hook } : null,
     askQuarter,
     creatorOwnPartners: ownPartners,
     brandWhatTheySell: [brandRow?.category, brandRow?.site_title, (brandRow?.site_description || "").slice(0, 200)].filter(Boolean).join(" · ") || null,
@@ -85,7 +90,7 @@ export async function POST(req: NextRequest) {
 LINE 1 (greeting): "Hi <recipient first name>!" if recipient.name is known, otherwise "Hi <brand> team!".
 PARAGRAPH 1 (four sentences, in this order):
   1. Intro: "I'm <sender first name>, <sender role> of <sender org>." (use sender.name and sender.org; if org is missing, "I'm <first name>, a talent manager.")
-  2. CONCEPT sentence: name a specific video or post that does not exist yet, in this creator's own format, built on a concrete detail about what THIS brand sells (use brandWhatTheySell and brandDealsWithProofCreator). Where possible tie it to a dated moment ("for December houseguests", "before back to school", "for the ${"$"}{askQuarter} launch window"). Never "could be a strong fit" or "your customers are her audience". This sentence earns the reply.
+  2. CONCEPT sentence: name a specific video or post that does not exist yet, in this creator's own format, built on a concrete detail about what THIS brand sells (use brandWhatTheySell and brandDealsWithProofCreator). If facts.launch is present, build the concept on that launch (name the product, tie it to the second wave of the launch or the seasonal re-push, and reflect what the brand said about it if brandSaid is given); this outranks every other angle. Where possible tie it to a dated moment ("for December houseguests", "before back to school", "for the ${"$"}{askQuarter} launch window"). Never "could be a strong fit" or "your customers are her audience". This sentence earns the reply.
   3. CREDIBILITY sentence: who the creator is and why they are the right person to tell that story; include their follower count and market HERE and never earlier (e.g. "... and @handle reaches 202K on Instagram out of LA"). Write the handle exactly as creatorBeingPitched.handle with the @.
   4. PROOF sentence: "She/He/They has recently partnered with brands like A and B." using ONLY creatorOwnPartners. If that list is empty, use one clause of social proof about the brand instead: "You've worked with creators like <proofPoints name>" (display name exactly as given, never a handle), or omit the sentence entirely. Never invent partners or numbers.
 PARAGRAPH 2 (the ask, verbatim, adjust only pronoun/name/quarter): "Are you booking paid creator partnerships for ${"$"}{askQuarter}? Would love to make something happen with <creator first name>. Happy to send over <his/her/their> media kit and rates!"

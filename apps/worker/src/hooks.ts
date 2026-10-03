@@ -37,6 +37,36 @@ async function transcribe(wav: Buffer): Promise<string | null> {
   return null;
 }
 
+/** Read the first SECONDS of one video: spoken line (Deepgram/Whisper) and burned-in text (vision). Used by the brand watch too. */
+export async function clipHook(sb: SupabaseClient, videoUrl: string, ref?: string): Promise<{ spoken: string | null; on_video: string | null }> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clip-"));
+  try {
+    const src = path.join(dir, "src.mp4"), mp4 = path.join(dir, "h.mp4"), wav = path.join(dir, "h.wav");
+    const r = await fetch(videoUrl, { signal: AbortSignal.timeout(20000), headers: { "user-agent": "Mozilla/5.0" } });
+    if (!r.ok) return { spoken: null, on_video: null };
+    await fs.writeFile(src, Buffer.from(await r.arrayBuffer()));
+    await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", "0", "-t", String(SECONDS), "-i", src, "-c", "copy", mp4]);
+    let spoken: string | null = null;
+    try { await run("ffmpeg", ["-y", "-loglevel", "error", "-i", mp4, "-vn", "-ac", "1", "-ar", "16000", "-f", "wav", wav]); spoken = await transcribe(await fs.readFile(wav)); } catch { spoken = ""; }
+    let on_video: string | null = null;
+    if (client && (await optionalBudgetOpen(sb).catch(() => false))) {
+      const frames: string[] = [];
+      for (const sec of [0.5, 2.5, 4.5]) { const jpg = path.join(dir, `f${sec}.jpg`); await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", String(sec), "-i", mp4, "-frames:v", "1", "-vf", "scale=540:-1", jpg]).catch(() => {}); try { frames.push((await fs.readFile(jpg)).toString("base64")); } catch { /* none */ } }
+      if (frames.length) {
+        try {
+          const content: any[] = frames.map((d) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: d } }));
+          content.push({ type: "text", text: `Frames from the first seconds of a short video. Transcribe the on-video caption/overlay text exactly as written, combined in order without repeats (ignore platform UI and usernames). Reply ONLY with JSON: {"text": "..."|null}` });
+          const msg = await client.messages.create({ model: MODEL, max_tokens: 300, temperature: 0, messages: [{ role: "user", content }] });
+          recordSpend(sb, "hooks", MODEL, (msg as any).usage, ref).catch(() => {});
+          const t = msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join(""); const m = t.match(/\{[\s\S]*\}/);
+          on_video = m ? (JSON.parse(m[0]).text || "") : "";
+        } catch { on_video = null; }
+      }
+    }
+    return { spoken: spoken == null ? null : spoken.replace(/\s+/g, " ").trim().slice(0, 240), on_video: on_video == null ? null : String(on_video).replace(/\s+/g, " ").trim().slice(0, 240) };
+  } catch { return { spoken: null, on_video: null }; } finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
+}
+
 export async function readHooks(sb: SupabaseClient, creatorId: string): Promise<number> {
   if (!DEEPGRAM && !OPENAI && !client) return 0;
   const modelOk = client ? await optionalBudgetOpen(sb).catch(() => false) : false;

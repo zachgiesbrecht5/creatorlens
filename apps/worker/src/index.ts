@@ -109,6 +109,15 @@ async function persist(job: any, result: ScanResult) {
     const prev = byKey.get(k);
     if (!prev || (r.confidence_score ?? 0) > (prev.confidence_score ?? 0)) byKey.set(k, r);
   }
+  // brand Instagram handles from the captions (for the brand watch)
+  try {
+    const handles = new Map<string, string>();
+    for (const r of result.rows) if ((r as any).brandHandle) { const bid = brandIds.get(brandKey(r.brand)); if (bid && !handles.has(bid)) handles.set(bid, (r as any).brandHandle); }
+    if (handles.size) {
+      const { data: known } = await sb.from("brands").select("id,ig_handle").in("id", [...handles.keys()]);
+      for (const k of known || []) if (!k.ig_handle && handles.get(k.id)) await sb.from("brands").update({ ig_handle: handles.get(k.id) }).eq("id", k.id);
+    }
+  } catch (e: any) { log("brand handle note failed", e?.message); }
   const dedup = [...byKey.values()];
   for (let i = 0; i < dedup.length; i += 500) {
     const { error } = await sb.from("partnerships").upsert(dedup.slice(i, i + 500), { onConflict: "creator_id,brand_id,content_id" });
@@ -318,6 +327,8 @@ import { discover } from "./discover";
 import { readCovers } from "./covers";
 import { readHooks } from "./hooks";
 import { noteModelError } from "./spend";
+import { brandWatch } from "./brandwatch";
+import { houseIgToken } from "./neighborhood";
 import { announceSignups } from "./signups";
 import { heartbeat, alert, nightly } from "./observe";
 
@@ -325,6 +336,7 @@ let lastNightly = "";
 let lastReap = 0;
 let neighborhoodBusy = false;
 let lastDiscover = 0;
+let lastBrandWatch = 0;
 let lastClassify = 0;
 let classifyBusy = false;
 async function tick() {
@@ -337,6 +349,8 @@ async function tick() {
   // old "only when idle" rule starved it once discovery kept the worker busy.
   if (!classifyBusy && Date.now() - lastClassify > 120e3) { lastClassify = Date.now(); classifyBusy = true; classifyBackfill(sb).catch((e: any) => log("classify failed", e?.message)).finally(() => { classifyBusy = false; }); }
   announceSignups(sb).catch(() => {});
+  // Brand watch: an hourly batch when the Instagram pool has room and no user prints are waiting
+  if (Date.now() - lastBrandWatch > 3600e3 && inFlight === 0) { lastBrandWatch = Date.now(); brandWatch(sb, () => houseIgToken(sb)).catch((e: any) => log("brand watch failed", e?.message)); }
   // Discovery runs hourly (budgeted per platform inside discover()).
   if (Date.now() - lastDiscover > 3600e3) { lastDiscover = Date.now(); discover(sb).catch((e: any) => log("discover failed", e?.message)); }
   // Neighborhood finds run alongside scans (they're short and users are watching).

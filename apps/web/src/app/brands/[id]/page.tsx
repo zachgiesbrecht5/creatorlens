@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 // Reverse view: every creator this brand has booked. This is the casting
 // intel for "who does Brand X work with" and for competitor pitches.
 import { BrandScan } from "@/components/BrandScan";
+import { windowStatus } from "@/lib/launches";
 import { track } from "@/lib/track";
 
 async function hiringFor(brandId: string) {
@@ -61,6 +62,15 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
+{(await (async () => { const { data: ls } = await admin.from("launch_signals").select("id,kind,product,summary,posted_at,url,spoken,on_video,window_start,window_end,repush_month").eq("brand_id", brand.id).order("posted_at", { ascending: false }).limit(6); return ls?.length ? (
+        <section className="card mb-6 p-5">
+          <div className="mb-2 flex items-baseline justify-between"><div><div className="label">What they're launching</div><div className="text-[13px] text-muted">From {brand.name}'s own Instagram. Second-wave pitch windows run 4 to 8 weeks after the post.</div></div>{brand.ig_handle && <a href={`https://instagram.com/${brand.ig_handle}`} target="_blank" rel="noreferrer" className="num text-[11px] text-muted hover:text-accent">@{brand.ig_handle} ↗</a>}</div>
+          <div className="divide-y divide-line">{ls.map((l) => { const st = windowStatus(l); return (
+            <div key={l.id} className="flex items-start justify-between gap-4 py-2.5">
+              <div className="min-w-0"><div className="text-[13.5px] font-medium">{l.product || l.summary}</div>{l.spoken || l.on_video ? <div className="truncate text-[12px] text-fg">"{l.spoken || l.on_video}"</div> : null}<div className="num text-[10.5px] text-muted">{l.kind} · {new Date(l.posted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · <a href={l.url} target="_blank" rel="noreferrer" className="hover:text-accent">open post ↗</a></div></div>
+              <span className={`ll-pill ${st === "open" ? "ll-open" : st === "soon" ? "ll-soon" : st === "repush" ? "ll-repush" : "ll-past"}`}>{st === "open" ? "window open" : st === "soon" ? `opens ${new Date(l.window_start!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : st === "repush" ? "re-push month" : "passed"}</span>
+            </div>); })}</div>
+        </section>) : null; })())}
 {profile && <BrandScan brandId={brand.id} brandName={brand.name} last={(lastScan as any) || null} />}
       {hiring.length > 0 && (
         <div className="card mb-6 border-ok/40 p-4">

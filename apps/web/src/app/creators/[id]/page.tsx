@@ -7,6 +7,8 @@ import { LocationField } from "@/components/LocationField";
 import { Tour } from "@/components/Tour";
 import { CREATOR_TOUR } from "@/components/tours";
 import { laneDigest } from "@/lib/lane-digest";
+import { laneLaunches } from "@/lib/launches";
+import { LaunchList } from "@/components/LaunchList";
 
 // A roster creator's page: who has paid them (their map), and the brands paying
 // their lane that haven't paid them yet, each one click from a contact and a
@@ -59,6 +61,8 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
   }
 
   const digest = await laneDigest(profile.id, r.id, 30);
+  const launches = await laneLaunches(lane, mine);
+  const paidPlan = ["pro", "agency", "team", "admin"].includes(String(profile.plan));
   const fmtK2 = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
   return (
     <div className="mx-auto max-w-6xl">
@@ -119,6 +123,16 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
           </div>
         )}
       </section>
+
+      {launches.length > 0 && (
+        <section className="mt-8">
+          <div className="mb-3 flex items-end justify-between gap-4">
+            <div><div className="label">Launches in the lane</div><h2 className="h2">{launches.filter((l) => l.status === "open").length} pitch window{launches.filter((l) => l.status === "open").length === 1 ? "" : "s"} open · {launches.length} launches in the last 75 days</h2><p className="mt-1 text-[13px] text-muted">Brands paying {lane} creators and what they just launched, with the second-wave window (4 to 8 weeks after the post) and the seasonal re-push month. Pitch inside the window with {r.name} and the launch in the first sentence.</p></div>
+          </div>
+          <LaunchList launches={paidPlan ? launches : launches.slice(0, 2)} roster={{ id: r.id, name: r.name, handle: r.handle, platform: r.platform, followers: r.followers }} locked={!paidPlan} />
+          {!paidPlan && launches.length > 2 && <div className="mt-2 text-[12.5px] text-muted">{launches.length - 2} more launches in this lane on Pro. <Link href="/pricing?need=launches" className="text-accent hover:underline">See plans →</Link></div>}
+        </section>
+      )}
 
       <section className="mt-8" data-tour="lane">
         <div className="mb-3 flex items-end justify-between gap-4">
