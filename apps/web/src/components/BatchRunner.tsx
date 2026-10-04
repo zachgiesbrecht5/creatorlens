@@ -11,6 +11,8 @@ export function BatchRunner() {
   const [text, setText] = useState("");
   const [platform, setPlatform] = useState<"youtube" | "instagram">("youtube");
   const [rows, setRows] = useState<Row[]>([]);
+  const [readyMins, setReadyMins] = useState<number | null>(null);
+  useEffect(() => { const sb = supabaseBrowser(); const f = async () => { const { data } = await sb.rpc("ig_pool_ready_at"); setReadyMins(data ? Math.max(1, Math.ceil((new Date(data as string).getTime() - Date.now()) / 60000)) : null); }; f(); const t = setInterval(f, 30000); return () => clearInterval(t); }, []);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const timer = useRef<any>();
@@ -67,7 +69,7 @@ export function BatchRunner() {
               <div key={r.platform + r.handle} className="pw-row" style={{ cursor: "default", opacity: 1, animation: "none" }}>
                 <div className="pw-line" style={{ gridTemplateColumns: "minmax(180px,1.4fr) 1fr 120px 90px" }}>
                   <div className="min-w-0"><span className="font-sans text-[15px] font-semibold tracking-tight">@{r.handle}</span><div className="num text-[10.5px] text-dim">{r.platform === "youtube" ? "YouTube" : "Instagram"}</div></div>
-                  <div className="num text-[12px] text-muted">{r.status === "done" ? (r.brands != null ? `${r.brands} deals found` : "printed") : r.status === "no_credits" ? "daily limit, try tomorrow" : r.status === "failed" ? "failed" : r.status === "rate_limited" ? "waiting on platform" : r.status === "running" ? "printing…" : "queued"}</div>
+                  <div className="num text-[12px] text-muted">{r.status === "done" ? (r.brands != null ? `${r.brands} deals found` : "printed") : r.status === "no_credits" ? "daily limit, try tomorrow" : r.status === "failed" ? "failed" : r.status === "rate_limited" ? (readyMins ? `platform limit · resumes in ${readyMins} min` : "waiting on platform") : r.status === "running" ? "printing…" : "queued"}</div>
                   <div className="num text-[12px]">{r.status === "done" ? <Link href={`/c/${r.platform}/${r.handle}`} className="text-accent hover:underline">open print →</Link> : r.status === "no_credits" ? <Link href="/pricing" className="text-accent hover:underline">upgrade</Link> : <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />}</div>
                   <div />
                 </div>
