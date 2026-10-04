@@ -22,10 +22,22 @@ export async function creatorContext() {
   return { profile, roster: r, enabled: !!r.portal_enabled };
 }
 
-/** Guard for /me pages: creators only, portal on; everyone else goes home. */
-export async function requireCreator() {
+/** Guard for /me pages: creators only, portal on; everyone else goes home.
+ *  Managers can preview a creator's page with ?as=<rosterCreatorId> (cookie-backed so links inside the preview keep working). */
+export async function requireCreator(asId?: string | null) {
+  const { cookies } = await import("next/headers");
+  const jar = await cookies();
+  const previewId = asId || jar.get("sp_preview_as")?.value || null;
+  if (previewId) {
+    const profile = await currentProfile();
+    if (profile) {
+      const admin = supabaseAdmin();
+      const { data: r } = await admin.from("roster_creators").select("*").eq("id", previewId).maybeSingle();
+      if (r && (r.user_id === profile.id || (profile.org_id && r.org_id === profile.org_id) || profile.plan === "admin")) return { profile, roster: r, enabled: true, preview: true as const };
+    }
+  }
   const ctx = await creatorContext();
   if (!ctx) redirect("/");
   if (!ctx.enabled) redirect("/me/off");
-  return ctx;
+  return { ...ctx, preview: false as const };
 }

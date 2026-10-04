@@ -17,7 +17,9 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const profile = await currentProfile();
-  const isCreator = profile?.role === "creator" || (profile ? !!(await creatorContext()) : false);
+  const { cookies: cookieJar } = await import("next/headers");
+  const previewing = !!(await cookieJar()).get("sp_preview_as")?.value;
+  const isCreator = previewing || profile?.role === "creator" || (profile ? !!(await creatorContext()) : false);
   return (
     <html lang="en">
       <head>

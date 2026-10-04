@@ -12,7 +12,7 @@ const fmtK = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? 
 const STATUS: Record<string, string> = { confirmed: "confirmed", in_production: "in production", delivered: "delivered", invoiced: "invoiced", paid: "paid", cancelled: "cancelled" };
 
 export default async function CreatorHome() {
-  const { profile, roster: r } = await requireCreator();
+  const { profile, roster: r, preview } = await requireCreator();
   const admin = supabaseAdmin();
   const first = r.name.split(" ")[0];
   const [{ data: projects }, { data: events }, { data: requests }, { data: experiments }, { data: me }] = await Promise.all([
@@ -36,6 +36,7 @@ export default async function CreatorHome() {
 
   return (
     <div className="mx-auto max-w-6xl">
+      {preview && <div className="mb-4 flex items-center justify-between rounded-lg border border-warn/40 bg-warn/10 px-4 py-2 text-[12.5px]"><span>Previewing as <b>{r.name}</b>. This is exactly what they see; nothing here is visible to them until their portal is on.</span><a href="/api/portal/preview?clear=1" className="num text-[11px] text-accent hover:underline">end preview</a></div>}
       <div className="mb-6 flex items-end justify-between gap-4">
         <div><div className="label mb-1">Sponsorprint · {r.name}</div><h1 className="h1">Hi {first}.</h1><p className="mt-1 text-[14px] text-muted">{upcoming.length ? `${upcoming.length} project${upcoming.length === 1 ? "" : "s"} on the go` : "No live projects right now"}{uniqPitched.length ? ` · ${uniqPitched.length} brands pitched for you this week` : ""}{launches.length ? ` · ${launches.length} launch window${launches.length === 1 ? "" : "s"} in your lane` : ""}.</p></div>
       </div>

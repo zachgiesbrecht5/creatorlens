@@ -10,13 +10,15 @@ type Ev = { id: string; title: string; starts_at: string; ends_at: string | null
 const STATUSES = ["confirmed", "in_production", "delivered", "invoiced", "paid", "cancelled"];
 const money = (n: number | null, c = "USD") => (n == null ? "" : new Intl.NumberFormat("en-US", { style: "currency", currency: c, maximumFractionDigits: 0 }).format(Number(n)));
 
-export function PortalPanel({ rosterCreatorId, name, enabled: initialEnabled, creatorEmail, projects: p0, events: e0, experiments, requests }: { rosterCreatorId: string; name: string; enabled: boolean; creatorEmail: string | null; projects: Project[]; events: Ev[]; experiments: any[]; requests: any[] }) {
+export function PortalPanel({ rosterCreatorId, name, enabled: initialEnabled, creatorEmail, projects: p0, events: e0, experiments, requests, sheetId, sheetNote }: { rosterCreatorId: string; name: string; enabled: boolean; creatorEmail: string | null; projects: Project[]; events: Ev[]; experiments: any[]; requests: any[]; sheetId?: string | null; sheetNote?: string | null }) {
   const [enabled, setEnabled] = useState(initialEnabled); const [email, setEmail] = useState(creatorEmail || "");
   const [projects, setProjects] = useState(p0); const [events, setEvents] = useState(e0);
   const [tab, setTab] = useState<"projects" | "events" | "ideas" | "requests">("projects");
   const [np, setNp] = useState<any>({ brand: "", title: "", deliverables: "", status: "confirmed", due_at: "", go_live_at: "", fee: "" });
   const [ne, setNe] = useState<any>({ title: "", starts_at: "", location: "", brand: "", rsvp_url: "" });
   const [busy, setBusy] = useState(false);
+  const [sheet, setSheet] = useState(sheetId ? `https://docs.google.com/spreadsheets/d/${sheetId}` : ""); const [sheetMsg, setSheetMsg] = useState<string | null>(sheetNote || null);
+  async function linkSheet(clear = false) { const j = await call("/api/portal/sheet", { url: clear ? "" : sheet }); if (j) { setSheetMsg(clear ? "Unlinked." : "Linked. Syncs within 15 minutes, then hourly."); if (clear) setSheet(""); } }
   async function call(path: string, body: any, method = "POST") { setBusy(true); const r = await fetch(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, rosterCreatorId }) }); const j = await r.json().catch(() => ({})); setBusy(false); return r.ok ? j : (alert(j.error || "failed"), null); }
   async function toggle(on: boolean) { const j = await call("/api/portal/toggle", { enabled: on, creator_email: email }); if (j) setEnabled(on); }
   async function addProject() { const j = await call("/api/portal/projects", { ...np, fee: np.fee === "" ? null : Number(np.fee) }); if (j) { setProjects((l) => [j, ...l]); setNp({ brand: "", title: "", deliverables: "", status: "confirmed", due_at: "", go_live_at: "", fee: "" }); } }
@@ -35,6 +37,14 @@ export function PortalPanel({ rosterCreatorId, name, enabled: initialEnabled, cr
 
       {tab === "projects" && (
         <div>
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-line bg-surface2/40 p-3">
+            <span className="num text-[11px] text-muted">project tracker sheet</span>
+            <input value={sheet} onChange={(e) => setSheet(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" className="input-flat !w-[380px] !py-1 font-mono text-[11px]" />
+            <button onClick={() => linkSheet(false)} disabled={busy || !sheet} className="btn-dark !py-1 !text-[11px] disabled:opacity-50">{sheetId ? "update" : "link"}</button>
+            {sheetId && <button onClick={() => linkSheet(true)} disabled={busy} className="btn-ghost !py-1 !text-[11px]">unlink</button>}
+            {sheetMsg && <span className="num text-[10.5px] text-muted">{sheetMsg}</span>}
+            <span className="num text-[10.5px] text-dim">edits in the sheet flow here hourly; rows added here stay too</span>
+          </div>
           <div className="mb-3 grid gap-2 md:grid-cols-[1.1fr_1fr_1.3fr_auto_auto_auto_auto_auto]">
             <input value={np.brand} onChange={(e) => setNp({ ...np, brand: e.target.value })} placeholder="brand" className="input-flat !py-1.5 text-[13px]" />
             <input value={np.title} onChange={(e) => setNp({ ...np, title: e.target.value })} placeholder="campaign" className="input-flat !py-1.5 text-[13px]" />

@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { HookCard } from "@/components/HookCard";
-import { hookMix } from "@/lib/hook-read";
 import { redirect } from "next/navigation";
 import { currentProfile, supabaseAdmin } from "@/lib/supabase";
 import { PrintTimeline, type TL } from "@/components/PrintTimeline";
@@ -12,6 +10,7 @@ import { laneDigest } from "@/lib/lane-digest";
 import { laneLaunches } from "@/lib/launches";
 import { LaunchList } from "@/components/LaunchList";
 import { trackerStatuses } from "@/lib/tracker";
+import { PortalPanel } from "@/components/PortalPanel";
 
 // A roster creator's page: who has paid them (their map), and the brands paying
 // their lane that haven't paid them yet, each one click from a contact and a
@@ -64,6 +63,12 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
   }
 
   const digest = await laneDigest(profile.id, r.id, 30);
+  const [{ data: pProjects }, { data: pEvents }, { data: pExps }, { data: pReqs }] = await Promise.all([
+    admin.from("projects").select("*").eq("roster_creator_id", r.id).order("created_at", { ascending: false }),
+    admin.from("creator_events").select("*").eq("roster_creator_id", r.id).order("starts_at", { ascending: false }).limit(30),
+    admin.from("experiments").select("*").eq("roster_creator_id", r.id).order("created_at", { ascending: false }),
+    admin.from("requests").select("*").eq("roster_creator_id", r.id).order("created_at", { ascending: false }),
+  ]);
   const launchesRaw = await laneLaunches(lane, mine);
   const tracker = await trackerStatuses(profile.id, [...laneBrands.map((b) => ({ id: b.brand_id, name: b.brand, website: b.website })), ...launchesRaw.map((l) => ({ id: l.brand_id, name: l.brand, website: l.website }))]);
   for (const b of laneBrands) b.tracker = tracker[b.brand_id] || null;
@@ -82,6 +87,7 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
           {r.pitch_angle && <p className="mt-3 max-w-3xl text-[13.5px] leading-relaxed text-muted">{r.pitch_angle}</p>}
           <div className="mt-3 flex flex-wrap items-center gap-3 text-[12px]">
             <span className="num text-muted">based in</span><LocationField id={r.id} initial={r.location} />
+            <a href={`/api/portal/preview?as=${r.id}`} className="btn-ghost !py-1 !text-[12px]" title="See this creator's page exactly as they would, without their login">preview as {r.name.split(" ")[0]} →</a>
             {me ? <Link href={`/c/${platform}/${me.handle}`} className="btn-ghost !py-1 !text-[12px]">open the full print →</Link> : <span className="num text-[11px] text-muted"><span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" /> printing {r.name} now; refresh in a minute</span>}
           </div>
         </div>
@@ -89,11 +95,17 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
       </div>
 
       <Tour id="creator" steps={CREATOR_TOUR} />
+      <PortalPanel rosterCreatorId={r.id} name={r.name.split(" ")[0]} enabled={!!r.portal_enabled} creatorEmail={r.creator_email || null} projects={(pProjects || []) as any} events={(pEvents || []) as any} experiments={pExps || []} requests={pReqs || []} sheetId={(r as any).project_sheet_id || null} sheetNote={(r as any).project_sheet_note || null} />
       {(me as any)?.performance?.top?.length > 0 && (() => { const perf = (me as any).performance; const fmtN = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n)); return (
         <section className="card mt-6 p-5">
-          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2"><div><div className="label">What's performing</div><div className="text-[13px] text-muted">{perf.items} posts in the window · median {fmtN(perf.median)} {perf.metric_label}. Top posts vs the median. Bold line is what a viewer hears or sees first; the tag says where it came from.</div>{hookMix(perf.top.slice(0, 6), platform) && <div className="mt-1 text-[13px] font-medium text-fg">{hookMix(perf.top.slice(0, 6), platform)}</div>}</div><div className="num text-[11px] text-dim">{(perf.hooks || []).filter((h: any) => h.hook !== "Other").slice(0, 3).map((h: any) => `"${h.hook}" ×${h.count}`).join(" · ")}</div></div>
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2"><div><div className="label">What's performing</div><div className="text-[13px] text-muted">{perf.items} posts in the window · median {fmtN(perf.median)} {perf.metric_label}. Top posts vs the median, with the hook that carried them.</div></div><div className="num text-[11px] text-dim">{(perf.hooks || []).filter((h: any) => h.hook !== "Other").slice(0, 3).map((h: any) => `"${h.hook}" ×${h.count}`).join(" · ")}</div></div>
           <div className="grid gap-2 md:grid-cols-2">
-            {perf.top.slice(0, 6).map((t: any, i: number) => <HookCard key={t.url} t={t} rank={i + 1} perf={perf} platform={platform} />)}
+            {perf.top.slice(0, 6).map((t: any) => (
+              <a key={t.url} href={t.url} target="_blank" rel="noreferrer" className="flex items-start gap-3 rounded-lg border border-line p-3 hover:border-fg">
+                <div className="num w-20 flex-none text-right"><div className="text-[15px] font-semibold text-fg">{fmtN(t.metric)}</div><div className="text-[10px] text-ok">{perf.median >= 1000 ? (t.metric / perf.median).toFixed(1) + "x median" : `#${perf.top.indexOf(t) + 1} of ${perf.items}`}</div></div>
+                <div className="min-w-0"><div className="truncate text-[13px] font-medium">"{t.spoken || t.on_video || t.on_screen || t.hook || t.title}"</div>{(t.spoken || t.on_video || t.on_screen) && <div className="truncate text-[11.5px] text-muted">{t.spoken ? "said" : t.on_video ? "on video" : "on cover"}{t.spoken && (t.on_video || t.on_screen) ? ` · on screen: "${t.on_video || t.on_screen}"` : ""} · caption: {t.hook || t.title}</div>}<div className="num text-[10.5px] text-muted">{new Date(t.published_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })} · {t.kind}{t.sponsored ? " · sponsored" : ""}</div></div>
+              </a>
+            ))}
           </div>
           {perf.formats?.length > 0 && <div className="num mt-3 text-[11px] text-muted">by format: {perf.formats.map((f: any) => `${f.kind} ${f.count} posts, avg ${fmtN(f.avg)}`).join(" · ")}</div>}
         </section>); })()}

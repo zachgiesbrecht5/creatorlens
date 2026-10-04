@@ -4,7 +4,7 @@ const money = (n: number | null, c = "USD") => (n == null ? "" : new Intl.Number
 const d = (s: string | null) => (s ? new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "");
 const STATUS: Record<string, string> = { confirmed: "confirmed", in_production: "in production", delivered: "delivered", invoiced: "invoiced", paid: "paid", cancelled: "cancelled" };
 export default async function MyProjects() {
-  const { roster: r } = await requireCreator();
+  const { roster: r, preview } = await requireCreator();
   const { data: projects } = await supabaseAdmin().from("projects").select("*").eq("roster_creator_id", r.id).eq("visible", true).order("created_at", { ascending: false });
   const live = (projects || []).filter((p) => !["paid", "cancelled"].includes(p.status)); const done = (projects || []).filter((p) => ["paid", "cancelled"].includes(p.status));
   const Table = ({ rows }: { rows: any[] }) => (
@@ -13,6 +13,7 @@ export default async function MyProjects() {
   );
   return (
     <div className="mx-auto max-w-6xl">
+      {preview && <div className="mb-4 flex items-center justify-between rounded-lg border border-warn/40 bg-warn/10 px-4 py-2 text-[12.5px]"><span>Previewing as <b>{r.name}</b>. This is exactly what they see; nothing here is visible to them until their portal is on.</span><a href="/api/portal/preview?clear=1" className="num text-[11px] text-accent hover:underline">end preview</a></div>}
       <div className="mb-5"><div className="label mb-1">Projects</div><h1 className="h1">Your campaigns</h1><p className="mt-1 text-[14px] text-muted">Every confirmed campaign, where it stands, and when it pays.</p></div>
       <div className="card mb-6 overflow-x-auto"><div className="px-4 pt-4 label">Live</div><Table rows={live} /></div>
       <div className="card overflow-x-auto"><div className="px-4 pt-4 label">Done</div><Table rows={done} /></div>
