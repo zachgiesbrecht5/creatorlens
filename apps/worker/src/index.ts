@@ -147,7 +147,7 @@ async function persist(job: any, result: ScanResult) {
     if (result.performance) {
       await sb.from("creators").update({ performance: result.performance }).eq("id", creator.id);
       const pf = result.performance;
-      await sb.from("performance_snapshots").insert({ creator_id: creator.id, items: pf.items, median: pf.median, metric_label: pf.metric_label, top: pf.top.slice(0, 5).map((t) => ({ title: t.title.slice(0, 120), url: t.url, published_at: t.published_at, metric: t.metric, kind: t.kind, hook: t.hook, sponsored: t.sponsored })), hooks: pf.hooks, formats: pf.formats }).then(() => {});
+      await sb.from("performance_snapshots").insert({ creator_id: creator.id, followers: result.creator.followers || null, items: pf.items, median: pf.median, metric_label: pf.metric_label, top: pf.top.slice(0, 5).map((t) => ({ title: t.title.slice(0, 120), url: t.url, published_at: t.published_at, metric: t.metric, kind: t.kind, hook: t.hook, sponsored: t.sponsored })), hooks: pf.hooks, formats: pf.formats }).then(() => {});
       // spoken hooks (Deepgram) and cover/frame reads (Anthropic) are independent; neither blocks the other
       readHooks(sb, creator.id).catch((e: any) => log("hooks failed", String(e?.message || e).slice(0, 160)));
       readCovers(sb, creator.id).catch((e: any) => { if (!noteModelError(e)) log("covers failed", String(e?.message || e).slice(0, 160)); });

@@ -95,7 +95,7 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
       </div>
 
       <Tour id="creator" steps={CREATOR_TOUR} />
-      <PortalPanel rosterCreatorId={r.id} name={r.name.split(" ")[0]} enabled={!!r.portal_enabled} creatorEmail={r.creator_email || null} projects={(pProjects || []) as any} events={(pEvents || []) as any} experiments={pExps || []} requests={pReqs || []} sheetId={(r as any).project_sheet_id || null} sheetNote={(r as any).project_sheet_note || null} />
+      <PortalPanel rosterCreatorId={r.id} name={r.name.split(" ")[0]} enabled={!!r.portal_enabled} creatorEmail={r.creator_email || null} projects={(pProjects || []) as any} events={(pEvents || []) as any} experiments={pExps || []} sheetId={(r as any).project_sheet_id || null} sheetNote={(r as any).project_sheet_note || null} thesis={(r as any).thesis || null} />
       {(me as any)?.performance?.top?.length > 0 && (() => { const perf = (me as any).performance; const fmtN = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n)); return (
         <section className="card mt-6 p-5">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2"><div><div className="label">What's performing</div><div className="text-[13px] text-muted">{perf.items} posts in the window · median {fmtN(perf.median)} {perf.metric_label}. Top posts vs the median, with the hook that carried them.</div></div><div className="num text-[11px] text-dim">{(perf.hooks || []).filter((h: any) => h.hook !== "Other").slice(0, 3).map((h: any) => `"${h.hook}" ×${h.count}`).join(" · ")}</div></div>

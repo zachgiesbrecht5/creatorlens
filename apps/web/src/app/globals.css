@@ -374,3 +374,16 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 /* project status pills */
 .pill-status { display: inline-block; padding: 2px 9px; border-radius: 999px; font-family: var(--font-mono); font-size: 10.5px; white-space: nowrap; }
 .ps-confirmed { background: #eef2ff; color: #2f5bff; } .ps-in_production { background: #fff4e5; color: #b45309; } .ps-delivered { background: #f2f4f7; color: #5b6472; } .ps-invoiced { background: #fdf2f8; color: #b13589; } .ps-paid { background: #e6f5ec; color: #0e6b45; } .ps-cancelled { background: #f2f4f7; color: #8b93a1; text-decoration: line-through; }
+
+/* creator home */
+.hero-card { border-radius: 18px; padding: 26px 28px; background: linear-gradient(135deg, #2E1B5B 0%, #1d1240 60%, #0f0b24 100%); color: #fff; box-shadow: 0 20px 60px -30px rgba(46,27,91,.6); }
+.feed-card { display: block; border: 1px solid #e4e6ea; border-radius: 14px; background: #fff; padding: 14px 14px 12px; transition: border-color .15s, transform .15s; }
+.feed-card:hover { border-color: #0b0d12; transform: translateY(-1px); }
+.feed-top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+.feed-hook { font-size: 14.5px; line-height: 1.35; font-weight: 600; letter-spacing: -0.01em; color: #0b0d12; min-height: 58px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.feed-meta { margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pill-src { display: inline-block; padding: 2px 7px; border-radius: 999px; background: #eef2ff; color: #2f5bff; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; }
+.post-card { display: block; overflow: hidden; border: 1px solid #e4e6ea; border-radius: 14px; background: #fff; transition: border-color .15s; }
+.post-card:hover { border-color: #0b0d12; }
+.post-thumb { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; display: block; }
+.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import { Experiments } from "@/components/Experiments";
-import { Requests } from "@/components/Requests";
 
 // Manager side of the creator portal, on the roster creator's page: on/off switch,
 // projects + payouts, events, ideas worth testing, requests.
@@ -10,10 +9,11 @@ type Ev = { id: string; title: string; starts_at: string; ends_at: string | null
 const STATUSES = ["confirmed", "in_production", "delivered", "invoiced", "paid", "cancelled"];
 const money = (n: number | null, c = "USD") => (n == null ? "" : new Intl.NumberFormat("en-US", { style: "currency", currency: c, maximumFractionDigits: 0 }).format(Number(n)));
 
-export function PortalPanel({ rosterCreatorId, name, enabled: initialEnabled, creatorEmail, projects: p0, events: e0, experiments, requests, sheetId, sheetNote }: { rosterCreatorId: string; name: string; enabled: boolean; creatorEmail: string | null; projects: Project[]; events: Ev[]; experiments: any[]; requests: any[]; sheetId?: string | null; sheetNote?: string | null }) {
+export function PortalPanel({ rosterCreatorId, name, enabled: initialEnabled, creatorEmail, projects: p0, events: e0, experiments, sheetId, sheetNote, thesis: initialThesis }: { rosterCreatorId: string; name: string; enabled: boolean; creatorEmail: string | null; projects: Project[]; events: Ev[]; experiments: any[]; requests?: any[]; sheetId?: string | null; sheetNote?: string | null; thesis?: string | null }) {
   const [enabled, setEnabled] = useState(initialEnabled); const [email, setEmail] = useState(creatorEmail || "");
   const [projects, setProjects] = useState(p0); const [events, setEvents] = useState(e0);
-  const [tab, setTab] = useState<"projects" | "events" | "ideas" | "requests">("projects");
+  const [tab, setTab] = useState<"projects" | "events" | "ideas">("projects");
+  const [thesis, setThesis] = useState(initialThesis || "");
   const [np, setNp] = useState<any>({ brand: "", title: "", deliverables: "", status: "confirmed", due_at: "", go_live_at: "", fee: "" });
   const [ne, setNe] = useState<any>({ title: "", starts_at: "", location: "", brand: "", rsvp_url: "" });
   const [busy, setBusy] = useState(false);
@@ -26,14 +26,17 @@ export function PortalPanel({ rosterCreatorId, name, enabled: initialEnabled, cr
   async function delProject(id: string) { if (!confirm("Delete this project?")) return; const j = await call("/api/portal/projects", { id }, "DELETE"); if (j) setProjects((l) => l.filter((x) => x.id !== id)); }
   async function addEvent() { const j = await call("/api/portal/events", ne); if (j) { setEvents((l) => [j, ...l]); setNe({ title: "", starts_at: "", location: "", brand: "", rsvp_url: "" }); } }
   async function delEvent(id: string) { const j = await call("/api/portal/events", { id }, "DELETE"); if (j) setEvents((l) => l.filter((x) => x.id !== id)); }
-  const openReq = requests.filter((r) => r.status !== "done").length;
   return (
     <section className="card mt-8 p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div><div className="label">Creator portal</div><div className="text-[13px] text-muted">{enabled ? `${name} can sign in with ${email || "their email"} and see projects, payouts, hooks, launches, events and what you're pitching.` : `Off. ${name} sees nothing until you turn this on; nothing is sent either way.`}</div></div>
         <div className="flex items-center gap-2"><input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="creator's sign-in email" className="input-flat !w-64 !py-1.5 font-mono text-[12px]" /><button onClick={() => toggle(!enabled)} disabled={busy || (!enabled && !email)} className={`!py-1.5 !text-[12px] ${enabled ? "btn-ghost" : "btn-dark"} disabled:opacity-50`}>{enabled ? "turn off" : "turn on"}</button></div>
       </div>
-      <div className="mb-4 flex gap-1 border-b border-line">{(["projects", "events", "ideas", "requests"] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={`px-3 py-2 text-[13px] ${tab === t ? "border-b-2 border-fg font-medium" : "text-muted"}`}>{t === "ideas" ? "worth testing" : t}{t === "requests" && openReq ? <span className="ml-1 rounded-full bg-accent px-1.5 text-[10px] text-white">{openReq}</span> : null}</button>)}</div>
+      <div className="mb-4 rounded-lg border border-dashed border-line bg-surface2/40 p-3">
+        <div className="num mb-1 text-[11px] text-muted">where we're taking {name} · shown on their home as the positioning line (two sentences; protect, expand, build)</div>
+        <textarea value={thesis} onChange={(e) => setThesis(e.target.value)} onBlur={() => call("/api/portal/toggle", { enabled, creator_email: email, thesis })} rows={2} placeholder="e.g. Protect the useful first-time-dad content that drives discovery. Expand into young-family life: travel, money, home, food. Use YouTube for the longer story." className="input-flat w-full !py-1.5 text-[13px]" />
+      </div>
+      <div className="mb-4 flex gap-1 border-b border-line">{(["projects", "events", "ideas"] as const).map((t) => <button key={t} onClick={() => setTab(t)} className={`px-3 py-2 text-[13px] ${tab === t ? "border-b-2 border-fg font-medium" : "text-muted"}`}>{t === "ideas" ? "worth testing" : t}</button>)}</div>
 
       {tab === "projects" && (
         <div>
@@ -88,7 +91,6 @@ export function PortalPanel({ rosterCreatorId, name, enabled: initialEnabled, cr
       )}
 
       {tab === "ideas" && <Experiments rows={experiments} api="/api/portal/experiments" rosterCreatorId={rosterCreatorId} />}
-      {tab === "requests" && <Requests rows={requests} api="/api/portal/requests" rosterCreatorId={rosterCreatorId} />}
     </section>
   );
 }

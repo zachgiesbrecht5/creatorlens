@@ -5,129 +5,169 @@ import { laneDigest } from "@/lib/lane-digest";
 import { laneLaunches } from "@/lib/launches";
 import { parsePulse } from "@/lib/pulse-html";
 
-// The creator's home: upcoming projects, payouts, hooks to test, top performers in
-// their lane, what Rootfor is doing for them this week, and what's coming up.
+// The creator's home, built against the Jimmy call: (1) what's working, for them and in
+// their lane, with the hooks; (2) what's worth testing, as suggestions; (3) what's coming
+// up, seasonal and launches; (4) what the agency is doing for them. Business (projects,
+// payouts) sits in a quiet rail. No creative instruction anywhere.
 const money = (n: number | null, c = "USD") => (n == null ? "" : new Intl.NumberFormat("en-US", { style: "currency", currency: c, maximumFractionDigits: 0 }).format(Number(n)));
 const d = (s: string | null | undefined) => (s ? new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
-const fmtK = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
+const fmtK = (n: number | null | undefined) => (!n ? "0" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
+const pct = (a: number | null | undefined, b: number | null | undefined) => (a && b ? ((a - b) / b) * 100 : null);
 const STATUS: Record<string, string> = { confirmed: "confirmed", in_production: "in production", delivered: "delivered", invoiced: "invoiced", paid: "paid", cancelled: "cancelled" };
+const SRC: Record<string, string> = { spoken: "said", on_video: "on video", on_screen: "on cover", hook: "caption" };
 
 export default async function CreatorHome() {
-  const { profile, roster: r, preview } = await requireCreator();
+  const { roster: r, preview } = await requireCreator();
   const admin = supabaseAdmin();
   const first = r.name.split(" ")[0];
-  const [{ data: projects }, { data: events }, { data: requests }, { data: experiments }, { data: me }] = await Promise.all([
+  const platform = r.platform === "youtube" ? "youtube" : "instagram";
+  const [{ data: me }, { data: projects }, { data: events }, { data: ideas }, { data: lastPulse }] = await Promise.all([
+    admin.from("creators").select("id,category,performance,followers,avatar_url,avatar_thumb,display_name,handle").eq("platform", platform).ilike("handle", String(r.handle || "").replace(/^@/, "")).maybeSingle(),
     admin.from("projects").select("*").eq("roster_creator_id", r.id).eq("visible", true).neq("status", "cancelled").order("due_at", { ascending: true, nullsFirst: false }),
-    admin.from("creator_events").select("*").or(`roster_creator_id.eq.${r.id},roster_creator_id.is.null`).eq("user_id", r.user_id).eq("visible", true).gte("starts_at", new Date(Date.now() - 864e5).toISOString()).order("starts_at").limit(8),
-    admin.from("requests").select("*").eq("roster_creator_id", r.id).order("created_at", { ascending: false }).limit(5),
-    admin.from("experiments").select("*").eq("roster_creator_id", r.id).in("status", ["idea", "testing"]).order("created_at", { ascending: false }).limit(6),
-    admin.from("creators").select("id,category,performance,followers").eq("platform", r.platform === "youtube" ? "youtube" : "instagram").ilike("handle", String(r.handle || "").replace(/^@/, "")).maybeSingle(),
+    admin.from("creator_events").select("*").or(`roster_creator_id.eq.${r.id},roster_creator_id.is.null`).eq("user_id", r.user_id).eq("visible", true).gte("starts_at", new Date(Date.now() - 864e5).toISOString()).order("starts_at").limit(6),
+    admin.from("experiments").select("*").eq("roster_creator_id", r.id).in("status", ["idea", "testing"]).order("created_at", { ascending: false }).limit(4),
+    admin.from("creator_updates").select("subject,body,month,kind,sent_at").eq("roster_creator_id", r.id).eq("status", "sent").order("sent_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
-  const { data: lastPulse } = await admin.from("creator_updates").select("subject,body,month,kind,sent_at").eq("roster_creator_id", r.id).eq("status", "sent").order("sent_at", { ascending: false }).limit(1).maybeSingle();
-  const pulse = lastPulse ? parsePulse(lastPulse.body || "") : null;
-  const upcoming = (projects || []).filter((p) => !["paid"].includes(p.status));
-  const payouts = (projects || []).filter((p) => ["delivered", "invoiced", "paid"].includes(p.status) && p.fee != null);
-  const digest = await laneDigest(r.user_id, r.id, 30);
+  const perf: any = me?.performance || null;
   const lane = me?.category || null;
-  const launches = (await laneLaunches(lane)).filter((l) => l.status === "open" || l.status === "soon").slice(0, 5);
-  // what Rootfor is doing this week: pitches for this creator from the tracker (brand names only), last 7 days
+  // growth from scan history
+  const { data: snaps } = me ? await admin.from("performance_snapshots").select("captured_at,followers,median").eq("creator_id", me.id).order("captured_at", { ascending: false }).limit(60) : { data: [] as any[] };
+  const at = (days: number) => (snaps || []).find((s) => new Date(s.captured_at).getTime() <= Date.now() - days * 864e5 && s.followers);
+  const g14 = pct(me?.followers, at(14)?.followers), g30 = pct(me?.followers, at(30)?.followers);
+  const digest = await laneDigest(r.user_id, r.id, 30);
+  const launches = lane ? (await laneLaunches(lane)).filter((l) => l.status === "open" || l.status === "soon").slice(0, 4) : [];
   const since = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
-  const { data: pitched } = await admin.from("tracker_rows").select("brand,date_sent,status").eq("user_id", r.user_id).eq("tab", "outreach").gte("date_sent", since).ilike("creator", `%${first}%`).order("date_sent", { ascending: false }).limit(40);
-  const { data: inConvo } = await admin.from("tracker_rows").select("brand,date_sent,status").eq("user_id", r.user_id).eq("tab", "outreach").ilike("creator", `%${first}%`).or("status.ilike.%repl%,status.ilike.%interest%,status.ilike.%negot%,status.ilike.%call%").gte("date_sent", new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10)).order("date_sent", { ascending: false }).limit(10);
-  const uniqPitched = [...new Map((pitched || []).map((p) => [p.brand.toLowerCase(), p])).values()];
-  const hooks = digest.posts.filter((p) => p.on_screen).slice(0, 6);
+  const { data: pitched } = await admin.from("tracker_rows").select("brand").eq("user_id", r.user_id).eq("tab", "outreach").gte("date_sent", since).ilike("creator", `%${first}%`).limit(60);
+  const { data: inConvo } = await admin.from("tracker_rows").select("brand,status").eq("user_id", r.user_id).eq("tab", "outreach").ilike("creator", `%${first}%`).or("status.ilike.%repl%,status.ilike.%interest%,status.ilike.%negot%,status.ilike.%call%").gte("date_sent", new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10)).limit(10);
+  const pitchedBrands = [...new Set((pitched || []).map((p) => p.brand))];
+  const convo = [...new Map((inConvo || []).map((p) => [p.brand.toLowerCase(), p])).values()];
+  const live = (projects || []).filter((p) => !["paid"].includes(p.status));
+  const payable = (projects || []).filter((p) => ["delivered", "invoiced"].includes(p.status));
+  const pending = payable.reduce((s, p) => s + Number(p.fee || 0), 0);
+  const month = new Date().toISOString().slice(0, 7);
+  const paidThisMonth = (projects || []).filter((p) => p.status === "paid" && String(p.paid_at || "").startsWith(month)).reduce((s, p) => s + Number(p.fee || 0), 0);
+  const avatar = me?.avatar_thumb ? `data:image/jpeg;base64,${me.avatar_thumb}` : me?.avatar_url || r.avatar_url || null;
+  const own = (perf?.top || []).slice(0, 4);
+  const pulse = lastPulse ? parsePulse(lastPulse.body || "") : null;
+  // the lane feed: thumbnails + hooks, source-tagged
+  const feed = digest.posts.slice(0, 9);
+  const hookMax = Math.max(...digest.hooks.map((h) => h.avg), 1);
 
   return (
     <div className="mx-auto max-w-6xl">
-      {preview && <div className="mb-4 flex items-center justify-between rounded-lg border border-warn/40 bg-warn/10 px-4 py-2 text-[12.5px]"><span>Previewing as <b>{r.name}</b>. This is exactly what they see; nothing here is visible to them until their portal is on.</span><a href="/api/portal/preview?clear=1" className="num text-[11px] text-accent hover:underline">end preview</a></div>}
-      <div className="mb-6 flex items-end justify-between gap-4">
-        <div><div className="label mb-1">Sponsorprint · {r.name}</div><h1 className="h1">Hi {first}.</h1><p className="mt-1 text-[14px] text-muted">{upcoming.length ? `${upcoming.length} project${upcoming.length === 1 ? "" : "s"} on the go` : "No live projects right now"}{uniqPitched.length ? ` · ${uniqPitched.length} brands pitched for you this week` : ""}{launches.length ? ` · ${launches.length} launch window${launches.length === 1 ? "" : "s"} in your lane` : ""}.</p></div>
-      </div>
+      {preview && <div className="mb-4 flex items-center justify-between rounded-lg border border-warn/40 bg-warn/10 px-4 py-2 text-[12.5px]"><span>Previewing as <b>{r.name}</b>. Nothing here is visible to them until their portal is on.</span><a href="/api/portal/preview?clear=1" className="num text-[11px] text-accent hover:underline">end preview</a></div>}
 
-      {pulse && pulse.sections.length > 0 && (
-        <section className="card mb-5 p-5" style={{ borderLeft: "4px solid #2E1B5B" }}>
-          <div className="mb-3 flex items-baseline justify-between"><div className="label">{lastPulse!.kind === "weekly" ? "This week's pulse" : "This month's update"}</div><div className="num text-[11px] text-muted">{new Date(lastPulse!.sent_at!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div></div>
-          <div className="grid gap-4 md:grid-cols-2">{pulse.sections.map((sct) => (
-            <div key={sct.title}><div className="num mb-1 text-[10.5px] tracking-[0.15em]" style={{ color: sct.title === "WORTH TESTING" ? "#E85D9B" : sct.title === "COMING UP" ? "#007D2A" : "#2E1B5B" }}>{sct.title}</div>
-              <div className="space-y-1 text-[13px] leading-relaxed">{sct.lines.filter((l) => l.trim()).map((l, i) => <div key={i} className={/^[-•·*]\s/.test(l.trim()) ? "pl-3" : ""}>{l.trim().replace(/^[-•·*]\s+/, "· ")}</div>)}</div></div>
-          ))}</div>
-        </section>
-      )}
-      <div className="grid gap-5 md:grid-cols-[1.4fr_1fr]">
-        <div className="space-y-5">
-          <section className="card p-5">
-            <div className="mb-3 flex items-baseline justify-between"><div className="label">Upcoming projects</div><Link href="/me/projects" className="num text-[11px] text-accent hover:underline">all projects →</Link></div>
-            {!upcoming.length ? <p className="text-[13px] text-muted">Nothing confirmed yet. When a campaign is confirmed it appears here with the deliverables and dates.</p> : (
-              <div className="divide-y divide-line">{upcoming.map((p) => (
-                <div key={p.id} className="flex items-start justify-between gap-4 py-2.5">
-                  <div className="min-w-0"><div className="text-[14px] font-semibold tracking-tight">{p.brand}{p.title ? <span className="font-normal text-muted"> · {p.title}</span> : null}</div>{p.deliverables && <div className="text-[12.5px] text-muted">{p.deliverables}</div>}<div className="num mt-0.5 text-[10.5px] text-dim">{p.due_at ? `due ${d(p.due_at)}` : ""}{p.go_live_at ? ` · live ${d(p.go_live_at)}` : ""}</div></div>
-                  <span className={`pill-status ps-${p.status}`}>{STATUS[p.status] || p.status}</span>
-                </div>))}</div>
+      {/* hero */}
+      <section className="hero-card">
+        <div className="flex flex-wrap items-center gap-5">
+          {avatar ? <img src={avatar} alt="" className="h-20 w-20 rounded-full object-cover ring-4 ring-white/10" /> : <span className="inline-block h-20 w-20 rounded-full bg-white/10" />}
+          <div className="min-w-0 flex-1">
+            <div className="num text-[11px] tracking-[0.2em] text-white/50">ROOTFOR · {platform === "youtube" ? "YOUTUBE" : "INSTAGRAM"}{lane ? ` · ${lane.toUpperCase()}` : ""}</div>
+            <h1 className="mt-1 text-[30px] font-bold leading-tight tracking-tight text-white">{r.name}</h1>
+            <div className="num mt-1 text-[12px] text-white/60">@{String(r.handle || "").replace(/^@/, "")}</div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label={platform === "youtube" ? "subscribers" : "followers"} value={fmtK(me?.followers || r.followers)} sub={g30 != null ? `${g30 >= 0 ? "+" : ""}${g30.toFixed(1)}% in 30d` : g14 != null ? `${g14 >= 0 ? "+" : ""}${g14.toFixed(1)}% in 14d` : "tracking from today"} good={(g30 ?? g14 ?? 0) >= 0} />
+            <Stat label={`median ${perf?.metric_label || "engagement"}`} value={fmtK(perf?.median)} sub={perf ? `${perf.items} posts in window` : ""} />
+            <Stat label="live projects" value={String(live.length)} sub={pending ? `${money(pending)} pending` : "nothing pending"} />
+            <Stat label="pitched this week" value={String(pitchedBrands.length)} sub={convo.length ? `${convo.length} in conversation` : "by your team"} />
+          </div>
+        </div>
+        {(r as any).thesis && <div className="mt-5 border-t border-white/10 pt-4 text-[14px] leading-relaxed text-white/85"><span className="num mr-2 text-[10.5px] tracking-[0.15em] text-white/50">WHERE WE'RE TAKING THIS</span>{(r as any).thesis}</div>}
+      </section>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-[1.55fr_1fr]">
+        <div className="space-y-6">
+          {/* your best */}
+          {own.length > 0 && (
+            <section>
+              <div className="mb-3 flex items-end justify-between"><div><div className="label">Your best right now</div><h2 className="h2">What's carrying your numbers</h2></div><Link href={`/c/${platform}/${String(r.handle || "").replace(/^@/, "")}`} className="num text-[11px] text-accent hover:underline">full print →</Link></div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{own.map((t: any, i: number) => <PostCard key={t.url} t={t} median={perf.median} label={perf.metric_label} rank={i + 1} items={perf.items} />)}</div>
+            </section>
+          )}
+
+          {/* lane feed */}
+          <section>
+            <div className="mb-3 flex items-end justify-between gap-4"><div><div className="label">Trending in your lane · last 30 days</div><h2 className="h2">Hooks that are working for creators like you</h2><p className="mt-1 text-[13px] text-muted">From the {digest.creators.length} creator{digest.creators.length === 1 ? "" : "s"} you and your team follow. Ranked by how far each post beat that creator's own median. Bold line is what a viewer hears or sees first.</p></div><Link href="/me/watchlist" className="btn-ghost !py-1.5 !text-[12px] whitespace-nowrap">your lane →</Link></div>
+            {!feed.length ? <div className="card p-6 text-[13.5px] text-muted">{digest.creators.length ? "Prints are landing; hooks show here within a day." : "Follow a few creators you rate and their best hooks start showing up here every week."}</div> : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{feed.map((p) => (
+                <a key={p.url} href={p.url} target="_blank" rel="noreferrer" className="feed-card">
+                  <div className="feed-top"><span className="num text-[18px] font-bold">{fmtK(p.metric)}</span><span className="num text-[10.5px] text-ok">{p.mult ? `${p.mult}x their median` : `#${p.rank} for them`}</span></div>
+                  <div className="feed-hook">"{p.on_screen || p.hook || p.title}"</div>
+                  <div className="feed-meta"><span className="pill-src">{p.on_screen ? "said / on video" : "caption"}</span><span className="num text-[10.5px] text-muted">{p.creator} · {d(p.published_at)} · {p.kind}{p.sponsored ? " · sponsored" : ""}</span></div>
+                </a>
+              ))}</div>
+            )}
+            {digest.hooks.length > 0 && (
+              <div className="card mt-3 p-4">
+                <div className="num mb-2 text-[10.5px] tracking-[0.15em] text-muted">HOOK SHAPES WINNING IN THE LANE</div>
+                <div className="space-y-1.5">{digest.hooks.map((h) => <div key={h.hook} className="grid grid-cols-[150px_1fr_110px] items-center gap-3 text-[12.5px]"><span className="truncate font-medium">"{h.hook}"</span><div className="h-2 rounded-full bg-surface2"><div className="h-2 rounded-full" style={{ width: `${Math.max(4, (h.avg / hookMax) * 100)}%`, background: "#2E1B5B" }} /></div><span className="num text-right text-[10.5px] text-muted">{h.count} posts · avg {fmtK(h.avg)}</span></div>)}</div>
+              </div>
             )}
           </section>
 
-          <section className="card p-5">
-            <div className="mb-3 flex items-baseline justify-between"><div className="label">Hooks to test</div><Link href="/me/watchlist" className="num text-[11px] text-accent hover:underline">your lane →</Link></div>
-            {!hooks.length ? <p className="text-[13px] text-muted">Hooks from creators in your lane appear here as their prints land. {digest.creators.length ? "" : "Add a few creators you rate to your watchlist to start."}</p> : (
-              <div className="divide-y divide-line">{hooks.map((p) => (
-                <a key={p.url} href={p.url} target="_blank" rel="noreferrer" className="flex items-start gap-3 py-2.5 hover:bg-surface2/60">
-                  <div className="num w-14 flex-none text-right"><div className="text-[14px] font-semibold">{fmtK(p.metric)}</div><div className="text-[10px] text-ok">{p.mult ? `${p.mult}x` : `#${p.rank}`}</div></div>
-                  <div className="min-w-0"><div className="text-[13.5px] font-medium">"{p.on_screen}"</div><div className="num text-[10.5px] text-muted">{p.creator} · {d(p.published_at)} · {p.kind}</div></div>
-                </a>))}</div>
+          {/* worth testing */}
+          <section>
+            <div className="mb-3"><div className="label">Worth testing</div><h2 className="h2">Ideas, not instructions</h2><p className="mt-1 text-[13px] text-muted">Each one comes with the reason behind it. You decide what to make.</p></div>
+            {!ideas?.length ? <div className="card p-5 text-[13.5px] text-muted">New ideas from your manager land here, tied to what the lane is doing.</div> : (
+              <div className="grid gap-3 sm:grid-cols-2">{ideas.map((e) => <div key={e.id} className="card p-4" style={{ borderTop: "3px solid #E85D9B" }}><div className="text-[14px] font-semibold leading-snug">{e.idea}</div>{e.hook && <div className="mt-1 text-[13px]">hook: "{e.hook}"</div>}{e.why && <div className="mt-1.5 text-[12.5px] text-muted">why: {e.why}</div>}{e.status === "testing" && <span className="pill mt-2 !bg-accent/10 !text-accent">you're testing this</span>}</div>)}</div>
             )}
-            {digest.hooks.length > 0 && <div className="num mt-3 text-[11px] text-muted">Shapes winning in your lane: {digest.hooks.slice(0, 3).map((h) => `"${h.hook}" (${h.count} posts, avg ${fmtK(h.avg)})`).join(" · ")}</div>}
           </section>
 
-          <section className="card p-5">
-            <div className="mb-3 label">Worth testing · ideas from your manager</div>
-            {!experiments?.length ? <p className="text-[13px] text-muted">New ideas land here. You decide what to make.</p> : (
-              <ul className="space-y-2">{experiments.map((e) => <li key={e.id} className="text-[13.5px]"><span className="font-medium">{e.idea}</span>{e.hook ? <span className="text-muted"> · hook: "{e.hook}"</span> : null}{e.why ? <div className="text-[12px] text-muted">{e.why}</div> : null}<span className={`pill ml-1 ${e.status === "testing" ? "!bg-accent/10 !text-accent" : ""}`}>{e.status}</span></li>)}</ul>
-            )}
-            <Link href="/me/experiments" className="num mt-3 inline-block text-[11px] text-accent hover:underline">experiments log →</Link>
-          </section>
+          {pulse && pulse.sections.length > 0 && (
+            <section className="card p-5" style={{ borderLeft: "4px solid #2E1B5B" }}>
+              <div className="mb-3 flex items-baseline justify-between"><div className="label">{lastPulse!.kind === "weekly" ? "Last week's pulse" : "Last month's update"}</div><div className="num text-[11px] text-muted">{d(lastPulse!.sent_at)}</div></div>
+              <div className="grid gap-4 md:grid-cols-2">{pulse.sections.map((sct) => <div key={sct.title}><div className="num mb-1 text-[10.5px] tracking-[0.15em]" style={{ color: sct.title === "WORTH TESTING" ? "#E85D9B" : sct.title === "COMING UP" ? "#007D2A" : "#2E1B5B" }}>{sct.title}</div><div className="space-y-1 text-[13px] leading-relaxed">{sct.lines.filter((l) => l.trim()).map((l, i) => <div key={i}>{l.trim().replace(/^[-•·*]\s+/, "· ")}</div>)}</div></div>)}</div>
+            </section>
+          )}
         </div>
 
-        <div className="space-y-5">
+        {/* rail */}
+        <aside className="space-y-4">
           <section className="card p-5">
-            <div className="mb-3 label">Payouts</div>
-            {!payouts.length ? <p className="text-[13px] text-muted">Invoiced and paid campaigns show here.</p> : (
-              <div className="divide-y divide-line">{payouts.map((p) => (
-                <div key={p.id} className="flex items-center justify-between gap-3 py-2"><div className="min-w-0"><div className="truncate text-[13px] font-medium">{p.brand}</div><div className="num text-[10.5px] text-muted">{p.status === "paid" ? `paid ${d(p.paid_at)}` : p.status === "invoiced" ? `invoiced ${d(p.invoice_sent_at)}` : "delivered · invoice pending"}</div></div><div className={`num text-[13px] font-semibold ${p.status === "paid" ? "text-ok" : ""}`}>{money(p.fee, p.currency)}</div></div>))}</div>
-            )}
-            {payouts.length > 0 && <div className="num mt-3 flex justify-between border-t border-line pt-2 text-[11px] text-muted"><span>pending</span><span>{money(payouts.filter((p) => p.status !== "paid").reduce((s, p) => s + Number(p.fee || 0), 0))}</span></div>}
+            <div className="mb-3 flex items-baseline justify-between"><div className="label">Projects</div><Link href="/me/projects" className="num text-[11px] text-accent hover:underline">all →</Link></div>
+            {!live.length ? <p className="text-[13px] text-muted">Nothing live right now.</p> : <div className="divide-y divide-line">{live.slice(0, 6).map((p) => <div key={p.id} className="flex items-center justify-between gap-3 py-2"><div className="min-w-0"><div className="truncate text-[13.5px] font-medium">{p.brand}</div><div className="num text-[10.5px] text-muted">{p.deliverables ? p.deliverables.slice(0, 40) : ""}{p.due_at ? ` · due ${d(p.due_at)}` : ""}</div></div><span className={`pill-status ps-${p.status}`}>{STATUS[p.status] || p.status}</span></div>)}</div>}
+            <div className="num mt-3 grid grid-cols-2 gap-2 border-t border-line pt-3 text-[11px]"><div><div className="text-muted">pending payouts</div><div className="text-[15px] font-semibold text-fg">{money(pending)}</div></div><div><div className="text-muted">paid this month</div><div className="text-[15px] font-semibold text-ok">{money(paidThisMonth)}</div></div></div>
           </section>
 
           <section className="card p-5">
-            <div className="mb-3 label">On our end this week</div>
-            {!uniqPitched.length && !inConvo?.length ? <p className="text-[13px] text-muted">What we're pitching and who's talking shows here.</p> : (
+            <div className="mb-2 label">On our end this week</div>
+            {!pitchedBrands.length && !convo.length ? <p className="text-[13px] text-muted">What we're pitching and who's talking shows here.</p> : (
               <div className="space-y-3 text-[13px]">
-                {uniqPitched.length > 0 && <div><div className="num text-[10.5px] text-muted">pitched for you · {uniqPitched.length} brands</div><div className="mt-1 flex flex-wrap gap-1.5">{uniqPitched.slice(0, 14).map((p) => <span key={p.brand} className="pill">{p.brand}</span>)}{uniqPitched.length > 14 && <span className="num text-[11px] text-dim">+{uniqPitched.length - 14}</span>}</div></div>}
-                {inConvo && inConvo.length > 0 && <div><div className="num text-[10.5px] text-muted">in conversation</div><ul className="mt-1 space-y-1">{[...new Map(inConvo.map((p) => [p.brand.toLowerCase(), p])).values()].map((p) => <li key={p.brand} className="flex justify-between gap-3"><span className="font-medium">{p.brand}</span><span className="num text-[11px] text-muted">{p.status}</span></li>)}</ul></div>}
+                {pitchedBrands.length > 0 && <div><div className="num text-[10.5px] text-muted">pitched for you · {pitchedBrands.length} brands</div><div className="mt-1 flex flex-wrap gap-1.5">{pitchedBrands.slice(0, 12).map((b) => <span key={b} className="pill">{b}</span>)}{pitchedBrands.length > 12 && <span className="num text-[11px] text-dim">+{pitchedBrands.length - 12}</span>}</div></div>}
+                {convo.length > 0 && <div><div className="num text-[10.5px] text-muted">in conversation</div><ul className="mt-1 space-y-1">{convo.map((p) => <li key={p.brand} className="flex justify-between gap-3"><span className="font-medium">{p.brand}</span><span className="num text-[11px] text-muted">{p.status}</span></li>)}</ul></div>}
               </div>
             )}
           </section>
 
           <section className="card p-5">
-            <div className="mb-3 label">Launches we're timing pitches to</div>
-            {!launches.length ? <p className="text-[13px] text-muted">Brands in your lane that just launched something show here with the window we pitch in.</p> : (
-              <ul className="space-y-2 text-[13px]">{launches.map((l) => <li key={l.id}><div className="font-medium">{l.brand}{l.product ? <span className="text-muted"> · {l.product}</span> : null}</div><div className="num text-[10.5px] text-muted">{l.status === "open" ? "pitching now" : `window opens ${d(l.window_start)}`}{l.spoken ? ` · they said: "${l.spoken.slice(0, 70)}"` : ""}</div></li>)}</ul>
-            )}
+            <div className="mb-2 label">Coming up</div>
+            <ul className="space-y-2 text-[13px]">
+              {(events || []).map((e) => <li key={e.id}><div className="font-medium">{e.title}{e.brand ? <span className="text-muted"> · {e.brand}</span> : null}</div><div className="num text-[10.5px] text-muted">{new Date(e.starts_at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}{e.location ? ` · ${e.location}` : ""}{e.rsvp_url ? <> · <a href={e.rsvp_url} target="_blank" rel="noreferrer" className="text-accent hover:underline">RSVP</a></> : null}</div></li>)}
+              {launches.map((l) => <li key={l.id}><div className="font-medium">{l.brand}{l.product ? <span className="text-muted"> · {l.product}</span> : null}</div><div className="num text-[10.5px] text-muted">{l.status === "open" ? "we're pitching this now" : `pitch window opens ${d(l.window_start)}`}{l.spoken ? ` · "${l.spoken.slice(0, 60)}"` : ""}</div></li>)}
+              {!events?.length && !launches.length && <li className="text-muted">Events, shoots, seasonal moments and launch windows show here.</li>}
+            </ul>
           </section>
-
-          <section className="card p-5">
-            <div className="mb-3 label">Coming up</div>
-            {!events?.length ? <p className="text-[13px] text-muted">Events, shoots and seasonal moments show here.</p> : (
-              <ul className="space-y-2 text-[13px]">{events.map((e) => <li key={e.id}><div className="font-medium">{e.title}{e.brand ? <span className="text-muted"> · {e.brand}</span> : null}</div><div className="num text-[10.5px] text-muted">{new Date(e.starts_at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}{e.location ? ` · ${e.location}` : ""}{e.rsvp_url ? <> · <a href={e.rsvp_url} target="_blank" rel="noreferrer" className="text-accent hover:underline">RSVP</a></> : null}</div></li>)}</ul>
-            )}
-          </section>
-
-          <section className="card p-5">
-            <div className="mb-2 flex items-baseline justify-between"><div className="label">Ask us</div><Link href="/me/requests" className="num text-[11px] text-accent hover:underline">all requests →</Link></div>
-            <p className="text-[12.5px] text-muted">Need an editor, a brand intro, a rate check? Post it and track it.</p>
-            {requests && requests.length > 0 && <ul className="mt-2 space-y-1 text-[12.5px]">{requests.slice(0, 3).map((q) => <li key={q.id} className="flex justify-between gap-3"><span className="truncate">{q.text}</span><span className="num text-[10.5px] text-muted">{q.status.replace("_", " ")}</span></li>)}</ul>}
-          </section>
-        </div>
+        </aside>
       </div>
     </div>
+  );
+}
+
+function Stat({ label, value, sub, good = true }: { label: string; value: string; sub?: string; good?: boolean }) {
+  return <div className="rounded-xl bg-white/[0.07] px-3.5 py-3"><div className="num text-[10px] uppercase tracking-[0.12em] text-white/50">{label}</div><div className="mt-0.5 text-[22px] font-bold leading-none text-white">{value}</div>{sub && <div className={`num mt-1 text-[10.5px] ${good ? "text-emerald-300" : "text-rose-300"}`}>{sub}</div>}</div>;
+}
+function PostCard({ t, median, label, rank, items }: { t: any; median: number; label: string; rank: number; items: number }) {
+  const src = t.spoken ? "spoken" : t.on_video ? "on_video" : t.on_screen ? "on_screen" : "hook";
+  const line = t.spoken || t.on_video || t.on_screen || t.hook || t.title;
+  return (
+    <a href={t.url} target="_blank" rel="noreferrer" className="post-card">
+      {t.thumb ? <img src={`data:image/jpeg;base64,${t.thumb}`} alt="" className="post-thumb" /> : <div className="post-thumb bg-surface2" />}
+      <div className="p-3">
+        <div className="flex items-baseline justify-between"><span className="num text-[15px] font-bold">{fmtK(t.metric)}</span><span className="num text-[10px] text-ok">{median >= 1000 ? `${(t.metric / median).toFixed(1)}x` : `#${rank} of ${items}`}</span></div>
+        <div className="mt-1 line-clamp-2 text-[12.5px] font-medium leading-snug">"{line}"</div>
+        <div className="mt-1.5 flex items-center gap-1.5"><span className="pill-src">{SRC[src]}</span><span className="num text-[10px] text-muted">{d(t.published_at)}</span></div>
+      </div>
+    </a>
   );
 }

@@ -1,0 +1,5 @@
+Delete these folders after unzipping (pages removed):
+  apps/web/src/app/me/experiments
+  apps/web/src/app/me/requests
+  apps/web/src/app/api/me/experiments
+  apps/web/src/app/api/me/requests
