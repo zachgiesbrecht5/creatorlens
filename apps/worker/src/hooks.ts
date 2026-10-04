@@ -21,20 +21,47 @@ const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[hooks]"
 const FFMPEG = (ffmpegStatic as unknown as string) || "ffmpeg";
 const run = (_cmd: string, args: string[]) => new Promise<void>((res, rej) => execFile(FFMPEG, args, { timeout: 60000 }, (e) => (e ? rej(e) : res())));
 
-async function transcribe(wav: Buffer): Promise<string | null> {
+type Heard = { text: string; conf: number | null } | null;
+async function transcribeFull(wav: Buffer): Promise<Heard> {
   if (DEEPGRAM) {
     const r = await fetch("https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&punctuate=true", { method: "POST", headers: { Authorization: `Token ${DEEPGRAM}`, "content-type": "audio/wav" }, body: new Uint8Array(wav) });
     if (!r.ok) { log("deepgram", r.status, (await r.text()).slice(0, 120)); return null; }
     const j: any = await r.json();
-    return j?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
+    const alt = j?.results?.channels?.[0]?.alternatives?.[0];
+    return { text: alt?.transcript || "", conf: typeof alt?.confidence === "number" ? alt.confidence : null };
   }
   if (OPENAI) {
-    const fd = new FormData(); fd.append("file", new Blob([new Uint8Array(wav)], { type: "audio/wav" }), "hook.wav"); fd.append("model", "whisper-1");
+    const fd = new FormData(); fd.append("file", new Blob([new Uint8Array(wav)], { type: "audio/wav" }), "hook.wav"); fd.append("model", "whisper-1"); fd.append("response_format", "verbose_json");
     const r = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${OPENAI}` }, body: fd });
     if (!r.ok) { log("whisper", r.status, (await r.text()).slice(0, 120)); return null; }
-    const j: any = await r.json(); return j?.text || "";
+    const j: any = await r.json();
+    // Whisper invents words over music; its own no-speech probability is the tell
+    const segs: any[] = j?.segments || [];
+    const noSpeech = segs.length ? segs.reduce((a, s) => a + Number(s.no_speech_prob || 0), 0) / segs.length : 0;
+    return { text: j?.text || "", conf: segs.length ? 1 - noSpeech : null };
   }
   return null;
+}
+
+/** Mean loudness of a wav in dB (ffmpeg volumedetect); -91 = digital silence. */
+function meanVolume(wavPath: string): Promise<number | null> {
+  return new Promise((res) => execFile(FFMPEG, ["-hide_banner", "-i", wavPath, "-af", "volumedetect", "-f", "null", "-"], { timeout: 30000 }, (_e, _o, err) => {
+    const m = String(err || "").match(/mean_volume:\s*(-?[\d.]+) dB/); res(m ? Number(m[1]) : null);
+  }));
+}
+
+const VOICE_CONF = Number(process.env.HOOK_VOICE_CONFIDENCE || 0.55);
+/** What a viewer hears in the opening: talking, a song (lyrics are not a hook), or nothing. */
+async function listen(wavPath: string): Promise<{ spoken: string | null; audio: "voice" | "music" | "silent" | "unread"; lyrics: string | null }> {
+  const heard = await transcribeFull(await fs.readFile(wavPath));
+  if (heard == null) return { spoken: null, audio: "unread", lyrics: null };
+  const text = heard.text.replace(/\s+/g, " ").trim().slice(0, 240);
+  if (text && (heard.conf == null || heard.conf >= VOICE_CONF)) return { spoken: text, audio: "voice", lyrics: null };
+  const vol = await meanVolume(wavPath);
+  const audible = vol == null || vol > -50;
+  // low-confidence words over audible sound are almost always sung lyrics
+  if (text) return { spoken: "", audio: audible ? "music" : "silent", lyrics: audible ? text : null };
+  return { spoken: "", audio: audible ? "music" : "silent", lyrics: null };
 }
 
 /** Read the first SECONDS of one video: spoken line (Deepgram/Whisper) and burned-in text (vision). Used by the brand watch too. */
@@ -47,7 +74,7 @@ export async function clipHook(sb: SupabaseClient, videoUrl: string, ref?: strin
     await fs.writeFile(src, Buffer.from(await r.arrayBuffer()));
     await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", "0", "-t", String(SECONDS), "-i", src, "-c", "copy", mp4]);
     let spoken: string | null = null;
-    try { await run("ffmpeg", ["-y", "-loglevel", "error", "-i", mp4, "-vn", "-ac", "1", "-ar", "16000", "-f", "wav", wav]); spoken = await transcribe(await fs.readFile(wav)); } catch { spoken = ""; }
+    try { await run("ffmpeg", ["-y", "-loglevel", "error", "-i", mp4, "-vn", "-ac", "1", "-ar", "16000", "-f", "wav", wav]); const h = await listen(wav); spoken = h.audio === "unread" ? null : h.spoken; } catch { spoken = ""; }
     let on_video: string | null = null;
     if (client && (await optionalBudgetOpen(sb).catch(() => false))) {
       const frames: string[] = [];
@@ -92,15 +119,15 @@ export async function readHooks(sb: SupabaseClient, creatorId: string): Promise<
         await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", "0", "-t", String(SECONDS), "-i", src, "-c", "copy", mp4]);
         await fs.rm(src, { force: true });
         await run("ffmpeg", ["-y", "-loglevel", "error", "-i", mp4, "-vn", "-ac", "1", "-ar", "16000", "-f", "wav", wav]);
-        const text = await transcribe(await fs.readFile(wav));
-        t.spoken = text == null ? null : text.replace(/\s+/g, " ").trim().slice(0, 240);
+        const h = await listen(wav);
+        t.spoken = h.spoken; t.audio = h.audio; t.lyrics = h.lyrics;
         if (t.spoken != null) n++;
         for (const sec of [0.5, 2.5, 4.5]) {
           const jpg = path.join(dir, `${i}-${sec}.jpg`);
           await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", String(sec), "-i", mp4, "-frames:v", "1", "-vf", "scale=540:-1", jpg]).catch(() => {});
           try { frames.push({ i, data: (await fs.readFile(jpg)).toString("base64") }); } catch { /* no frame */ }
         }
-      } catch (e: any) { log("clip failed", t.url, String(e?.message || e).replace(/\s+/g, " ").slice(-160)); t.spoken = t.spoken ?? ""; }
+      } catch (e: any) { log("clip failed", t.url, String(e?.message || e).replace(/\s+/g, " ").slice(-160)); t.spoken = t.spoken ?? ""; t.audio = t.audio ?? "unread"; }
     }
     // burned-in captions: one vision call for all frames
     if (client && modelOk && frames.length) {

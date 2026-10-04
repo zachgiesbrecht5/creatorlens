@@ -44,7 +44,7 @@ export interface ScanResult {
   /** Top posts in the window by the platform's main metric, plus a format/hook read. */
   performance?: Performance;
 }
-export interface TopPost { title: string; url: string; published_at: string; metric: number; metric_label: string; kind: string; hook: string; sponsored: boolean; cover?: string | null; on_screen?: string | null; video?: string | null; spoken?: string | null; on_video?: string | null }
+export interface TopPost { title: string; url: string; published_at: string; metric: number; metric_label: string; kind: string; hook: string; sponsored: boolean; cover?: string | null; on_screen?: string | null; video?: string | null; spoken?: string | null; on_video?: string | null; audio?: "voice" | "music" | "silent" | "unread" | null; lyrics?: string | null }
 export interface Performance { top: TopPost[]; median: number; metric_label: string; formats: { kind: string; count: number; avg: number }[]; hooks: { hook: string; count: number; avg: number }[]; window_days: number; items: number }
 
 // A one-line "hook": the first clause of a caption/title, trimmed to something a manager can quote.
