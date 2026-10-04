@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { currentProfile } from "@/lib/supabase";
 import { Logo } from "@/components/Logo";
 import { MoreMenu } from "@/components/MoreMenu";
+import { creatorContext } from "@/lib/creator-portal";
 import { Feedback } from "@/components/Feedback";
 import { Beacon } from "@/components/Beacon";
 
@@ -16,6 +17,7 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const profile = await currentProfile();
+  const isCreator = profile?.role === "creator" || (profile ? !!(await creatorContext()) : false);
   return (
     <html lang="en">
       <head>
@@ -29,7 +31,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
             <Link href="/" className="flex items-center"><Logo /></Link>
             <nav className="flex items-center gap-1 whitespace-nowrap text-[13px]">
-              {profile ? (
+              {profile && isCreator ? (
+                <>
+                  <NavLink href="/me">Home</NavLink>
+                  <NavLink href="/me/projects">Projects</NavLink>
+                  <NavLink href="/me/watchlist">Your lane</NavLink>
+                  <NavLink href="/me/experiments">Experiments</NavLink>
+                  <NavLink href="/me/requests">Ask us</NavLink>
+                  <form action="/auth/signout" method="post" className="ml-2"><button className="rounded-md px-2.5 py-1.5 text-dim hover:bg-surface2 hover:text-fg">Sign out</button></form>
+                </>
+              ) : profile ? (
                 <>
                   <NavLink href="/">Print</NavLink>
                   <NavLink href="/brands">Brands</NavLink>

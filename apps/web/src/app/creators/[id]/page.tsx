@@ -10,6 +10,7 @@ import { laneDigest } from "@/lib/lane-digest";
 import { laneLaunches } from "@/lib/launches";
 import { LaunchList } from "@/components/LaunchList";
 import { trackerStatuses } from "@/lib/tracker";
+import { PortalPanel } from "@/components/PortalPanel";
 
 // A roster creator's page: who has paid them (their map), and the brands paying
 // their lane that haven't paid them yet, each one click from a contact and a
@@ -62,6 +63,12 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
   }
 
   const digest = await laneDigest(profile.id, r.id, 30);
+  const [{ data: pProjects }, { data: pEvents }, { data: pExps }, { data: pReqs }] = await Promise.all([
+    admin.from("projects").select("*").eq("roster_creator_id", r.id).order("created_at", { ascending: false }),
+    admin.from("creator_events").select("*").eq("roster_creator_id", r.id).order("starts_at", { ascending: false }).limit(30),
+    admin.from("experiments").select("*").eq("roster_creator_id", r.id).order("created_at", { ascending: false }),
+    admin.from("requests").select("*").eq("roster_creator_id", r.id).order("created_at", { ascending: false }),
+  ]);
   const launchesRaw = await laneLaunches(lane, mine);
   const tracker = await trackerStatuses(profile.id, [...laneBrands.map((b) => ({ id: b.brand_id, name: b.brand, website: b.website })), ...launchesRaw.map((l) => ({ id: l.brand_id, name: l.brand, website: l.website }))]);
   for (const b of laneBrands) b.tracker = tracker[b.brand_id] || null;
@@ -87,6 +94,7 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
       </div>
 
       <Tour id="creator" steps={CREATOR_TOUR} />
+      <PortalPanel rosterCreatorId={r.id} name={r.name.split(" ")[0]} enabled={!!r.portal_enabled} creatorEmail={r.creator_email || null} projects={(pProjects || []) as any} events={(pEvents || []) as any} experiments={pExps || []} requests={pReqs || []} />
       {(me as any)?.performance?.top?.length > 0 && (() => { const perf = (me as any).performance; const fmtN = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n)); return (
         <section className="card mt-6 p-5">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2"><div><div className="label">What's performing</div><div className="text-[13px] text-muted">{perf.items} posts in the window · median {fmtN(perf.median)} {perf.metric_label}. Top posts vs the median, with the hook that carried them.</div></div><div className="num text-[11px] text-dim">{(perf.hooks || []).filter((h: any) => h.hook !== "Other").slice(0, 3).map((h: any) => `"${h.hook}" ×${h.count}`).join(" · ")}</div></div>

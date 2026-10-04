@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { journeyState } from "@/lib/supabase";
 import { SearchBox } from "@/components/SearchBox";
+import { creatorContext } from "@/lib/creator-portal";
 import { PrintReceipt } from "@/components/PrintReceipt";
 import { FloatingPrints } from "@/components/FloatingPrints";
 import { Journey } from "@/components/Journey";
@@ -16,6 +17,7 @@ import { fmt } from "@/lib/fmt";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
+  { const cc = await creatorContext(); if (cc) redirect("/me"); }
   const { profile: user, admin: seesAll } = await currentAccess();
   const admin = supabaseAdmin();
   const [{ count: creators }, { count: brands }, { count: deals }] = await Promise.all([

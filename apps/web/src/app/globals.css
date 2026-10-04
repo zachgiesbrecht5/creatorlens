@@ -370,3 +370,7 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 .tc { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-family: var(--font-mono); font-size: 10px; white-space: nowrap; max-width: 100%; overflow: hidden; }
 .tc em { font-style: normal; opacity: .75; overflow: hidden; text-overflow: ellipsis; }
 .tc-clean { background: #e6f5ec; color: #0e6b45; } .tc-recent { background: #fff4e5; color: #b45309; } .tc-old { background: #eef2ff; color: #2f5bff; } .tc-x { background: #fde8e8; color: #b91c1c; }
+
+/* project status pills */
+.pill-status { display: inline-block; padding: 2px 9px; border-radius: 999px; font-family: var(--font-mono); font-size: 10.5px; white-space: nowrap; }
+.ps-confirmed { background: #eef2ff; color: #2f5bff; } .ps-in_production { background: #fff4e5; color: #b45309; } .ps-delivered { background: #f2f4f7; color: #5b6472; } .ps-invoiced { background: #fdf2f8; color: #b13589; } .ps-paid { background: #e6f5ec; color: #0e6b45; } .ps-cancelled { background: #f2f4f7; color: #8b93a1; text-decoration: line-through; }
