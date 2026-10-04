@@ -9,6 +9,7 @@ import { CREATOR_TOUR } from "@/components/tours";
 import { laneDigest } from "@/lib/lane-digest";
 import { laneLaunches } from "@/lib/launches";
 import { LaunchList } from "@/components/LaunchList";
+import { trackerStatuses } from "@/lib/tracker";
 
 // A roster creator's page: who has paid them (their map), and the brands paying
 // their lane that haven't paid them yet, each one click from a contact and a
@@ -61,7 +62,10 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
   }
 
   const digest = await laneDigest(profile.id, r.id, 30);
-  const launches = await laneLaunches(lane, mine);
+  const launchesRaw = await laneLaunches(lane, mine);
+  const tracker = await trackerStatuses(profile.id, [...laneBrands.map((b) => ({ id: b.brand_id, name: b.brand, website: b.website })), ...launchesRaw.map((l) => ({ id: l.brand_id, name: l.brand, website: l.website }))]);
+  for (const b of laneBrands) b.tracker = tracker[b.brand_id] || null;
+  const launches = launchesRaw.map((l) => ({ ...l, tracker: tracker[l.brand_id] || null }));
   const paidPlan = ["pro", "agency", "team", "admin"].includes(String(profile.plan));
   const fmtK2 = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
   return (

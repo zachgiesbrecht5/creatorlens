@@ -3,8 +3,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { ContactCard, type ContactInfo } from "@/components/ContactCard";
 import type { RosterCreator } from "@/components/BrandWall";
+import { TrackerChip } from "@/components/TrackerChip";
 
-export type LaneBrand = { brand_id: string; brand: string; category: string | null; website: string | null; deals: number; last: string | null; contacts: number; creators: { id: string; handle: string; platform: string; name: string; avatar: string | null; followers: number | null }[] };
+export type LaneBrand = { brand_id: string; brand: string; category: string | null; website: string | null; deals: number; last: string | null; contacts: number; tracker?: import("@/lib/tracker").TrackerStatus | null; creators: { id: string; handle: string; platform: string; name: string; avatar: string | null; followers: number | null }[] };
 const dom = (w: string | null) => (w ? String(w).replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "") : null);
 const mon = (d: string | null) => (d ? new Date(d).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "");
 const fmtK = (n: number | null) => (!n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
@@ -15,6 +16,7 @@ export function LaneWall({ brands, roster }: { brands: LaneBrand[]; roster: Rost
   const [open, setOpen] = useState<string | null>(null);
   const [contacts, setContacts] = useState<Record<string, ContactInfo | "loading">>({});
   const [q, setQ] = useState("");
+  const [cleanOnly, setCleanOnly] = useState(false);
   async function load(brandId: string) {
     setContacts((c) => (c[brandId] ? c : { ...c, [brandId]: "loading" }));
     const r = await fetch(`/api/contacts/${brandId}`);
@@ -22,12 +24,12 @@ export function LaneWall({ brands, roster }: { brands: LaneBrand[]; roster: Rost
     setContacts((c) => ({ ...c, [brandId]: j }));
     if (j.research && (j.research.status === "queued" || j.research.status === "running")) setTimeout(() => load(brandId), 8000);
   }
-  const shown = brands.filter((b) => !q || b.brand.toLowerCase().includes(q.toLowerCase()) || (b.category || "").toLowerCase().includes(q.toLowerCase()));
+  const shown = brands.filter((b) => (!q || b.brand.toLowerCase().includes(q.toLowerCase()) || (b.category || "").toLowerCase().includes(q.toLowerCase())) && (!cleanOnly || !b.tracker || b.tracker.state === "clean" || b.tracker.state === "old"));
   if (!brands.length) return <div className="card p-6 text-[13px] text-muted">Nothing yet: the lane is thin in the index. Run a neighborhood or two and this fills in.</div>;
   return (
     <div className="lw">
-      <div className="lw-tools"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="filter brands or categories" className="input-flat !w-72 !py-1.5 text-[13px]" /><span className="num text-[11px] text-dim">{shown.length} brands</span></div>
-      <div className="lw-head"><span>brand</span><span>who they pay in the lane</span><span>deals</span><span>last</span><span>contact</span></div>
+      <div className="lw-tools"><div className="flex items-center gap-3"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="filter brands or categories" className="input-flat !w-72 !py-1.5 text-[13px]" /><label className="num flex items-center gap-1.5 text-[11px] text-muted"><input type="checkbox" checked={cleanOnly} onChange={(e) => setCleanOnly(e.target.checked)} /> hide brands pitched in the last 90 days or excluded</label></div><span className="num text-[11px] text-dim">{shown.length} brands</span></div>
+      <div className="lw-head"><span>brand</span><span>who they pay in the lane</span><span>deals</span><span>last</span><span>contact</span><span>tracker</span></div>
       {shown.map((b, idx) => {
         const isOpen = open === b.brand_id;
         const proof = b.creators[0];
@@ -39,6 +41,7 @@ export function LaneWall({ brands, roster }: { brands: LaneBrand[]; roster: Rost
               <span className="num text-[12px]">{b.deals}</span>
               <span className="num text-[11.5px] text-muted">{mon(b.last)}</span>
               <span className="num text-[11px]">{b.contacts > 0 ? <span className="text-ok">{b.contacts} on file</span> : <span className="text-dim">find →</span>}</span>
+              <span><TrackerChip s={b.tracker} /></span>
             </button>
             {isOpen && (
               <div className="lw-detail">

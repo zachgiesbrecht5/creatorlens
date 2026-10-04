@@ -1,3 +1,4 @@
+import { TrackerLink } from "@/components/TrackerLink";
 import { GoogleButton } from "@/components/GoogleButton";
 import { ManagePlan } from "@/components/ManagePlan";
 import { redirect } from "next/navigation";
@@ -66,6 +67,9 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             <Row title="Gmail drafts" ok={!!gc}
               detail={gc ? `Connected as ${gc.email}. Pitches land silently in your Drafts folder. Drafts only; nothing is ever sent.` : "Optional. Without it, each pitch opens as a prefilled Gmail compose window for you to review. Connecting places drafts straight into your Drafts folder instead; Google shows an \"unverified app\" notice while Sponsorprint is in beta, and the connection needs renewing every 7 days."}
               action={<GoogleButton next="/settings" gmail label={gc ? "Reconnect" : "Connect Gmail"} className="btn-ghost" />} />
+            <Row title="Outreach tracker" ok={!!(profile as any).tracker_sheet_id}
+              detail={(profile as any).tracker_sheet_id ? "Linked. Every brand on your creators' pages, launches and watchlist shows whether it has been pitched (by whom, for whom, how long ago) or is on the exclusion list. Read hourly, read-only." : "Link your team's outreach tracker (a Google Sheet with an Outreach Log and exclusion tabs) and every brand in Sponsorprint shows 'pitched 12d ago by Karli', 'do not contact', or 'not contacted'. Read-only."}
+              action={<TrackerLink initialId={(profile as any).tracker_sheet_id || null} note={(profile as any).tracker_note || null} connected={!!gc} />} />
             {insider ? (
               <Row title="Instagram" ok={!!ig?.length}
                 detail={ig?.length ? `Connected: ${ig.map((c) => "@" + c.ig_username).join(", ")}. ${ig.some((c) => c.cooldown_until && new Date(c.cooldown_until) > new Date()) ? "Cooling down after a rate limit." : "Healthy."}` : "Connect your Instagram Business or Creator account. It adds scanning capacity for everyone."}

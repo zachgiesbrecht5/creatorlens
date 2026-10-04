@@ -9,6 +9,7 @@ import { NeighborsButton } from "@/components/NeighborsButton";
 import { Tour } from "@/components/Tour";
 import { PRINT_TOUR } from "@/components/tours";
 import { Missing } from "@/components/Missing";
+import { trackerStatuses } from "@/lib/tracker";
 import { BrandWall, type WallCard, type RosterCreator } from "@/components/BrandWall";
 import { PrintingScan } from "@/components/PrintingScan";
 import { fmt } from "@/lib/fmt";
@@ -70,6 +71,8 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
     }
     missing = [...agg.values()].filter((e) => e.creators.size >= 2).sort((a, b) => b.creators.size - a.creators.size).slice(0, 8).map((e) => ({ ...e, creators: e.creators.size }));
   }
+  const missingTracker = user && missing.length ? await trackerStatuses(user.id, missing.map((m) => ({ id: m.brand_id, name: m.brand, website: m.website }))) : {};
+  for (const m of missing as any[]) m.tracker = missingTracker[m.brand_id] || null;
   // Neighbors already found for this creator (by anyone in the house, or this user)
   const { data: hoodRow } = await admin.from("neighborhoods").select("id,candidates,user_id").eq("creator_id", creator.id).eq("status", "done").order("created_at", { ascending: false }).limit(5);
   const hood = (hoodRow || []).find((h) => (h.candidates || []).length > 0 && (h.user_id === user?.id || seesAll));

@@ -328,6 +328,7 @@ import { readCovers } from "./covers";
 import { readHooks } from "./hooks";
 import { noteModelError } from "./spend";
 import { brandWatch } from "./brandwatch";
+import { syncTrackers } from "./tracker";
 import { houseIgToken } from "./neighborhood";
 import { announceSignups } from "./signups";
 import { heartbeat, alert, nightly } from "./observe";
@@ -337,6 +338,7 @@ let lastReap = 0;
 let neighborhoodBusy = false;
 let lastDiscover = 0;
 let lastBrandWatch = 0;
+let lastTracker = 0;
 let lastClassify = 0;
 let classifyBusy = false;
 async function tick() {
@@ -349,6 +351,7 @@ async function tick() {
   // old "only when idle" rule starved it once discovery kept the worker busy.
   if (!classifyBusy && Date.now() - lastClassify > 120e3) { lastClassify = Date.now(); classifyBusy = true; classifyBackfill(sb).catch((e: any) => log("classify failed", e?.message)).finally(() => { classifyBusy = false; }); }
   announceSignups(sb).catch(() => {});
+  if (Date.now() - lastTracker > 15 * 60e3) { lastTracker = Date.now(); syncTrackers(sb).catch((e: any) => log("tracker sync failed", e?.message)); }
   // Brand watch: an hourly batch when the Instagram pool has room and no user prints are waiting
   if (Date.now() - lastBrandWatch > 3600e3 && inFlight === 0) { lastBrandWatch = Date.now(); brandWatch(sb, () => houseIgToken(sb)).catch((e: any) => log("brand watch failed", e?.message)); }
   // Discovery runs hourly (budgeted per platform inside discover()).

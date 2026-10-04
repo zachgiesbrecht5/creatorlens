@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ContactCard, type ContactInfo } from "@/components/ContactCard";
 import type { RosterCreator } from "@/components/BrandWall";
 import type { Launch } from "@/lib/launches";
+import { TrackerChip } from "@/components/TrackerChip";
 
 const dom = (w: string | null) => (w ? String(w).replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "") : null);
 const d = (s: string | null) => (s ? new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
@@ -28,7 +29,7 @@ export function LaunchList({ launches, roster, locked = false }: { launches: Lau
         return (
           <div key={l.id} className={`ll-row ${isOpen ? "ll-row-open" : ""}`}>
             <div className="ll-line">
-              <div className="ll-brand">{dom(l.website) ? <img src={`https://www.google.com/s2/favicons?domain=${dom(l.website)}&sz=64`} alt="" /> : <span className="ll-blank" />}<div className="min-w-0"><div className="truncate text-[14px] font-semibold tracking-tight"><Link href={`/brands/${l.brand_id}`} className="hover:text-accent">{l.brand}</Link>{l.product ? <span className="font-normal text-muted"> · {l.product}</span> : null}</div><div className="num text-[10.5px] text-muted">{KIND[l.kind] || l.kind} · posted {d(l.posted_at)} · pays {l.lane_creators} in this lane{l.contacts ? ` · ${l.contacts} contact${l.contacts === 1 ? "" : "s"} on file` : ""}</div></div></div>
+              <div className="ll-brand">{dom(l.website) ? <img src={`https://www.google.com/s2/favicons?domain=${dom(l.website)}&sz=64`} alt="" /> : <span className="ll-blank" />}<div className="min-w-0"><div className="truncate text-[14px] font-semibold tracking-tight"><Link href={`/brands/${l.brand_id}`} className="hover:text-accent">{l.brand}</Link>{l.product ? <span className="font-normal text-muted"> · {l.product}</span> : null}</div><div className="num text-[10.5px] text-muted">{KIND[l.kind] || l.kind} · posted {d(l.posted_at)} · pays {l.lane_creators} in this lane{l.contacts ? ` · ${l.contacts} contact${l.contacts === 1 ? "" : "s"} on file` : ""} {l.tracker ? <TrackerChip s={l.tracker} /> : null}</div></div></div>
               <div className="ll-window"><span className={`ll-pill ${st.cls}`}>{st.label}{l.status === "soon" || l.status === "open" ? ` · ${d(l.window_start)} to ${d(l.window_end)}` : l.status === "repush" && l.repush_month ? ` · ${new Date(l.repush_month).toLocaleDateString("en-US", { month: "long" })}` : ""}</span></div>
               <div className="ll-act">{locked ? <Link href="/pricing?need=launches" className="btn-ghost !py-1 !text-[12px]">unlock →</Link> : roster ? <button className="btn-dark !py-1 !text-[12px]" onClick={() => { setOpen(isOpen ? null : l.id); if (!isOpen) load(l.brand_id); }}>{isOpen ? "close" : "pitch this"}</button> : <Link href={`/brands/${l.brand_id}`} className="btn-ghost !py-1 !text-[12px]">brand page →</Link>}</div>
             </div>

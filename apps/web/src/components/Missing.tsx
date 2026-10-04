@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { TrackerChip } from "@/components/TrackerChip";
 
 // Under the print header: who's next to this creator, and the brands paying
 // the lane that haven't paid this creator yet. The second list is the pitch
 // list: proof the brand books this kind of talent, and a gap to fill.
-type Miss = { brand_id: string; brand: string; website: string | null; creators: number; sample: string[] };
+type Miss = { brand_id: string; brand: string; website: string | null; creators: number; sample: string[]; tracker?: any };
 type Nb = { id: string; handle: string; platform: string; name: string; avatar: string | null };
 const dom = (w: string | null) => (w ? String(w).replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "") : null);
 
@@ -31,7 +32,7 @@ export function Missing({ missing, neighbors, lane, creatorId, platform }: { mis
               <Link key={m.brand_id} href={`/brands/${m.brand_id}`} className="ms-brand" title={`Books: ${m.sample.join(", ")}`}>
                 {dom(m.website) ? <img src={`https://www.google.com/s2/favicons?domain=${dom(m.website)}&sz=32`} alt="" /> : <span className="ms-blank ms-blank-sq" />}
                 <span className="ms-brand-name">{m.brand}</span>
-                <span className="num text-[10px] text-muted">{m.creators} in lane</span>
+                <span className="num text-[10px] text-muted">{m.creators} in lane</span>{m.tracker && m.tracker.state !== "clean" ? <TrackerChip s={m.tracker} /> : null}
               </Link>
             ))}
           </div>

@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase";
 
-export type Launch = { id: string; brand_id: string; brand: string; website: string | null; kind: string; product: string | null; summary: string | null; posted_at: string; url: string; spoken: string | null; on_video: string | null; window_start: string | null; window_end: string | null; repush_month: string | null; lane_creators: number; contacts: number; status: "open" | "soon" | "repush" | "past" };
+export type Launch = { id: string; brand_id: string; brand: string; website: string | null; kind: string; product: string | null; summary: string | null; posted_at: string; url: string; spoken: string | null; on_video: string | null; window_start: string | null; window_end: string | null; repush_month: string | null; lane_creators: number; contacts: number; status: "open" | "soon" | "repush" | "past"; tracker?: import("@/lib/tracker").TrackerStatus | null };
 
 export function windowStatus(l: { window_start: string | null; window_end: string | null; repush_month: string | null }): Launch["status"] {
   const today = new Date().toISOString().slice(0, 10);
