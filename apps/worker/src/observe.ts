@@ -6,6 +6,7 @@ import { spentToday, DAILY_BUDGET } from "./spend";
 import { keepWatch } from "./watch";
 import { discover } from "./discover";
 import { brandWatch } from "./brandwatch";
+import { writeWeeklyPulses } from "./pulse";
 import { houseIgToken } from "./neighborhood";
 import { findHiring } from "./hiring";
 import { autoBrandScans } from "./brandscan";
@@ -64,6 +65,8 @@ export async function nightly(sb: SupabaseClient) {
   if (new Date().getUTCDay() === 2) { try { await findSignals(sb); } catch (e: any) { await alert(sb, "signals agent failed", { error: String(e?.message || e).slice(0, 300) }); } }
   else { try { await matchSignals(sb); } catch { /* daily re-match for new roster rows */ } }
   if (new Date().getUTCDay() === 1) { try { await findHiring(sb); } catch (e: any) { await alert(sb, "hiring agent failed", { error: String(e?.message || e).slice(0, 300) }); } }
+  // weekly pulse drafts (Mondays)
+  if (new Date().getUTCDay() === 1) { try { await writeWeeklyPulses(sb); } catch (e: any) { await alert(sb, "weekly pulse failed", { error: String(e?.message || e).slice(0, 300) }); } }
   // brand watch: the first batch runs nightly; hourly batches in the worker tick finish the week's list
   try { await brandWatch(sb, () => houseIgToken(sb)); } catch (e: any) { await alert(sb, "brand watch failed", { error: String(e?.message || e).slice(0, 300) }); }
   if (new Date().getUTCDate() === 1) { try { await writeCreatorUpdates(sb); } catch (e: any) { await alert(sb, "creator updates failed", { error: String(e?.message || e).slice(0, 300) }); } }

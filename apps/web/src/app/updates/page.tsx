@@ -12,7 +12,7 @@ export default async function Updates() {
   const admin = supabaseAdmin();
   const [{ data: roster }, { data: updates }] = await Promise.all([
     admin.from("roster_creators").select("id,name,handle,creator_email,monthly_update,update_show_money,update_show_early").eq("user_id", profile.id).order("name"),
-    admin.from("creator_updates").select("id,subject,body,status,month,roster_creator_id").eq("user_id", profile.id).order("month", { ascending: false }).limit(60),
+    admin.from("creator_updates").select("id,subject,body,status,month,roster_creator_id,kind").eq("user_id", profile.id).order("month", { ascending: false }).limit(60),
   ]);
   const byId = new Map((roster || []).map((r) => [r.id, r]));
   const paid = ["pro", "agency", "team", "admin"].includes(profile.plan);
@@ -25,7 +25,7 @@ export default async function Updates() {
         {!roster?.length && <div className="p-6 text-center text-muted">Add creators to your roster first.</div>}
       </div>
       <div className="grid gap-4">
-        {(updates || []).map((u) => { const r = byId.get(u.roster_creator_id); return <UpdateReview key={u.id} u={{ id: u.id, subject: u.subject || "", body: u.body || "", status: u.status, creator: r?.name || "creator", email: r?.creator_email || null, month: new Date(u.month + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }) }} />; })}
+        {(updates || []).map((u) => { const r = byId.get(u.roster_creator_id); return <UpdateReview key={u.id} u={{ id: u.id, subject: u.subject || "", body: u.body || "", status: u.status, creator: r?.name || "creator", email: r?.creator_email || null, month: (u as any).kind === "weekly" ? `Weekly pulse · week of ${new Date(u.month + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}` : new Date(u.month + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }) }} />; })}
         {!updates?.length && <div className="num text-center text-[11px] text-dim">No drafts yet. The first batch is written on the 1st for creators switched on above.</div>}
       </div>
     </div>

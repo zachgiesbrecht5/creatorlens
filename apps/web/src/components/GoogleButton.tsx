@@ -13,7 +13,7 @@ export function GoogleButton({ next, refCode, gmail, label, className }: { next:
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}${gmail ? "&gmail=1" : ""}`,
-        ...(gmail ? { scopes: "https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.settings.basic https://www.googleapis.com/auth/spreadsheets.readonly", queryParams: { access_type: "offline", prompt: "consent" } } : {}),
+        ...(gmail ? { scopes: "https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.settings.basic https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/gmail.readonly", queryParams: { access_type: "offline", prompt: "consent" } } : {}),
       },
     });
   }

@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     await admin.from("google_connections").upsert({
       user_id: user.id,
       refresh_token: data.session.provider_refresh_token,
-      scopes: ["https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.settings.basic https://www.googleapis.com/auth/spreadsheets.readonly"],
+      scopes: ["https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.settings.basic https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/gmail.readonly"],
       email: user.email,
       updated_at: new Date().toISOString(),
     });
