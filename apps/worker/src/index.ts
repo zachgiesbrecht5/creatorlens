@@ -126,12 +126,15 @@ async function persist(job: any, result: ScanResult) {
 
   // brand rollups + alias learning
   for (const id of new Set(brandIds.values())) {
-    const { data: agg } = await sb.from("partnerships").select("creator_id,published_at,confidence_label").eq("brand_id", id).neq("status", "rejected");
-    const deals = agg?.length ?? 0;
-    const creators = new Set(agg?.map((a) => a.creator_id)).size;
-    const last = agg?.map((a) => a.published_at).filter(Boolean).sort().pop();
+    // Counts mean disclosed deals: High, or Medium with a real signal (code, gifted, partner tag).
+    // Low rows (a topic hashtag, a bare link to the brand's site) are kept for the print but never counted.
+    const { data: aggAll } = await sb.from("partnerships").select("creator_id,published_at,confidence_label,signal_type").eq("brand_id", id).neq("status", "rejected");
+    const agg = (aggAll || []).filter((a) => a.confidence_label === "High" || (a.confidence_label === "Medium" && a.signal_type && !/^affiliate$/i.test(String(a.signal_type).trim())));
+    const deals = agg.length;
+    const creators = new Set(agg.map((a) => a.creator_id)).size;
+    const last = agg.map((a) => a.published_at).filter(Boolean).sort().pop();
     await sb.from("brands").update({ deal_count: deals, creator_count: creators, last_seen: last ? String(last).substring(0, 10) : null }).eq("id", id);
-    const strong = agg?.filter((a) => a.confidence_label === "High").length ?? 0;
+    const strong = agg.filter((a) => a.confidence_label === "High").length;
     const { data: b } = await sb.from("brands").select("name,key").eq("id", id).single();
     if (b && isLearnable(b.name, strong)) await sb.from("learned_aliases").upsert({ key: b.key, name: b.name, deal_count: strong }, { onConflict: "key" });
   }
