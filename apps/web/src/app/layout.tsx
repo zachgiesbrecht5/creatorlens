@@ -45,12 +45,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <NavLink href="/">Print</NavLink>
                   <NavLink href="/brands">Brands</NavLink>
                   <NavLink href="/creators">My creators</NavLink>
-                  <NavLink href="/pipeline">Pipeline</NavLink>
+                  <NavLink href="/watchlist">Watchlist</NavLink>
                   <MoreMenu items={[
+                    { href: "/pipeline", label: "Pipeline" },
                     { href: "/start", label: "Start: roster and neighborhood" },
                     { href: "/batch", label: "Batch prints" },
                     { href: "/signals", label: "Signals" },
-                    { href: "/watchlist", label: "Watchlist" },
                     { href: "/inbox", label: "Inbox: confirmations to review" },
                     { href: "/updates", label: "Creator updates and weekly pulse" },
                     { href: "/scans", label: "My prints" },
