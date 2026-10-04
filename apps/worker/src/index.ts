@@ -335,6 +335,7 @@ import { syncTrackers } from "./tracker";
 import { syncProjectSheets } from "./projectsheets";
 import { watchInboxes } from "./inbox";
 import { syncOwnedInsights } from "./ownedinsights";
+import { refreshRoster } from "./rosterrefresh";
 import { houseIgToken } from "./neighborhood";
 import { announceSignups } from "./signups";
 import { heartbeat, alert, nightly } from "./observe";
@@ -347,6 +348,7 @@ let lastBrandWatch = 0;
 let lastTracker = 0;
 let lastInbox = 0;
 let lastOwned = 0;
+let lastRoster = 0;
 let lastClassify = 0;
 let classifyBusy = false;
 async function tick() {
@@ -360,6 +362,7 @@ async function tick() {
   if (!classifyBusy && Date.now() - lastClassify > 120e3) { lastClassify = Date.now(); classifyBusy = true; classifyBackfill(sb).catch((e: any) => log("classify failed", e?.message)).finally(() => { classifyBusy = false; }); }
   announceSignups(sb).catch(() => {});
   if (Date.now() - lastTracker > 15 * 60e3) { lastTracker = Date.now(); syncTrackers(sb).catch((e: any) => log("tracker sync failed", e?.message)); syncProjectSheets(sb).catch((e: any) => log("project sheet sync failed", e?.message)); }
+  if (Date.now() - lastRoster > 3600e3 && inFlight === 0) { lastRoster = Date.now(); refreshRoster(sb).catch((e: any) => log("roster refresh failed", e?.message)); }
   if (Date.now() - lastOwned > 3600e3) { lastOwned = Date.now(); syncOwnedInsights(sb).catch((e: any) => log("owned insights failed", e?.message)); }
   if (Date.now() - lastInbox > 3600e3) { lastInbox = Date.now(); watchInboxes(sb).catch((e: any) => log("inbox watch failed", e?.message)); }
   // Brand watch: an hourly batch when the Instagram pool has room and no user prints are waiting

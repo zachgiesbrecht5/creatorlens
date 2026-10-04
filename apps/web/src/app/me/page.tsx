@@ -74,7 +74,7 @@ export default async function CreatorHome() {
           <div className="min-w-0 flex-1">
             <div className="num text-[11px] tracking-[0.2em] text-white/50">ROOTFOR · {platform === "youtube" ? "YOUTUBE" : "INSTAGRAM"}{lane ? ` · ${lane.toUpperCase()}` : ""}</div>
             <h1 className="mt-1 text-[30px] font-bold leading-tight tracking-tight text-white">{r.name}</h1>
-            <div className="num mt-1 text-[12px] text-white/60">@{String(r.handle || "").replace(/^@/, "")}</div>
+            <div className="num mt-1 text-[12px] text-white/60">@{String(r.handle || "").replace(/^@/, "")}{(r as any).refreshed_at ? ` · profile as of ${new Date((r as any).refreshed_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</div>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label={platform === "youtube" ? "subscribers" : "followers"} value={fmtK(me?.followers || r.followers)} sub={g30 != null ? `${g30 >= 0 ? "+" : ""}${g30.toFixed(1)}% in 30d` : g14 != null ? `${g14 >= 0 ? "+" : ""}${g14.toFixed(1)}% in 14d` : "tracking from today"} good={(g30 ?? g14 ?? 0) >= 0} />
