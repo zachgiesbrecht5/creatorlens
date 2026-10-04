@@ -39,6 +39,21 @@ export async function readCovers(sb: SupabaseClient, creatorId: string): Promise
   const modelOk = !!client && (await optionalBudgetOpen(sb));
   const perf = c?.performance as any;
   const top: any[] = (perf?.top || []).slice(0, 8);
+  // Reels with licensed music come back from the API with no cover. Instagram's oEmbed
+  // endpoint still serves a thumbnail for any public post once the app has "oEmbed Read"
+  // (App Review); until then it just returns an error we ignore.
+  const appToken = process.env.META_APP_ID && process.env.META_APP_SECRET ? `${process.env.META_APP_ID}|${process.env.META_APP_SECRET}` : null;
+  if (appToken) {
+    for (const t of top) {
+      if (t.cover || !t.url || !/instagram\.com/.test(t.url) || t.oembed_tried) continue;
+      t.oembed_tried = true;
+      try {
+        const r = await fetch(`https://graph.facebook.com/v21.0/instagram_oembed?url=${encodeURIComponent(t.url)}&fields=thumbnail_url&omitscript=true&access_token=${encodeURIComponent(appToken)}`, { signal: AbortSignal.timeout(8000) });
+        if (r.ok) { const j: any = await r.json(); if (j?.thumbnail_url) { t.cover = j.thumbnail_url; t.cover_source = "oembed"; } }
+        else if (r.status === 400 || r.status === 403) { const e = await r.text().catch(() => ""); if (/oembed|permission|feature/i.test(e)) { log("oEmbed not approved yet; skipping"); break; } }
+      } catch { /* best effort */ }
+    }
+  }
   const todo = top.map((t, i) => ({ t, i })).filter(({ t }) => t.cover && (t.on_screen == null || !t.thumb));
   if (!todo.length) return 0;
   // fetch each cover as base64 (Instagram CDN URLs expire; read them now, not later)
