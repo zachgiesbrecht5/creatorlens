@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { currentProfile, supabaseAdmin } from "@/lib/supabase";
 import { googleAccessToken, createGmailDraft, bodyToHtml } from "@/lib/gmail";
+import { pulseHtml } from "@/lib/pulse-html";
+import { pulseStats } from "@/lib/pulse-stats";
 
 // PATCH { id, body?, subject?, action: "save" | "approve" | "send" | "skip" }
 export async function PATCH(req: NextRequest) {
@@ -22,7 +24,11 @@ export async function PATCH(req: NextRequest) {
     if (!gc?.refresh_token) return NextResponse.json({ error: "Connect Gmail in Settings to send updates" }, { status: 400 });
     const token = await googleAccessToken(gc.refresh_token);
     const text = (body ?? u.body) + "\n\n";
-    const d = await createGmailDraft(token, { to, subject: subject ?? u.subject, body: text, html: bodyToHtml(text, profile.signature_html || null) });
+    const kind = ((u as any).kind || "monthly") as "weekly" | "monthly";
+    const stats = await pulseStats(u.roster_creator_id, profile.id);
+    const dateLabel = kind === "weekly" ? `Week of ${new Date(u.month + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" })}` : new Date(u.month + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+    const html = pulseHtml({ body: body ?? u.body, creatorFirst: String((u as any).roster_creators?.name || "there").split(" ")[0], dateLabel, kind, stats, signatureHtml: profile.signature_html || null });
+    const d = await createGmailDraft(token, { to, subject: subject ?? u.subject, body: text, html });
     // send the draft
     const r = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/drafts/send", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ id: d.id }) });
     if (!r.ok) return NextResponse.json({ error: `Gmail send failed: ${await r.text()}` }, { status: 502 });

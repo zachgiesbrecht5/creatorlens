@@ -3,6 +3,7 @@ import { requireCreator } from "@/lib/creator-portal";
 import { supabaseAdmin } from "@/lib/supabase";
 import { laneDigest } from "@/lib/lane-digest";
 import { laneLaunches } from "@/lib/launches";
+import { parsePulse } from "@/lib/pulse-html";
 
 // The creator's home: upcoming projects, payouts, hooks to test, top performers in
 // their lane, what Rootfor is doing for them this week, and what's coming up.
@@ -22,6 +23,8 @@ export default async function CreatorHome() {
     admin.from("experiments").select("*").eq("roster_creator_id", r.id).in("status", ["idea", "testing"]).order("created_at", { ascending: false }).limit(6),
     admin.from("creators").select("id,category,performance,followers").eq("platform", r.platform === "youtube" ? "youtube" : "instagram").ilike("handle", String(r.handle || "").replace(/^@/, "")).maybeSingle(),
   ]);
+  const { data: lastPulse } = await admin.from("creator_updates").select("subject,body,month,kind,sent_at").eq("roster_creator_id", r.id).eq("status", "sent").order("sent_at", { ascending: false }).limit(1).maybeSingle();
+  const pulse = lastPulse ? parsePulse(lastPulse.body || "") : null;
   const upcoming = (projects || []).filter((p) => !["paid"].includes(p.status));
   const payouts = (projects || []).filter((p) => ["delivered", "invoiced", "paid"].includes(p.status) && p.fee != null);
   const digest = await laneDigest(r.user_id, r.id, 30);
@@ -41,6 +44,15 @@ export default async function CreatorHome() {
         <div><div className="label mb-1">Sponsorprint · {r.name}</div><h1 className="h1">Hi {first}.</h1><p className="mt-1 text-[14px] text-muted">{upcoming.length ? `${upcoming.length} project${upcoming.length === 1 ? "" : "s"} on the go` : "No live projects right now"}{uniqPitched.length ? ` · ${uniqPitched.length} brands pitched for you this week` : ""}{launches.length ? ` · ${launches.length} launch window${launches.length === 1 ? "" : "s"} in your lane` : ""}.</p></div>
       </div>
 
+      {pulse && pulse.sections.length > 0 && (
+        <section className="card mb-5 p-5" style={{ borderLeft: "4px solid #2E1B5B" }}>
+          <div className="mb-3 flex items-baseline justify-between"><div className="label">{lastPulse!.kind === "weekly" ? "This week's pulse" : "This month's update"}</div><div className="num text-[11px] text-muted">{new Date(lastPulse!.sent_at!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div></div>
+          <div className="grid gap-4 md:grid-cols-2">{pulse.sections.map((sct) => (
+            <div key={sct.title}><div className="num mb-1 text-[10.5px] tracking-[0.15em]" style={{ color: sct.title === "WORTH TESTING" ? "#E85D9B" : sct.title === "COMING UP" ? "#007D2A" : "#2E1B5B" }}>{sct.title}</div>
+              <div className="space-y-1 text-[13px] leading-relaxed">{sct.lines.filter((l) => l.trim()).map((l, i) => <div key={i} className={/^[-•·*]\s/.test(l.trim()) ? "pl-3" : ""}>{l.trim().replace(/^[-•·*]\s+/, "· ")}</div>)}</div></div>
+          ))}</div>
+        </section>
+      )}
       <div className="grid gap-5 md:grid-cols-[1.4fr_1fr]">
         <div className="space-y-5">
           <section className="card p-5">

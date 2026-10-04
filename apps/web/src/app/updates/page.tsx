@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentProfile, supabaseAdmin } from "@/lib/supabase";
+import { pulseHtml } from "@/lib/pulse-html";
+import { pulseStats } from "@/lib/pulse-stats";
 import { UpdateReview } from "@/components/UpdateReview";
 import { UpdateSettings } from "@/components/UpdateSettings";
 
@@ -25,7 +27,7 @@ export default async function Updates() {
         {!roster?.length && <div className="p-6 text-center text-muted">Add creators to your roster first.</div>}
       </div>
       <div className="grid gap-4">
-        {(updates || []).map((u) => { const r = byId.get(u.roster_creator_id); return <UpdateReview key={u.id} u={{ id: u.id, subject: u.subject || "", body: u.body || "", status: u.status, creator: r?.name || "creator", email: r?.creator_email || null, month: (u as any).kind === "weekly" ? `Weekly pulse · week of ${new Date(u.month + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}` : new Date(u.month + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }) }} />; })}
+        {await Promise.all((updates || []).map(async (u) => { const r = byId.get(u.roster_creator_id); const kind = ((u as any).kind || "monthly") as "weekly" | "monthly"; const stats = await pulseStats(u.roster_creator_id, profile.id); const preview = pulseHtml({ body: u.body || "", creatorFirst: String(r?.name || "there").split(" ")[0], dateLabel: kind === "weekly" ? `Week of ${new Date(u.month + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" })}` : new Date(u.month + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }), kind, stats, signatureHtml: profile.signature_html || null }); return <UpdateReview key={u.id} preview={preview} u={{ id: u.id, subject: u.subject || "", body: u.body || "", status: u.status, creator: r?.name || "creator", email: r?.creator_email || null, month: (u as any).kind === "weekly" ? `Weekly pulse · week of ${new Date(u.month + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}` : new Date(u.month + "T00:00:00Z").toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }) }} />; }))}
         {!updates?.length && <div className="num text-center text-[11px] text-dim">No drafts yet. The first batch is written on the 1st for creators switched on above.</div>}
       </div>
     </div>
