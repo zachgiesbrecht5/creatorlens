@@ -11,6 +11,7 @@ import { laneLaunches } from "@/lib/launches";
 import { LaunchList } from "@/components/LaunchList";
 import { trackerStatuses } from "@/lib/tracker";
 import { PortalPanel } from "@/components/PortalPanel";
+import { WatchAdd } from "@/components/WatchAdd";
 
 // A roster creator's page: who has paid them (their map), and the brands paying
 // their lane that haven't paid them yet, each one click from a contact and a
@@ -116,6 +117,7 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
           <div><div className="label">In the lane, last 30 days</div><h2 className="h2">What's working for creators like {r.name}</h2><p className="mt-1 text-[13px] text-muted">From the {digest.creators.length} creator{digest.creators.length === 1 ? "" : "s"} watched under {r.name}. Best posts relative to each creator's own median, recurring hooks, and brands they picked up. This feeds {r.name}'s monthly update.</p></div>
           <Link href={`/watchlist?for=${r.id}`} className="btn-ghost !py-1.5 !text-[12px]">manage the lane →</Link>
         </div>
+        <div className="mb-4"><WatchAdd roster={[{ id: r.id, name: r.name }]} defaultFor={r.id} compact /></div>
         {!digest.creators.length ? (
           <div className="card p-6 text-[13px] text-muted">No one is watched under {r.name} yet. Open a neighbor's print, click watch, and pick {r.name}; their top posts and new sponsors will show here every week.</div>
         ) : (

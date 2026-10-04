@@ -26,7 +26,12 @@ export async function POST(req: NextRequest) {
   const { data: wall } = c ? await admin.from("brand_wall").select("brand").eq("creator_id", c.id).eq("is_junk", false) : { data: [] };
   await admin.from("watchlist").insert({ user_id: profile.id, platform, handle, roster_creator_id: rosterCreatorId || null, known_brands: (wall || []).map((b) => b.brand), last_checked_at: new Date().toISOString() });
   track(profile.id, "watch", { platform, handle, roster_creator_id: rosterCreatorId || null });
-  return NextResponse.json({ watching: true, rosterCreatorId: rosterCreatorId || null });
+  // not printed yet: queue a low-priority print so the hooks and brands arrive when the pool has room; no credit, no waiting on the page
+  if (!c) {
+    const { data: q } = await admin.from("scan_jobs").select("id").eq("platform", platform).ilike("handle", handle).in("status", ["queued", "running", "rate_limited"]).limit(1);
+    if (!q?.length) await admin.from("scan_jobs").insert({ user_id: profile.id, platform, handle, priority: 3, source: "watch" });
+  }
+  return NextResponse.json({ watching: true, rosterCreatorId: rosterCreatorId || null, queued: !c });
 }
 
 // PATCH marks all watch events seen

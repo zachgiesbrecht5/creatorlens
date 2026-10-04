@@ -4,6 +4,7 @@ import { currentProfile, supabaseAdmin } from "@/lib/supabase";
 import { WatchButton } from "@/components/WatchButton";
 import { MarkSeen } from "@/components/MarkSeen";
 import { WatchFilter } from "@/components/WatchFilter";
+import { WatchAdd } from "@/components/WatchAdd";
 
 export const metadata = { title: "Watchlist | Sponsorprint" };
 const fmt = (n: number | null) => (n == null ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
@@ -40,6 +41,7 @@ export default async function Watchlist({ searchParams }: { searchParams: Promis
         {unseen.length > 0 && <MarkSeen />}
       </div>
 
+      <div className="mb-4"><WatchAdd roster={rosterList.map((r) => ({ id: r.id, name: r.name }))} defaultFor={filterFor !== "all" && filterFor !== "none" ? filterFor : ""} /></div>
       <WatchFilter roster={rosterList.map((r) => ({ id: r.id, name: r.name, avatar: r.avatar_url }))} counts={counts} active={filterFor} />
       {eventsShown.length > 0 && (
         <div className="card mb-8 divide-y divide-line">
