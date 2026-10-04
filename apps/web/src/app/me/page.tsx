@@ -30,6 +30,16 @@ export default async function CreatorHome() {
   ]);
   const perf: any = me?.performance || null;
   const lane = me?.category || null;
+  // owned insights (saves, shares, reach): present when this creator's Instagram sits in the manager's business portfolio
+  const { data: owned } = me ? await admin.from("owned_post_insights").select("media_id,permalink,posted_at,media_type,caption,likes,comments,saves,shares,reach,views").eq("creator_id", me.id).order("posted_at", { ascending: false }).limit(50) : { data: [] as any[] };
+  const hasOwned = !!owned?.length;
+  const med = (arr: number[]) => { const a = arr.filter((n) => n != null && !isNaN(n)).sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : 0; };
+  const medSaves = med((owned || []).map((o) => o.saves)), medShares = med((owned || []).map((o) => o.shares)), medReach = med((owned || []).map((o) => o.reach));
+  const last30 = (owned || []).filter((o) => new Date(o.posted_at).getTime() > Date.now() - 30 * 864e5);
+  const sumShares = last30.reduce((a, o) => a + (o.shares || 0), 0), sumSaves = last30.reduce((a, o) => a + (o.saves || 0), 0), sumReach = last30.reduce((a, o) => a + (o.reach || 0), 0);
+  // "your best" by shares + saves when owned data exists (the numbers that drive discovery), else public engagement
+  const ownBest = hasOwned ? [...(owned || [])].sort((a, b) => (b.shares || 0) + (b.saves || 0) - ((a.shares || 0) + (a.saves || 0))).slice(0, 4) : [];
+  const hookFor = (permalink: string, caption: string) => { const t = (perf?.top || []).find((x: any) => x.url === permalink); return t ? { line: t.spoken || t.on_video || t.on_screen || t.hook, src: t.spoken ? "spoken" : t.on_video ? "on_video" : t.on_screen ? "on_screen" : "hook", thumb: t.thumb } : { line: String(caption || "").split(/\r?\n/).find((l) => l.trim()) || "", src: "hook", thumb: null }; };
   // growth from scan history
   const { data: snaps } = me ? await admin.from("performance_snapshots").select("captured_at,followers,median").eq("creator_id", me.id).order("captured_at", { ascending: false }).limit(60) : { data: [] as any[] };
   const at = (days: number) => (snaps || []).find((s) => new Date(s.captured_at).getTime() <= Date.now() - days * 864e5 && s.followers);
@@ -68,9 +78,15 @@ export default async function CreatorHome() {
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label={platform === "youtube" ? "subscribers" : "followers"} value={fmtK(me?.followers || r.followers)} sub={g30 != null ? `${g30 >= 0 ? "+" : ""}${g30.toFixed(1)}% in 30d` : g14 != null ? `${g14 >= 0 ? "+" : ""}${g14.toFixed(1)}% in 14d` : "tracking from today"} good={(g30 ?? g14 ?? 0) >= 0} />
-            <Stat label={`median ${perf?.metric_label || "engagement"}`} value={fmtK(perf?.median)} sub={perf ? `${perf.items} posts in window` : ""} />
-            <Stat label="live projects" value={String(live.length)} sub={pending ? `${money(pending)} pending` : "nothing pending"} />
-            <Stat label="pitched this week" value={String(pitchedBrands.length)} sub={convo.length ? `${convo.length} in conversation` : "by your team"} />
+            {hasOwned ? <>
+              <Stat label="shares · 30 days" value={fmtK(sumShares)} sub={`median ${fmtK(medShares)} per post`} />
+              <Stat label="saves · 30 days" value={fmtK(sumSaves)} sub={`median ${fmtK(medSaves)} per post`} />
+              <Stat label="reach · 30 days" value={fmtK(sumReach)} sub={`median ${fmtK(medReach)} per post`} />
+            </> : <>
+              <Stat label={`median ${perf?.metric_label || "engagement"}`} value={fmtK(perf?.median)} sub={perf ? `${perf.items} posts in window` : ""} />
+              <Stat label="live projects" value={String(live.length)} sub={pending ? `${money(pending)} pending` : "nothing pending"} />
+              <Stat label="pitched this week" value={String(pitchedBrands.length)} sub={convo.length ? `${convo.length} in conversation` : "by your team"} />
+            </>}
           </div>
         </div>
         {(r as any).thesis && <div className="mt-5 border-t border-white/10 pt-4 text-[14px] leading-relaxed text-white/85"><span className="num mr-2 text-[10.5px] tracking-[0.15em] text-white/50">WHERE WE'RE TAKING THIS</span>{(r as any).thesis}</div>}
@@ -79,7 +95,20 @@ export default async function CreatorHome() {
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.55fr_1fr]">
         <div className="space-y-6">
           {/* your best */}
-          {own.length > 0 && (
+          {hasOwned ? (
+            <section>
+              <div className="mb-3 flex items-end justify-between"><div><div className="label">Your best right now · by shares and saves</div><h2 className="h2">What's carrying your numbers</h2><p className="mt-1 text-[13px] text-muted">Read from your own account. Shares and saves are what the algorithm pays for; these are your posts that earned the most of both.</p></div><Link href={`/c/${platform}/${String(r.handle || "").replace(/^@/, "")}`} className="num text-[11px] text-accent hover:underline">full print →</Link></div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{ownBest.map((o) => { const h = hookFor(o.permalink, o.caption); return (
+                <a key={o.media_id} href={o.permalink} target="_blank" rel="noreferrer" className="post-card">
+                  {h.thumb ? <img src={`data:image/jpeg;base64,${h.thumb}`} alt="" className="post-thumb" /> : <div className="post-thumb bg-surface2" />}
+                  <div className="p-3">
+                    <div className="grid grid-cols-3 gap-1 text-center"><div><div className="num text-[14px] font-bold">{fmtK(o.shares)}</div><div className="num text-[9px] uppercase tracking-wide text-muted">shares</div></div><div><div className="num text-[14px] font-bold">{fmtK(o.saves)}</div><div className="num text-[9px] uppercase tracking-wide text-muted">saves</div></div><div><div className="num text-[14px] font-bold">{fmtK(o.reach)}</div><div className="num text-[9px] uppercase tracking-wide text-muted">reach</div></div></div>
+                    <div className="mt-2 line-clamp-2 text-[12.5px] font-medium leading-snug">"{h.line}"</div>
+                    <div className="mt-1.5 flex items-center gap-1.5"><span className="pill-src">{SRC[h.src]}</span><span className="num text-[10px] text-muted">{d(o.posted_at)}{medShares ? ` · ${((o.shares || 0) / Math.max(medShares, 1)).toFixed(1)}x your median shares` : ""}</span></div>
+                  </div>
+                </a>); })}</div>
+            </section>
+          ) : own.length > 0 && (
             <section>
               <div className="mb-3 flex items-end justify-between"><div><div className="label">Your best right now</div><h2 className="h2">What's carrying your numbers</h2></div><Link href={`/c/${platform}/${String(r.handle || "").replace(/^@/, "")}`} className="num text-[11px] text-accent hover:underline">full print →</Link></div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{own.map((t: any, i: number) => <PostCard key={t.url} t={t} median={perf.median} label={perf.metric_label} rank={i + 1} items={perf.items} />)}</div>

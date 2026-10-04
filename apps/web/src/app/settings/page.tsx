@@ -27,7 +27,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const admin = supabaseAdmin();
   const { data: hoodsLeft } = await admin.rpc("hood_remaining", { p_user: profile.id });
   const [{ data: ig }, { data: gc }, { data: ledger }] = await Promise.all([
-    admin.from("ig_connections").select("ig_username,healthy,cooldown_until,created_at").eq("user_id", profile.id),
+    admin.from("ig_connections").select("ig_username,healthy,cooldown_until,created_at,owned").eq("user_id", profile.id),
     admin.from("google_connections").select("email,updated_at").eq("user_id", profile.id).maybeSingle(),
     admin.from("credit_ledger").select("kind,delta,reason,created_at").eq("user_id", profile.id).order("created_at", { ascending: false }).limit(15),
   ]);
@@ -72,7 +72,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
               action={<TrackerLink initialId={(profile as any).tracker_sheet_id || null} note={(profile as any).tracker_note || null} connected={!!gc} />} />
             {insider ? (
               <Row title="Instagram" ok={!!ig?.length}
-                detail={ig?.length ? `Connected: ${ig.map((c) => "@" + c.ig_username).join(", ")}. ${ig.some((c) => c.cooldown_until && new Date(c.cooldown_until) > new Date()) ? "Cooling down after a rate limit." : "Healthy."}` : "Connect your Instagram Business or Creator account. It adds scanning capacity for everyone."}
+                detail={ig?.length ? `Connected: ${ig.map((c) => "@" + c.ig_username + ((c as any).owned ? " (insights)" : "")).join(", ")}. Each account adds 200 calls an hour; accounts marked insights are in your business portfolio, so saves, shares and reach are read for them daily. ${ig.some((c) => c.cooldown_until && new Date(c.cooldown_until) > new Date()) ? "Cooling down after a rate limit." : "Healthy."}` : "Connect your Instagram Business or Creator account. It adds scanning capacity for everyone."}
                 action={<a href="/api/ig/connect" className="btn-ghost">{ig?.length ? "Add another" : "Connect Instagram"}</a>} />
             ) : (
               <Row title="Instagram" ok

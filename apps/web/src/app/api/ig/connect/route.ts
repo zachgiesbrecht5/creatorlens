@@ -4,7 +4,7 @@ import { currentUser } from "@/lib/supabase";
 
 // Facebook Login for Business. The user picks the Page linked to their IG
 // Business/Creator account; we get a long-lived token and the IG user id.
-const SCOPES = ["instagram_basic", "pages_show_list", "pages_read_engagement", "business_management"].join(",");
+const SCOPES = ["instagram_basic", "instagram_manage_insights", "pages_show_list", "pages_read_engagement", "business_management"].join(",");
 
 export async function GET(req: NextRequest) {
   const user = await currentUser();

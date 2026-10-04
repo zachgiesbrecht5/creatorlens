@@ -26,12 +26,28 @@ export async function GET(req: NextRequest) {
   if (!withIg.length) return fail(req, "No Instagram Business/Creator account is linked to a Facebook Page you manage. Link one in Instagram settings, then retry.");
 
   const admin = supabaseAdmin();
+  const pageIgIds = new Set<string>();
   for (const p of withIg) {
+    pageIgIds.add(String(p.instagram_business_account.id));
     await admin.from("ig_connections").upsert({
       user_id: user.id, ig_user_id: p.instagram_business_account.id, ig_username: p.instagram_business_account.username, fb_user_id: fbUserId,
       access_token: token, healthy: true, cooldown_until: null, last_error: null,
     }, { onConflict: "ig_user_id" });
   }
+  // Instagram accounts inside the user's business portfolios (owned, or assigned by a creator):
+  // each one is readable for insights (saves, shares, reach) and adds its own hourly allowance.
+  try {
+    const biz: any = await (await fetch(`https://graph.facebook.com/${V}/me/businesses?fields=id,name&access_token=${token}`)).json();
+    for (const b of biz.data || []) {
+      for (const edge of ["owned_instagram_accounts", "client_instagram_accounts"]) {
+        const r: any = await (await fetch(`https://graph.facebook.com/${V}/${b.id}/${edge}?fields=id,username&limit=100&access_token=${token}`)).json();
+        for (const ig of r.data || []) {
+          await admin.from("ig_connections").upsert({ user_id: user.id, ig_user_id: String(ig.id), ig_username: ig.username, fb_user_id: fbUserId, access_token: token, healthy: true, cooldown_until: null, last_error: null, owned: true }, { onConflict: "ig_user_id" });
+        }
+      }
+    }
+    if (pageIgIds.size) await admin.from("ig_connections").update({ owned: true }).in("ig_user_id", [...pageIgIds]);
+  } catch { /* business edges are optional */ }
   const res = NextResponse.redirect(redirectTo(req, "/settings?ig=ok"));
   res.cookies.delete("cl_ig_state");
   return res;
