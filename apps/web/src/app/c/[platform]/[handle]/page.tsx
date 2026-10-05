@@ -87,6 +87,12 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
 
   const header = (
     <>
+      {active && job && (
+        <div className="mb-5 rounded-xl border border-warn/40 bg-warn/10 p-4">
+          <div className="mb-2 text-[13px]"><b>Re-printing now.</b> Everything below is the previous print (from {creator.last_scanned_at ? new Date(creator.last_scanned_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "earlier"}); it refreshes by itself when the new one lands, and the PDF button updates then too.</div>
+          <PrintingScan jobId={job.id} initialStatus={job.status} handle={creator.handle} platform={p} />
+        </div>
+      )}
       <div className="pw-top">
         <div className="pw-id">
           {creator.avatar_url ? <img src={creator.avatar_url} alt="" className="pw-avatar" /> : <div className="pw-avatar bg-surface2" />}
@@ -102,7 +108,8 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
               {!active && <Reprint platform={p} handle={creator.handle} />}
               <WatchButton platform={p} handle={creator.handle} initial={watching} roster={(roster || []).map((r) => ({ id: r.id, name: r.name }))} initialFor={watchFor} />
               <NeighborsButton creatorId={creator.id} paused={process.env.NEIGHBORHOODS_PAUSED === "1"} />
-              {unlocked && <a href={`/api/print/pdf?platform=${p}&handle=${encodeURIComponent(creator.handle)}`} className="btn-like" title="PDF with recurring sponsors, every disclosed deal, and clickable links to the posts">download PDF ↓</a>}
+              {unlocked && active && <span className="btn-like opacity-50" title="Re-printing; the PDF updates when the new print lands">download PDF ↓</span>}
+              {unlocked && !active && <a href={`/api/print/pdf?platform=${p}&handle=${encodeURIComponent(creator.handle)}`} className="btn-like" title="PDF with recurring sponsors, every disclosed deal, and clickable links to the posts">download PDF ↓</a>}
             </div>}
             {user && (missing.length > 0 || neighbors.length > 0) && <Missing missing={missing} neighbors={neighbors} lane={creator.category || "this lane"} creatorId={creator.id} platform={p} />}
           </div>
@@ -129,7 +136,6 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
         </>
       ) : (
         <>
-          {active && <p className="num mb-2 text-center text-[11px] text-dim">re-printing in the background…</p>}
           {sp.from && <div className="mx-auto mb-3 max-w-5xl num text-[11px] text-dim"><Link href={sp.from} className="hover:text-accent">← back to {sp.from.startsWith("/n/") ? "the neighborhood" : "Start"}</Link></div>}
       {user && <Tour id="print" steps={PRINT_TOUR} />}
       {unlocked && (creator as any).performance?.top?.length > 0 && (() => { const perf = (creator as any).performance; const hooks = (perf.hooks || []).filter((h: any) => h.hook !== "Other").slice(0, 4); return (
