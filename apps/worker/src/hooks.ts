@@ -108,7 +108,11 @@ export async function readHooks(sb: SupabaseClient, creatorId: string): Promise<
   if (c?.platform !== "instagram") return 0;
   const perf = c.performance as any;
   const top: any[] = (perf?.top || []).slice(0, 6);
+  // reels with no file from Meta (licensed audio): say so, don't leave them "unread"
+  let marked = 0;
+  for (const t of top) if (!t.video && t.spoken == null && /reel|video|clip/i.test(String(t.kind || ""))) { t.audio = "nofile"; t.spoken = ""; marked++; }
   const todo = top.map((t, i) => ({ t, i })).filter(({ t }) => t.video && t.spoken == null);
+  if (!todo.length && marked) { await sb.from("creators").update({ performance: { ...perf, top: [...top, ...(perf.top || []).slice(6)] } }).eq("id", creatorId); return 0; }
   if (!todo.length) return 0;
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "hook-"));
   let n = 0;

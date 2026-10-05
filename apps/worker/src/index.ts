@@ -160,8 +160,9 @@ async function persist(job: any, result: ScanResult) {
       const pf = result.performance;
       await sb.from("performance_snapshots").insert({ creator_id: creator.id, followers: result.creator.followers || null, items: pf.items, median: pf.median, metric_label: pf.metric_label, top: pf.top.slice(0, 5).map((t) => ({ title: t.title.slice(0, 120), url: t.url, published_at: t.published_at, metric: t.metric, kind: t.kind, hook: t.hook, sponsored: t.sponsored })), hooks: pf.hooks, formats: pf.formats }).then(() => {});
       // spoken hooks (Deepgram) and cover/frame reads (Anthropic) are independent; neither blocks the other
-      readHooks(sb, creator.id).catch((e: any) => log("hooks failed", String(e?.message || e).slice(0, 160)));
-      readCovers(sb, creator.id).catch((e: any) => { if (!noteModelError(e)) log("covers failed", String(e?.message || e).slice(0, 160)); });
+      // voice first, then eyes, one after the other: both rewrite the performance block, so they must not overlap
+      readHooks(sb, creator.id).catch((e: any) => log("hooks failed", String(e?.message || e).slice(0, 160)))
+        .then(() => readCovers(sb, creator.id)).catch((e: any) => { if (!noteModelError(e)) log("covers failed", String(e?.message || e).slice(0, 160)); });
     }
     if (job.source === "discover") await sb.from("creators").update({ is_public: true, discovered_at: new Date().toISOString(), discover_reason: job.note || null }).eq("id", creator.id);
     // resolve sites for new brands first so the classifier sees the brand's own page (cap per scan; backfill gets the rest)
