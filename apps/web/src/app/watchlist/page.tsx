@@ -5,6 +5,7 @@ import { WatchButton } from "@/components/WatchButton";
 import { MarkSeen } from "@/components/MarkSeen";
 import { WatchFilter } from "@/components/WatchFilter";
 import { WatchAdd } from "@/components/WatchAdd";
+import { orgMemberIds } from "@/lib/org";
 
 export const metadata = { title: "Watchlist | Sponsorprint" };
 const fmt = (n: number | null) => (n == null ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
@@ -14,16 +15,24 @@ export default async function Watchlist({ searchParams }: { searchParams: Promis
   const profile = await currentProfile();
   if (!profile) redirect("/login?next=/watchlist");
   const admin = supabaseAdmin();
-  const [{ data: watches }, { data: events }] = await Promise.all([
-    admin.from("watchlist").select("platform,handle,known_brands,added_at,last_checked_at,roster_creator_id").eq("user_id", profile.id).order("added_at", { ascending: false }),
-    admin.from("watch_events").select("id,platform,handle,new_brands,seen,created_at,roster_creator_id").eq("user_id", profile.id).order("created_at", { ascending: false }).limit(80),
+  const members = await orgMemberIds(profile);
+  const [{ data: watchesRaw }, { data: events }] = await Promise.all([
+    admin.from("watchlist").select("user_id,platform,handle,known_brands,added_at,last_checked_at,roster_creator_id").in("user_id", members).order("added_at", { ascending: false }),
+    admin.from("watch_events").select("id,platform,handle,new_brands,seen,created_at,roster_creator_id").in("user_id", members).order("created_at", { ascending: false }).limit(80),
   ]);
-  const { data: rosterRows } = await admin.from("roster_creators").select("id,name,avatar_url").eq("user_id", profile.id).order("name");
-  const rosterList = rosterRows || [];
-  const matches = (rid: string | null) => filterFor === "all" || (filterFor === "none" ? !rid : rid === filterFor);
-  const allWatches = watches || [];
+  // roster chips shared across the org: one chip per creator handle, your own row preferred; any member's row maps to it
+  const { data: rosterAll } = await admin.from("roster_creators").select("id,name,avatar_url,handle,user_id").in("user_id", members).order("name");
+  const canon = new Map<string, any>(); const alias = new Map<string, string>();
+  for (const r of rosterAll || []) { const k = String(r.handle || r.name).replace(/^@/, "").toLowerCase(); const cur = canon.get(k); if (!cur || (r.user_id === profile.id && cur.user_id !== profile.id)) canon.set(k, r); }
+  for (const r of rosterAll || []) { const k = String(r.handle || r.name).replace(/^@/, "").toLowerCase(); alias.set(r.id, canon.get(k)!.id); }
+  const rosterList = [...canon.values()];
+  const norm = (rid: string | null) => (rid ? alias.get(rid) || rid : null);
+  const matches = (rid: string | null) => filterFor === "all" || (filterFor === "none" ? !rid : norm(rid) === filterFor);
+  // the same creator watched by two people is one row
+  const seenKey = new Set<string>(); const watches = (watchesRaw || []).filter((w) => { const k = `${w.platform}:${String(w.handle).toLowerCase()}`; if (seenKey.has(k)) return false; seenKey.add(k); return true; }).map((w) => ({ ...w, roster_creator_id: norm(w.roster_creator_id) }));
+  const allWatches = watches;
   const watchesShown = allWatches.filter((w) => matches(w.roster_creator_id));
-  const eventsShown = (events || []).filter((e) => matches(e.roster_creator_id));
+  const eventsShown = (events || []).filter((e) => matches(e.roster_creator_id)).map((e) => ({ ...e, roster_creator_id: norm(e.roster_creator_id) }));
   const counts: Record<string, number> = { all: allWatches.length, none: allWatches.filter((w) => !w.roster_creator_id).length };
   for (const r of rosterList) counts[r.id] = allWatches.filter((w) => w.roster_creator_id === r.id).length;
   const handles = watchesShown.map((w) => w.handle);

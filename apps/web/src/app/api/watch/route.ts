@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { currentProfile, supabaseAdmin } from "@/lib/supabase";
+import { orgMemberIds } from "@/lib/org";
 import { track } from "@/lib/track";
 
 const FREE_LIMIT = 3;
@@ -12,13 +13,14 @@ export async function POST(req: NextRequest) {
   const handle = String(raw || "").replace(/^@/, "").toLowerCase();
   if (!handle || !["youtube", "instagram"].includes(platform)) return NextResponse.json({ error: "bad request" }, { status: 400 });
   const admin = supabaseAdmin();
-  const { data: existing } = await admin.from("watchlist").select("handle,roster_creator_id").eq("user_id", profile.id).eq("platform", platform).eq("handle", handle).maybeSingle();
+  const members = await orgMemberIds(profile);
+  const { data: existing } = await admin.from("watchlist").select("user_id,handle,roster_creator_id").in("user_id", members).eq("platform", platform).eq("handle", handle).order("user_id").limit(1).maybeSingle();
   if (existing && rosterCreatorId !== undefined && rosterCreatorId !== existing.roster_creator_id) {
     // already watching: just move it to another creator's lane
-    await admin.from("watchlist").update({ roster_creator_id: rosterCreatorId || null }).eq("user_id", profile.id).eq("platform", platform).eq("handle", handle);
+    await admin.from("watchlist").update({ roster_creator_id: rosterCreatorId || null }).eq("user_id", existing.user_id).eq("platform", platform).eq("handle", handle);
     return NextResponse.json({ watching: true, rosterCreatorId: rosterCreatorId || null });
   }
-  if (existing) { await admin.from("watchlist").delete().eq("user_id", profile.id).eq("platform", platform).eq("handle", handle); return NextResponse.json({ watching: false }); }
+  if (existing) { await admin.from("watchlist").delete().eq("user_id", existing.user_id).eq("platform", platform).eq("handle", handle); return NextResponse.json({ watching: false }); }
   const paid = ["pro", "agency", "team", "admin"].includes(profile.plan);
   if (!paid) { const { count } = await admin.from("watchlist").select("*", { count: "exact", head: true }).eq("user_id", profile.id); if ((count || 0) >= FREE_LIMIT) return NextResponse.json({ error: `The free plan watches ${FREE_LIMIT} creators. Upgrade for an unlimited watchlist.` }, { status: 402 }); }
   // baseline: brands already on the print, so only future additions count as new

@@ -15,7 +15,15 @@ export type LaneDigest = {
 export async function laneDigest(userId: string, rosterCreatorId: string, days = 30): Promise<LaneDigest> {
   const admin = supabaseAdmin();
   const since = new Date(Date.now() - days * 864e5).toISOString();
-  const { data: watches } = await admin.from("watchlist").select("platform,handle").eq("user_id", userId).eq("roster_creator_id", rosterCreatorId);
+  // the lane is shared across the org: watches filed under any teammate's row for the same creator count
+  const { data: rr } = await admin.from("roster_creators").select("handle,name,user_id").eq("id", rosterCreatorId).single();
+  const { data: owner } = rr ? await admin.from("profiles").select("org_id").eq("id", rr.user_id).single() : { data: null };
+  const { data: mates } = owner?.org_id ? await admin.from("profiles").select("id").eq("org_id", owner.org_id) : { data: [{ id: userId }] };
+  const memberIds = (mates || []).map((m) => m.id);
+  const key = String(rr?.handle || rr?.name || "").replace(/^@/, "").toLowerCase();
+  const { data: twins } = key ? await admin.from("roster_creators").select("id").in("user_id", memberIds).or(`handle.ilike.${key},handle.ilike.@${key},name.ilike.${key}`) : { data: [] };
+  const rowIds = [...new Set([rosterCreatorId, ...(twins || []).map((t) => t.id)])];
+  const { data: watches } = await admin.from("watchlist").select("platform,handle").in("user_id", memberIds).in("roster_creator_id", rowIds);
   const pairs = (watches || []).map((w) => `and(platform.eq.${w.platform},handle.ilike.${w.handle})`);
   const { data: creators } = pairs.length ? await admin.from("creators").select("id,handle,platform,display_name,avatar_url,performance").or(pairs.join(",")) : { data: [] };
   const posts: LaneDigest["posts"] = [];
@@ -30,7 +38,7 @@ export async function laneDigest(userId: string, rosterCreatorId: string, days =
     for (const h of (perf.hooks || []) as any[]) { if (h.hook === "Other") continue; const e = hookAgg.get(h.hook) || hookAgg.set(h.hook, { count: 0, sum: 0 }).get(h.hook)!; e.count += h.count; e.sum += h.avg * h.count; }
   }
   posts.sort((a, b) => (b.mult ?? 0) - (a.mult ?? 0) || b.metric - a.metric);
-  const { data: ev } = await admin.from("watch_events").select("handle,new_brands,created_at").eq("user_id", userId).eq("roster_creator_id", rosterCreatorId).gte("created_at", since).order("created_at", { ascending: false }).limit(30);
+  const { data: ev } = await admin.from("watch_events").select("handle,new_brands,created_at").in("user_id", memberIds).in("roster_creator_id", rowIds).gte("created_at", since).order("created_at", { ascending: false }).limit(30);
   const nameOf = new Map((creators || []).map((c) => [String(c.handle).toLowerCase(), c.display_name || c.handle]));
   const newBrands = (ev || []).flatMap((e) => ((e.new_brands || []) as any[]).map((b) => ({ creator: nameOf.get(String(e.handle).toLowerCase()) || e.handle, brand: b.brand, brand_id: b.brand_id || null, when: e.created_at })));
   return {
