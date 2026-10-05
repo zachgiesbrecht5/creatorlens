@@ -99,7 +99,7 @@ export async function discover(sb: SupabaseClient): Promise<number> {
       }
       // roster seeds: mark so the same one doesn't reseed nightly
       await sb.from("roster_creators").update({ neighborhood_at: new Date().toISOString() }).ilike("handle", s.handle).eq("platform", s.platform);
-    } catch (e: any) { log("seed failed", s.handle, e?.message); }
+    } catch (e: any) { if (noteModelError(e)) { log("model refused (billing); stopping discovery for now"); break; } log("seed failed", s.handle, String(e?.message || e).slice(0, 160)); }
   }
   if (queued) log("queued", queued, "discoveries");
   else log("queued nothing this hour (budget, limits, or no verified seeds)");
