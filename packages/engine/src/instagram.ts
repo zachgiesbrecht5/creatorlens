@@ -46,7 +46,7 @@ const GENERIC: Record<string, 1> = { brand: 1, paid: 1, our: 1, the: 1, my: 1, y
 const RISKY: Record<string, 1> = { ring: 1, aura: 1, cozy: 1, prime: 1, glow: 1, pure: 1, bloom: 1,
   halo: 1, luna: 1, nova: 1, mint: 1, honey: 1, sage: 1, dawn: 1, ember: 1 };
 
-interface Evidence { tier: Tier; index: number; length: number }
+interface Evidence { tier: Tier; index: number; length: number; match?: string }
 interface Candidate { key: string; brand: string; idx: number; len: number; self: Tier | null }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -63,7 +63,7 @@ export function detectInstagram(caption: string | null | undefined, ownHandle?: 
       re.lastIndex = 0;
       let m: RegExpExecArray | null;
       while ((m = re.exec(text)) !== null) {
-        evidences.push({ tier: grp.tier, index: m.index, length: m[0].length });
+        evidences.push({ tier: grp.tier, index: m.index, length: m[0].length, match: m[0] });
         if (m.index === re.lastIndex) re.lastIndex++;
       }
     }
@@ -247,7 +247,9 @@ export function detectInstagram(caption: string | null | undefined, ownHandle?: 
   if (!arr.length) {
     for (const e of evidences) {
       if (e.tier.score >= 8) {
-        const guess = guessBrand(text, e.index);
+        // a bare "ad"/"AD" with no @mention or partner tag nearby: only trust a handle, never a capitalized word
+        const bare = /^(ad|this is an? ad|sponsored (?:post|content|ad)|paid (?:post|content|ad))$/i.test(String(e.match || "").trim().replace(/[-\u2013\u2014|:]+$/, "").trim());
+        const guess = guessBrand(text, e.index, bare);
         if (guess) {
           arr.push({ brand: guess + " (?)", type: "Paid - brand guessed (verify)", score: 5, label: "Medium", evidence: snip(e.index, e.length) });
         } else {
@@ -279,7 +281,7 @@ const GEN: Record<string, 1> = { the: 1, this: 1, that: 1, with: 1, from: 1, you
   watch: 1, video: 1, episode: 1, favourite: 1, favorite: 1 };
 
 /** Best-effort brand guess when explicit paid language exists but no brand matched. */
-export function guessBrand(text: string, evIdx: number): string {
+export function guessBrand(text: string, evIdx: number, handlesOnly = false): string {
   const cands: { name: string; idx: number; rank: number }[] = [];
 
   // "thank you @brand" / "thanks to brand" / "partnered with brand" / "sponsored by brand" / "in collaboration with brand":
@@ -340,7 +342,8 @@ export function guessBrand(text: string, evIdx: number): string {
     if (reps >= 2 && Math.abs(cm2.index - evIdx) <= 120) cands.push({ name: w, idx: cm2.index, rank: 4 });
   }
 
-  if (!cands.length) return "";
-  cands.sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : Math.abs(a.idx - evIdx) - Math.abs(b.idx - evIdx)));
-  return cands[0].name;
+  const pool = handlesOnly ? cands.filter((c) => c.rank <= 1) : cands;
+  if (!pool.length) return "";
+  pool.sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : Math.abs(a.idx - evIdx) - Math.abs(b.idx - evIdx)));
+  return pool[0].name;
 }

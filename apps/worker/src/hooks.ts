@@ -52,11 +52,18 @@ function meanVolume(wavPath: string): Promise<number | null> {
 
 const VOICE_CONF = Number(process.env.HOOK_VOICE_CONFIDENCE || 0.55);
 /** What a viewer hears in the opening: talking, a song (lyrics are not a hook), or nothing. */
+// "Bob. Bob. Bob." / "yeah yeah yeah yeah": a vocal chop on a beat, not a sentence
+function looksLikeMusic(t: string): boolean {
+  const words = String(t || "").toLowerCase().replace(/[^a-z' ]/g, " ").split(/\s+/).filter(Boolean);
+  if (words.length < 3) return false;
+  const uniq = new Set(words).size;
+  return uniq / words.length < 0.34 || (words.length >= 6 && uniq <= 2);
+}
 async function listen(wavPath: string): Promise<{ spoken: string | null; audio: "voice" | "music" | "silent" | "unread"; lyrics: string | null }> {
   const heard = await transcribeFull(await fs.readFile(wavPath));
   if (heard == null) return { spoken: null, audio: "unread", lyrics: null };
   const text = heard.text.replace(/\s+/g, " ").trim().slice(0, 240);
-  if (text && (heard.conf == null || heard.conf >= VOICE_CONF)) return { spoken: text, audio: "voice", lyrics: null };
+  if (text && (heard.conf == null || heard.conf >= VOICE_CONF) && !looksLikeMusic(text)) return { spoken: text, audio: "voice", lyrics: null };
   const vol = await meanVolume(wavPath);
   const audible = vol == null || vol > -50;
   // low-confidence words over audible sound are almost always sung lyrics

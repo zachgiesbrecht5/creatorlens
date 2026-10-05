@@ -161,3 +161,8 @@ describe("bare ad disclosures on Instagram", () => {
   it("catches 'this is an ad'", () => { expect(detectInstagram("this is an ad for @liquidiv and I'd drink it anyway").length).toBeGreaterThan(0); });
   it("ignores 'ad hoc' and 'add'", () => { expect(detectInstagram("ad hoc plans today, add me on snap").length).toBe(0); });
 });
+
+describe("bare ad never invents a brand from a capitalized word", () => {
+  it("marks the brand unclear when only prose follows", () => { const f = detectInstagram("Ad THIS is the best way to swaddle your newborn baby. The lovetodream swaddle is wild"); expect(f.length).toBeGreaterThan(0); expect(f[0].brand).not.toMatch(/swaddle \(\?\)/i); });
+  it("still takes an @mention", () => { const f = detectInstagram("ad\nLoving my new @skims set"); expect(f[0].brand.toLowerCase()).toContain("skims"); });
+});
