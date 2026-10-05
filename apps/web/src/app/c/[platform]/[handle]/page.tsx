@@ -9,6 +9,7 @@ import { NeighborsButton } from "@/components/NeighborsButton";
 import { Tour } from "@/components/Tour";
 import { PRINT_TOUR } from "@/components/tours";
 import { Missing } from "@/components/Missing";
+import { HookCard } from "@/components/HookCard";
 import { trackerStatuses } from "@/lib/tracker";
 import { BrandWall, type WallCard, type RosterCreator } from "@/components/BrandWall";
 import { PrintingScan } from "@/components/PrintingScan";
@@ -131,6 +132,14 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
           {active && <p className="num mb-2 text-center text-[11px] text-dim">re-printing in the background…</p>}
           {sp.from && <div className="mx-auto mb-3 max-w-5xl num text-[11px] text-dim"><Link href={sp.from} className="hover:text-accent">← back to {sp.from.startsWith("/n/") ? "the neighborhood" : "Start"}</Link></div>}
       {user && <Tour id="print" steps={PRINT_TOUR} />}
+      {unlocked && (creator as any).performance?.top?.length > 0 && (() => { const perf = (creator as any).performance; const hooks = (perf.hooks || []).filter((h: any) => h.hook !== "Other").slice(0, 4); return (
+        <section className="mx-auto mt-6 max-w-5xl">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <div><div className="label">What's performing</div><div className="text-[13px] text-muted">Best {Math.min(6, perf.top.length)} of {perf.items} posts · median {perf.median >= 1e3 ? `${Math.round(perf.median / 1e3)}K` : perf.median} {perf.metric_label}. The bold line is what a viewer hears or sees first; the rows under it show the other channels.</div></div>
+            {hooks.length > 0 && <div className="num text-[11px] text-muted">openers that work: {hooks.map((h: any) => `"${h.hook}" ×${h.count}`).join(" · ")}</div>}
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">{perf.top.slice(0, 6).map((t: any, i: number) => <HookCard key={t.url} t={t} rank={i + 1} perf={perf} platform={p} />)}</div>
+        </section>); })()}
       <BrandWall header={header} timeline={timeline} why={whyMap} pitchFor={sp.pitch || null} cards={cards} creator={{ id: creator.id, handle: creator.handle, platform: p, displayName: creator.display_name || creator.handle }} signedIn={!!user} roster={(roster || []) as RosterCreator[]} />
         </>
       )}
