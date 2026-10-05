@@ -5,6 +5,7 @@ import { track } from "@/lib/track";
 // POST { rosterCreatorId } -> queue a neighborhood find (3 adjacent creators, printed free).
 // GET  ?id=... -> status + candidates + live print status for each.
 export async function POST(req: NextRequest) {
+  if (process.env.NEIGHBORHOODS_PAUSED === "1") return NextResponse.json({ error: "Neighborhoods are paused for the moment" }, { status: 503 });
   const profile = await currentProfile();
   if (!profile) return NextResponse.json({ error: "Sign in" }, { status: 401 });
   const { rosterCreatorId, creatorId } = await req.json().catch(() => ({}));

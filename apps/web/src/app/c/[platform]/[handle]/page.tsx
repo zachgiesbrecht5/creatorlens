@@ -101,7 +101,7 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
             {user && <div className="pw-actions" data-tour="actions">
               {!active && <Reprint platform={p} handle={creator.handle} />}
               <WatchButton platform={p} handle={creator.handle} initial={watching} roster={(roster || []).map((r) => ({ id: r.id, name: r.name }))} initialFor={watchFor} />
-              <NeighborsButton creatorId={creator.id} />
+              <NeighborsButton creatorId={creator.id} paused={process.env.NEIGHBORHOODS_PAUSED === "1"} />
               {unlocked && <a href={`/api/print/pdf?platform=${p}&handle=${encodeURIComponent(creator.handle)}`} className="btn-like" title="PDF with recurring sponsors, every disclosed deal, and clickable links to the posts">download PDF ↓</a>}
             </div>}
             {user && (missing.length > 0 || neighbors.length > 0) && <Missing missing={missing} neighbors={neighbors} lane={creator.category || "this lane"} creatorId={creator.id} platform={p} />}

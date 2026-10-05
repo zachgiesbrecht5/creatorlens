@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-export function NeighborsButton({ creatorId }: { creatorId: string }) {
+export function NeighborsButton({ creatorId, paused = false }: { creatorId: string; paused?: boolean }) {
+  if (paused) return <span className="text-dim" title="Neighborhoods are paused for the moment">neighbors ◎ paused</span>;
   const [busy, setBusy] = useState(false);
   const router = useRouter();
   return (

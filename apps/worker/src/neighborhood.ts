@@ -30,6 +30,7 @@ function extractCandidates(text: string): { handle: string; why: string }[] {
 }
 
 export async function runNeighborhoods(sb: SupabaseClient, limit = 1): Promise<number> {
+  if (process.env.NEIGHBORHOODS_PAUSED === "1") return 0;   // temporary switch: jobs wait in the queue
   const { data: jobs } = await sb.from("neighborhoods").select("id,user_id,roster_creator_id,creator_id,exclude").eq("status", "queued").order("created_at").limit(limit);
   if (!jobs?.length) return 0;
   for (const j of jobs) {

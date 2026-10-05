@@ -13,7 +13,7 @@ export function HoodView({ hoodId: initial, seed }: { hoodId: string; seed: { na
   async function again() {
     if (!seed?.creatorId) return;
     const r = await fetch("/api/neighborhood?again=1", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ creatorId: seed.creatorId }) });
-    const j = await r.json().catch(() => ({})); if (r.ok) setStartId(j.id); else if (r.status === 402) window.location.href = "/pricing?need=neighborhoods";
+    const j = await r.json().catch(() => ({})); if (r.ok) setStartId(j.id); else if (r.status === 402) window.location.href = "/pricing?need=neighborhoods"; else if (r.status === 503) alert(j.error || "Neighborhoods are paused for the moment");
   }
   return (
     <div>
