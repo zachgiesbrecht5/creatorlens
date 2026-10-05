@@ -27,6 +27,13 @@ let inFlight = 0;
 const brandKey = (name: string) => name.toLowerCase().replace(/^@/, "").replace(/[^a-z0-9]/g, "");
 // Strip lone UTF-16 surrogates (an emoji cut in half by slice()) and null bytes; Postgres
 // rejects the whole batch as "invalid input syntax for type json" otherwise.
+// deep version for jsonb payloads (performance): every string inside gets the same treatment
+function cleanDeep<T>(v: T): T {
+  if (typeof v === "string") return cleanText(v);
+  if (Array.isArray(v)) return v.map(cleanDeep) as unknown as T;
+  if (v && typeof v === "object") { const o: any = {}; for (const [k, x] of Object.entries(v as any)) o[k] = cleanDeep(x); return o; }
+  return v;
+}
 function cleanText<T>(v: T): T {
   if (typeof v !== "string") return v;
   return (v as string).replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "").replace(/(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "$1").replace(/\u0000/g, "") as unknown as T;
@@ -148,7 +155,8 @@ async function persist(job: any, result: ScanResult) {
     classifyCreator(sb, creator.id, true).then(() => explainCreatorDeals(sb, creator.id)).catch((e: any) => log("enrich failed", e?.message));
     if (result.mentions?.length) await sb.from("creators").update({ mentions: result.mentions }).eq("id", creator.id);
     if (result.performance) {
-      await sb.from("creators").update({ performance: result.performance }).eq("id", creator.id);
+      result.performance = cleanDeep(result.performance);
+      { const { error: perr } = await sb.from("creators").update({ performance: result.performance }).eq("id", creator.id); if (perr) log("performance save failed", result.creator.handle, perr.message); }
       const pf = result.performance;
       await sb.from("performance_snapshots").insert({ creator_id: creator.id, followers: result.creator.followers || null, items: pf.items, median: pf.median, metric_label: pf.metric_label, top: pf.top.slice(0, 5).map((t) => ({ title: t.title.slice(0, 120), url: t.url, published_at: t.published_at, metric: t.metric, kind: t.kind, hook: t.hook, sponsored: t.sponsored })), hooks: pf.hooks, formats: pf.formats }).then(() => {});
       // spoken hooks (Deepgram) and cover/frame reads (Anthropic) are independent; neither blocks the other
