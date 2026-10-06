@@ -10,6 +10,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import ffmpegStatic from "ffmpeg-static";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordSpend, optionalBudgetOpen, noteModelError } from "./spend";
+import { fetchIgCreator, IgRateLimitError, type IgToken } from "@creatorlens/engine";
 
 const MODEL = process.env.ANTHROPIC_COVERS_MODEL || "claude-haiku-4-5";
 const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "PASTE_ME" ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
@@ -158,4 +159,48 @@ export async function readHooks(sb: SupabaseClient, creatorId: string): Promise<
   await sb.from("creators").update({ performance: { ...perf, top: [...top, ...(perf.top || []).slice(6)] } }).eq("id", creatorId);
   log(creatorId, "spoken hooks", n, "of", todo.length);
   return n;
+}
+
+/** Backfill. Prints made before the hook/cover race fix (Oct 5 2026) kept "audio: null" on their top
+ *  reels, so the print says "Not checked yet" for two weeks. For a few creators per run: fetch fresh
+ *  media URLs from Meta (CDN links were dropped on purpose), put them back on the top posts, and run
+ *  readHooks. Also catches any creator whose hooks pass failed outright. */
+const BACKFILL_PER_RUN = Number(process.env.HOOKS_BACKFILL_PER_RUN || 4);
+export async function hooksBackfill(sb: SupabaseClient, tokenFn: () => Promise<IgToken | null>): Promise<number> {
+  if (!DEEPGRAM && !OPENAI) return 0;
+  // candidates: Instagram creators printed in the last 14 days whose top-6 has a reel with no audio verdict
+  const { data: cs } = await sb.from("creators").select("id,handle,performance").eq("platform", "instagram").gte("last_scanned_at", new Date(Date.now() - 14 * 864e5).toISOString()).not("performance", "is", null).order("last_scanned_at", { ascending: false }).limit(400);
+  const needs = (cs || []).filter((c) => ((c.performance as any)?.top || []).slice(0, 6).some((t: any) => /reel|video|clip/i.test(String(t.kind || "")) && t.audio == null && !t.hooks_backfilled)).slice(0, BACKFILL_PER_RUN);
+  if (!needs.length) return 0;
+  let done = 0;
+  for (const c of needs) {
+    const perf = c.performance as any;
+    const top: any[] = perf.top || [];
+    const tok = await tokenFn();
+    if (!tok) { log("backfill: no Instagram token; stopping"); break; }
+    try {
+      const { posts } = await fetchIgCreator(tok, c.handle, 60, 50);
+      const byUrl = new Map(posts.map((p) => [p.permalink.replace(/\/$/, ""), p]));
+      let refreshed = 0;
+      for (const t of top.slice(0, 6)) {
+        if (t.audio != null) continue;
+        t.hooks_backfilled = true;
+        const p = byUrl.get(String(t.url || "").replace(/\/$/, ""));
+        if (p) { t.video = p.video || null; if (!t.cover) t.cover = p.cover || null; refreshed++; }
+        // not in Meta's recent media any more: we can't listen, and it's not a licensed-audio case either
+        else if (/reel|video|clip/i.test(String(t.kind || ""))) { t.audio = "unread"; t.spoken = ""; }
+      }
+      // write the refreshed links first; readHooks re-reads, listens, and drops the CDN links again
+      await sb.from("creators").update({ performance: { ...perf, top } }).eq("id", c.id);
+      const n = refreshed ? await readHooks(sb, c.id) : 0;
+      log("backfill", c.handle, refreshed, "posts refreshed,", n, "spoken");
+      done++;
+    } catch (e: any) {
+      if (e instanceof IgRateLimitError) { log("backfill: Instagram rate limit; will resume"); break; }
+      log("backfill failed", c.handle, String(e?.message || e).slice(0, 120));
+      for (const t of top.slice(0, 6)) if (t.audio == null) t.hooks_backfilled = true;
+      await sb.from("creators").update({ performance: { ...perf, top } }).eq("id", c.id).then(() => {}, () => {});
+    }
+  }
+  return done;
 }
