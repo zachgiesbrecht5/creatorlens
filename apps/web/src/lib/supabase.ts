@@ -51,6 +51,9 @@ export async function currentProfile() {
 export async function currentAccess() {
   const profile = await currentProfile();
   if (!profile) return { profile: null, insider: false, admin: false };
+  // Roster creators sign in with @rootforgroup.com addresses, which the house trigger files into the
+  // house org. They are never insiders: brand names yes, contacts / pitch history / queue no.
+  if (profile.role === "creator") return { profile, insider: false, admin: false };
   if (profile.plan === "admin") return { profile, insider: true, admin: true };
   if (!profile.org_id) return { profile, insider: false, admin: false };
   const { data: org } = await supabaseAdmin().from("orgs").select("is_house").eq("id", profile.org_id).maybeSingle();
@@ -76,7 +79,13 @@ export async function canSeeCreator(userId: string | null, seesAll: boolean, cre
   if (pub?.is_public) return true;
   const handles = [creator.handle.toLowerCase(), (creator.external_id || "").toLowerCase()].filter(Boolean);
   const { data } = await admin.from("creator_access").select("handle").eq("user_id", userId).eq("platform", creator.platform).in("handle", handles).limit(1);
-  return !!data?.length;
+  if (data?.length) return true;
+  // a roster creator sees their own print and anyone in their lane (watched under their roster row by them or their manager)
+  const { data: mine } = await admin.from("roster_creators").select("id,handle,platform").eq("creator_user_id", userId);
+  if (!mine?.length) return false;
+  if (mine.some((r) => r.platform === creator.platform && String(r.handle || "").replace(/^@/, "").toLowerCase() === creator.handle.toLowerCase())) return true;
+  const { data: lane } = await admin.from("watchlist").select("id").in("roster_creator_id", mine.map((r) => r.id)).eq("platform", creator.platform).ilike("handle", creator.handle).limit(1);
+  return !!lane?.length;
 }
 
 export async function grantCreatorAccess(userId: string, platform: string, handle: string) {
