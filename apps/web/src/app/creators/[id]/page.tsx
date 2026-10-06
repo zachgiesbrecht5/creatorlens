@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LaneHooks, LaneRoster } from "@/components/LaneHooks";
 import { redirect } from "next/navigation";
 import { currentProfile, supabaseAdmin } from "@/lib/supabase";
 import { PrintTimeline, type TL } from "@/components/PrintTimeline";
@@ -132,7 +133,8 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
               ))}
             </div>
             <div className="space-y-4">
-              <div className="card p-4"><div className="label mb-2">Hooks that work in the lane</div>{digest.hooks.length ? <ul className="space-y-1 text-[13px]">{digest.hooks.map((h) => <li key={h.hook} className="flex justify-between gap-3"><span>"{h.hook}"</span><span className="num text-[11px] text-muted">{h.count} posts · avg {fmtK2(h.avg)}</span></li>)}</ul> : <div className="text-[12.5px] text-muted">Shapes appear once a few watched prints have landed.</div>}</div>
+              <LaneHooks hooks={digest.hooks} note={digest.note} />
+              <LaneRoster creators={digest.creators} />
               <div className="card p-4"><div className="label mb-2">New sponsors in the lane</div>{digest.newBrands.length ? <ul className="space-y-1 text-[13px]">{digest.newBrands.slice(0, 8).map((b, i) => <li key={i} className="flex justify-between gap-3"><span>{b.brand_id ? <Link href={`/brands/${b.brand_id}`} className="font-medium hover:text-accent">{b.brand}</Link> : <span className="font-medium">{b.brand}</span>} <span className="text-muted">paid {b.creator}</span></span><span className="num text-[11px] text-muted">{new Date(b.when).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span></li>)}</ul> : <div className="text-[12.5px] text-muted">None flagged in the last 30 days.</div>}</div>
             </div>
           </div>

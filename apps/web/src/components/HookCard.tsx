@@ -1,13 +1,14 @@
 import { readHook } from "@/lib/hook-read";
+import { SoundToggle } from "./SoundToggle";
 
 const fmtN = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
 const SRC: Record<string, string> = { said: "bg-[#2f5bff] text-white", "on-video": "bg-[#6b38c7] text-white", "on-cover": "bg-[#6b38c7] text-white", caption: "bg-[#5b6472] text-white" };
 
 /** One top post: the number, the opening a viewer actually gets (tagged by source), then the other channels with plain empty states. */
-export function HookCard({ t, rank, perf, platform }: { t: any; rank: number; perf: any; platform: string }) {
+export function HookCard({ t, rank, perf, platform, creatorId }: { t: any; rank: number; perf: any; platform: string; creatorId?: string }) {
   const h = readHook(t, platform);
   const leadKey = h.source === "said" ? "voice" : h.source === "caption" ? "caption" : "screen";
-  const noTalk = h.audio === "music" || h.audio === "no-voice" || h.audio === "silent";
+  const noTalk = h.audio === "music" || h.audio === "no-voice" || h.audio === "silent" || h.audio === "sound";
   return (
     <a href={t.url} target="_blank" rel="noreferrer" className={`flex items-start gap-3 rounded-lg border border-line border-l-[3px] p-3 hover:border-fg ${t.sponsored ? "border-l-[#0e6b45]" : ""}`}>
       <div className="num w-[72px] flex-none">
@@ -31,6 +32,7 @@ export function HookCard({ t, rank, perf, platform }: { t: any; rank: number; pe
             </div>
           ))}
         </dl>
+        {creatorId && (h.audio === "voice" || h.audio === "sound") && <SoundToggle creatorId={creatorId} url={t.url} isSound={h.audio === "sound"} />}
       </div>
     </a>
   );

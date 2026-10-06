@@ -39,6 +39,9 @@ export default async function Watchlist({ searchParams }: { searchParams: Promis
   const { data: creators } = handles.length ? await admin.from("creators").select("platform,handle,display_name,avatar_url,followers,last_scanned_at").or(handles.map((h) => `handle.ilike.${h}`).join(",")) : { data: [] };
   const cr = (p: string, h: string) => (creators || []).find((c) => c.platform === p && c.handle.toLowerCase() === h.toLowerCase());
   const unseen = eventsShown.filter((e) => !e.seen);
+  // what the creators themselves did in their portal: follows and unfollows in the last 30 days
+  const { data: actsRaw } = await admin.from("events").select("id,name,props,created_at").in("user_id", members).in("name", ["creator_followed", "creator_unfollowed"]).gte("created_at", new Date(Date.now() - 30 * 864e5).toISOString()).order("created_at", { ascending: false }).limit(40);
+  const acts = (actsRaw || []).filter((a) => matches(norm((a.props as any)?.roster_creator_id)));
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-6 flex items-end justify-between gap-4">
@@ -52,6 +55,17 @@ export default async function Watchlist({ searchParams }: { searchParams: Promis
 
       <div className="mb-4"><WatchAdd roster={rosterList.map((r) => ({ id: r.id, name: r.name }))} defaultFor={filterFor !== "all" && filterFor !== "none" ? filterFor : ""} /></div>
       <WatchFilter roster={rosterList.map((r) => ({ id: r.id, name: r.name, avatar: r.avatar_url }))} counts={counts} active={filterFor} />
+      {acts.length > 0 && (
+        <div className="card mb-6 p-4">
+          <div className="label mb-2">From your creators</div>
+          <ul className="space-y-1.5">{acts.map((a) => { const pr = a.props as any; return (
+            <li key={a.id} className="flex items-baseline justify-between gap-3 text-[13px]">
+              <span><b>{pr.creator}</b> {a.name === "creator_followed" ? "started following" : "unfollowed"} <Link href={`/c/${pr.platform}/${pr.handle}`} className="font-medium hover:text-accent">{pr.name || `@${pr.handle}`}</Link>{a.name === "creator_followed" ? " in their lane" : ""}</span>
+              <span className="num shrink-0 text-[10.5px] text-dim">{new Date(a.created_at).toLocaleDateString()}</span>
+            </li>); })}</ul>
+          <div className="mt-2 text-[11px] text-dim">Their follows feed the lane you both see. Unfollowing one of your picks isn't possible on their side.</div>
+        </div>
+      )}
       {eventsShown.length > 0 && (
         <div className="card mb-8 divide-y divide-line">
           {eventsShown.map((e) => {

@@ -5,7 +5,7 @@
 // so nobody has to open the post to learn whether a line was spoken, sung,
 // typed on screen, or only lives in the caption.
 
-export type Audio = "voice" | "music" | "silent" | "no-voice" | "unread" | "no-audio" | "nofile";
+export type Audio = "voice" | "music" | "silent" | "no-voice" | "unread" | "no-audio" | "nofile" | "sound";
 export type Source = "said" | "on-video" | "on-cover" | "caption";
 export type Channel = { key: "voice" | "screen" | "caption"; label: string; text: string | null; empty: string | null };
 export type HookRead = { source: Source; sourceLabel: string; lead: string; audio: Audio; audioLabel: string; channels: Channel[] };
@@ -21,7 +21,7 @@ export function readHook(t: any, platform: string): HookRead {
   const lyrics = clean(t.lyrics);
   // audio: the worker's verdict when present; older prints only know "" (nothing transcribed) vs null (never listened)
   let audio: Audio;
-  if (t.audio === "voice" || t.audio === "music" || t.audio === "silent" || t.audio === "unread" || t.audio === "nofile") audio = t.audio;
+  if (t.audio === "voice" || t.audio === "music" || t.audio === "silent" || t.audio === "unread" || t.audio === "nofile" || t.audio === "sound") audio = t.audio;
   else if (spoken) audio = "voice";
   else if (spoken === "") audio = "no-voice";
   else audio = platform === "youtube" || !String(t.kind || "").match(/reel|video|clip/i) ? "no-audio" : "unread";
@@ -34,6 +34,7 @@ export function readHook(t: any, platform: string): HookRead {
     "no-voice": "NO TALKING",
     unread: "AUDIO NOT CHECKED",
     nofile: "NO VIDEO FILE (LICENSED AUDIO)",
+    sound: "TRENDING SOUND, NOT THEM",
     "no-audio": "",
   }[audio];
 
@@ -50,6 +51,7 @@ export function readHook(t: any, platform: string): HookRead {
     : audio === "silent" ? "No sound in the first seconds."
     : audio === "no-voice" ? "Nobody talks in the first 6 seconds (music or silence)."
     : audio === "nofile" ? "No video file from Instagram (licensed audio); caption and cover only."
+    : audio === "sound" ? (lyrics ? `A reused sound, not them talking. It says: "${lyrics}"` : "A reused sound, not them talking.")
     : audio === "unread" ? "Not checked yet."
     : platform === "youtube" ? "Not available for YouTube." : "Photo post, no audio.";
   const screenEmpty = t.on_video === "" || t.on_screen === "" ? "No text on screen." : "Not read yet.";
@@ -68,7 +70,7 @@ export function hookMix(top: any[], platform: string): string | null {
   if (!reads.length) return null;
   const n = reads.length;
   const talk = reads.filter((r) => r.source === "said").length;
-  const noTalk = reads.filter((r) => r.audio === "music" || r.audio === "no-voice" || r.audio === "silent").length;
+  const noTalk = reads.filter((r) => r.audio === "music" || r.audio === "no-voice" || r.audio === "silent" || r.audio === "sound").length;
   const textLed = reads.filter((r) => r.source === "on-video" || r.source === "on-cover").length;
   const capOnly = reads.filter((r) => r.source === "caption").length;
   const parts: string[] = [];

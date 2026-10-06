@@ -156,6 +156,7 @@ export async function readHooks(sb: SupabaseClient, creatorId: string): Promise<
     }
   } finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
   for (const t of top) if (t.video) t.video = null;   // CDN links expire; never keep them
+  await markReusedSounds(sb, creatorId, top);
   await sb.from("creators").update({ performance: { ...perf, top: [...top, ...(perf.top || []).slice(6)] } }).eq("id", creatorId);
   log(creatorId, "spoken hooks", n, "of", todo.length);
   return n;
@@ -203,4 +204,25 @@ export async function hooksBackfill(sb: SupabaseClient, tokenFn: () => Promise<I
     }
   }
   return done;
+}
+
+/** A transcript that also appears on ANOTHER creator's reel is a trending sound, not this creator
+ *  talking (the same creator repeating a line is a repost, which stays "voice"). Also honours
+ *  `known_sounds`, the lines a manager has marked "not them talking" on a print. Marked
+ *  audio="sound" so the print stops calling it "said out loud"; the words move to `lyrics`. */
+export const soundKey = (t: string) => String(t || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim().split(" ").slice(0, 6).join(" ");
+async function markReusedSounds(sb: SupabaseClient, creatorId: string, top: any[]) {
+  const voiced = top.filter((t) => t.audio === "voice" && t.spoken && soundKey(t.spoken).split(" ").length >= 4);
+  if (!voiced.length) return;
+  const keys = [...new Set(voiced.map((t) => soundKey(t.spoken)))];
+  const [{ data: seen }, { data: known }] = await Promise.all([
+    sb.from("heard_lines").select("key").in("key", keys).neq("creator_id", creatorId).limit(200),
+    sb.from("known_sounds").select("key").in("key", keys),
+  ]);
+  const hit = new Set([...(seen || []).map((s) => s.key), ...(known || []).map((s) => s.key)]);
+  let flagged = 0;
+  for (const t of voiced) if (hit.has(soundKey(t.spoken))) { t.audio = "sound"; t.lyrics = t.spoken; t.spoken = ""; flagged++; }
+  const rows = voiced.map((t) => ({ key: soundKey(t.lyrics || t.spoken), creator_id: creatorId, url: t.url, text: String(t.lyrics || t.spoken).slice(0, 240) }));
+  await sb.from("heard_lines").upsert(rows, { onConflict: "key,url", ignoreDuplicates: true }).then(() => {}, () => {});
+  if (flagged) log(creatorId, "reused sounds", flagged);
 }

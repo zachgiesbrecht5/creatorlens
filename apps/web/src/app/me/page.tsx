@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LaneHooks, LaneRoster } from "@/components/LaneHooks";
 import { requireCreator } from "@/lib/creator-portal";
 import { supabaseAdmin } from "@/lib/supabase";
 import { laneDigest } from "@/lib/lane-digest";
@@ -61,7 +62,6 @@ export default async function CreatorHome() {
   const pulse = lastPulse ? parsePulse(lastPulse.body || "") : null;
   // the lane feed: thumbnails + hooks, source-tagged
   const feed = digest.posts.slice(0, 9);
-  const hookMax = Math.max(...digest.hooks.map((h) => h.avg), 1);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -127,12 +127,8 @@ export default async function CreatorHome() {
                 </a>
               ))}</div>
             )}
-            {digest.hooks.length > 0 && (
-              <div className="card mt-3 p-4">
-                <div className="num mb-2 text-[10.5px] tracking-[0.15em] text-muted">HOOK SHAPES WINNING IN THE LANE</div>
-                <div className="space-y-1.5">{digest.hooks.map((h) => <div key={h.hook} className="grid grid-cols-[150px_1fr_110px] items-center gap-3 text-[12.5px]"><span className="truncate font-medium">"{h.hook}"</span><div className="h-2 rounded-full bg-surface2"><div className="h-2 rounded-full" style={{ width: `${Math.max(4, (h.avg / hookMax) * 100)}%`, background: "#2E1B5B" }} /></div><span className="num text-right text-[10.5px] text-muted">{h.count} posts · avg {fmtK(h.avg)}</span></div>)}</div>
-              </div>
-            )}
+            <LaneHooks hooks={digest.hooks} note={digest.note} printHref={false} />
+            <LaneRoster creators={digest.creators} printHref={false} you={{ followers: me?.followers || r.followers || null, growth30: g30 != null ? g30 / 100 : g14 != null ? g14 / 100 : null, median: perf?.median ?? null }} />
           </section>
 
           {/* worth testing */}
