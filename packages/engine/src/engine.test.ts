@@ -166,3 +166,13 @@ describe("bare ad never invents a brand from a capitalized word", () => {
   it("marks the brand unclear when only prose follows", () => { const f = detectInstagram("Ad THIS is the best way to swaddle your newborn baby. The lovetodream swaddle is wild"); expect(f.length).toBeGreaterThan(0); expect(f[0].brand).not.toMatch(/swaddle \(\?\)/i); });
   it("still takes an @mention", () => { const f = detectInstagram("ad\nLoving my new @skims set"); expect(f[0].brand.toLowerCase()).toContain("skims"); });
 });
+
+describe("bare ad names the adjacent brand", () => {
+  const b = (t: string) => (detectInstagram(t)[0]?.brand || "").toLowerCase();
+  it("alo AD", () => { expect(b("in my softest state 🤎alo AD")).toContain("alo"); });
+  it("alo in new york || ad", () => { expect(b("alo in new york || ad")).toContain("alo"); });
+  it("aritzia ad", () => { expect(b("settling into fall with aritzia ad")).toContain("aritzia"); });
+  it("medicube_global_official AD", () => { expect(b("peel, glow, repeat! medicube_global_official AD")).toContain("medicube"); });
+  it("hmbeauty with hashtags before AD", () => { expect(b("scents that feel like memories hmbeauty #HMBeauty #HMFragrances AD")).toContain("hmbeauty"); });
+  it("does not take a stopword", () => { expect(b("so happy with my new shoes today ad")).not.toContain("today"); });
+});

@@ -247,9 +247,10 @@ export function detectInstagram(caption: string | null | undefined, ownHandle?: 
   if (!arr.length) {
     for (const e of evidences) {
       if (e.tier.score >= 8) {
-        // a bare "ad"/"AD" with no @mention or partner tag nearby: only trust a handle, never a capitalized word
+        // a bare "ad"/"AD": the brand is the word right next to it ("alo AD", "aritzia ad", "AD medicube").
+        // Instagram's API strips the @ from mentions, so that word is usually the brand handle in lowercase.
         const bare = /^(ad|this is an? ad|sponsored (?:post|content|ad)|paid (?:post|content|ad))$/i.test(String(e.match || "").trim().replace(/[-\u2013\u2014|:]+$/, "").trim());
-        const guess = guessBrand(text, e.index, bare);
+        const guess = (bare && adjacentBrand(text, e.index, e.length)) || guessBrand(text, e.index, bare);
         if (guess) {
           arr.push({ brand: guess + " (?)", type: "Paid - brand guessed (verify)", score: 5, label: "Medium", evidence: snip(e.index, e.length) });
         } else {
@@ -281,6 +282,22 @@ const GEN: Record<string, 1> = { the: 1, this: 1, that: 1, with: 1, from: 1, you
   watch: 1, video: 1, episode: 1, favourite: 1, favorite: 1 };
 
 /** Best-effort brand guess when explicit paid language exists but no brand matched. */
+const AD_STOP = new Set(["the","and","with","for","my","our","your","this","that","new","in","on","at","to","of","from","by","a","an","is","it","its","im","me","we","you","they","love","loving","thanks","thank","so","very","just","all","day","today","here","there","now","out","up","ad","paid","partner","partnership","sponsored","sponsor","gifted","collab","link","bio","code","use","get","shop","post","video","reel","story","york","city","tokyo","london","paris","la","nyc","fall","summer","winter","spring","life","vibes","mood","outfit","ootd","girl","girls","boy","boys","mom","dad","baby","home"]);
+const AD_SUFFIX = /[._-]+(official|global|us|usa|uk|ca|eu|hq|shop|store|co|official_)$/i;
+/** The word right before (or after) a bare ad marker, cleaned up as a brand name. "" when it's a stopword or junk. */
+export function adjacentBrand(text: string, idx: number, len: number): string {
+  const before = text.slice(0, idx).replace(/[\s|·•\-\u2013\u2014×x:]+$/i, "").replace(/#\w+\s*$/g, "").replace(/[\s|·•\-\u2013\u2014×x:]+$/i, "");
+  const after = text.slice(idx + len).replace(/^[\s|·•\-\u2013\u2014×x:]+/i, "");
+  const pick = (m: RegExpMatchArray | null) => {
+    if (!m) return "";
+    let w = m[1].toLowerCase().replace(AD_SUFFIX, "").replace(AD_SUFFIX, "");
+    if (w.length < 3 || AD_STOP.has(w) || GEN[w.replace(/[._]+/g, "")] || /^\d+$/.test(w)) return "";
+    return cap(w.replace(/[._]+/g, " "));
+  };
+  // last resort: the caption's first word ("alo in new york || ad")
+  const first = text.trim().replace(/^[^a-z0-9@]+/i, "").match(/^@?([a-z0-9][a-z0-9._]{2,30})\b/i);
+  return pick(before.match(/@?([a-z0-9][a-z0-9._]{2,30})$/i)) || pick(after.match(/^@?([a-z0-9][a-z0-9._]{2,30})\b/i)) || pick(first);
+}
 export function guessBrand(text: string, evIdx: number, handlesOnly = false): string {
   const cands: { name: string; idx: number; rank: number }[] = [];
 
