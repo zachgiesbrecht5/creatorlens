@@ -142,3 +142,14 @@ export async function recentVideoIds(apiKey: string, uploadsPlaylist: string, n 
   const json = await ytGet(apiKey, "playlistItems", { part: "contentDetails", playlistId: uploadsPlaylist, maxResults: String(n) }, meter);
   return (json.items || []).map((it: any) => it.contentDetails?.videoId).filter(Boolean);
 }
+
+/** Channel descriptions for up to 50 channel ids in one call (1 unit). Used to find
+ *  the creator's linked Instagram so a brand scan can print both platforms. */
+export async function channelDescriptions(apiKey: string, ids: string[], meter?: QuotaMeter): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 50) {
+    const json = await ytGet(apiKey, "channels", { part: "snippet", id: ids.slice(i, i + 50).join(","), maxResults: "50" }, meter);
+    for (const it of json.items || []) out.set(it.id, String(it.snippet?.description || ""));
+  }
+  return out;
+}

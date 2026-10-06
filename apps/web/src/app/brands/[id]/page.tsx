@@ -12,6 +12,8 @@ export const dynamic = "force-dynamic";
 import { BrandScan } from "@/components/BrandScan";
 import { windowStatus } from "@/lib/launches";
 import { track } from "@/lib/track";
+import { enrichScan } from "@/lib/brandscan";
+import { ShareBrand } from "@/components/ShareBrand";
 
 async function hiringFor(brandId: string) {
   const { data } = await supabaseAdmin().from("hiring_signals").select("id,title,seniority,url,posted_at,found_at,closed_at,summary").eq("brand_id", brandId).order("found_at", { ascending: false }).limit(3);
@@ -27,7 +29,9 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
   const { data: brand } = await admin.from("brands").select("*").eq("id", id).single();
   if (!brand) return <p>Brand not found.</p>;
   const hiring = await hiringFor(brand.id);
-  const { data: lastScan } = await supabaseAdmin().from("brand_scans").select("id,status,found,ig_pulse,error").eq("brand_id", brand.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const { data: rawScan } = await supabaseAdmin().from("brand_scans").select("id,status,found,ig_pulse,error,brand_id").eq("brand_id", brand.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const lastScan = rawScan ? await enrichScan(admin, rawScan as any) : null;
+  const { data: share } = await admin.from("brand_shares").select("token,views").eq("brand_id", brand.id).is("revoked_at", null).limit(1).maybeSingle();
   if (profile) track(profile.id, "brand_view", { brand_id: brand.id, brand: brand.name });
   let rowsQ = admin.from("brand_wall").select("*, creators(handle,display_name,platform,followers,avatar_url,category)").eq("brand_id", id).order("deals", { ascending: false });
   if (scope) rowsQ = rowsQ.in("creator_id", scope.length ? scope : ["00000000-0000-0000-0000-000000000000"]);
@@ -60,6 +64,7 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
             <Verticals v={brand.verticals} bar />
           </div>
         </div>
+        <div className="mt-5 border-t border-dashed border-line pt-4"><ShareBrand brandId={brand.id} initialToken={share?.token || null} views={share?.views || 0} /></div>
       </div>
 
 {(await (async () => { const { data: ls } = await admin.from("launch_signals").select("id,kind,product,summary,posted_at,url,spoken,on_video,window_start,window_end,repush_month").eq("brand_id", brand.id).order("posted_at", { ascending: false }).limit(6); return ls?.length ? (

@@ -14,7 +14,7 @@ export type Deal = {
 const W = 920, H = 340, PAD = { l: 56, r: 20, t: 20, b: 40 };
 const COLOR: Record<string, string> = { youtube: "#c4302b", instagram: "#b13589", tiktok: "#0b0d12" };
 
-export function BookingMap({ deals }: { deals: Deal[] }) {
+export function BookingMap({ deals, linkToPost = false }: { deals: Deal[]; linkToPost?: boolean }) {
   const [hover, setHover] = useState<number | null>(null);
   const pts = useMemo(() => deals.filter((d) => d.published_at && d.creator.followers).map((d) => ({ ...d, t: new Date(d.published_at).getTime(), f: Math.max(1000, d.creator.followers!) })), [deals]);
   if (pts.length < 2) return null;
@@ -71,7 +71,7 @@ export function BookingMap({ deals }: { deals: Deal[] }) {
           {pts.map((p, i) => {
             const on = hover === i;
             return (
-              <Link key={i} href={`/c/${p.platform}/${p.creator.handle}`}>
+              <Link key={i} href={linkToPost && p.content_url ? p.content_url : `/c/${p.platform}/${p.creator.handle}`} target={linkToPost ? "_blank" : undefined}>
                 <circle cx={x(p.t)} cy={y(p.f)} r={on ? 9 : 6.5} fill={COLOR[p.platform] || "#0b0d12"} fillOpacity={p.confidence_label === "High" ? 0.85 : 0.45}
                   stroke={p.repeat ? "#0b0d12" : "#fff"} strokeWidth={p.repeat ? 2 : 1.5} style={{ cursor: "pointer", transition: "r .12s" }}
                   onMouseEnter={() => setHover(i)} />
