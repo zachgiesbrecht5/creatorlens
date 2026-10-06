@@ -30,3 +30,24 @@ describe("pulseFrom", () => {
     expect(p.posts).toBe(1);
   });
 });
+
+import { openerKey, groupOpeners } from "./scan";
+describe("openers from the data", () => {
+  it("keys on the first words with numbers collapsed", () => {
+    expect(openerKey("I gave my 4 year old $10 to pick anything")).toBe("i gave my");
+    expect(openerKey("I gave my 4 year old $10", 5)).toBe(openerKey("I gave my 4 year old $15", 5));
+    expect(openerKey("How to Swaddle a Newborn 🍼👶🏽 (Day 1)", 3)).toBe("how to swaddle");
+  });
+  it("groups repeats, labels with the most common line, measures against the median", () => {
+    const g = groupOpeners([
+      { line: "I gave my 4 year old $10 to pick anything", metric: 660000 },
+      { line: "I gave my 4 year old $10 to buy anything", metric: 640000 },
+      { line: "I gave my 4 year old $15 to pick anything", metric: 172000 },
+      { line: "Doing this every day", metric: 147000 },
+    ], 1724);
+    expect(g).toHaveLength(1);
+    expect(g[0].count).toBe(3);
+    expect(g[0].label).toMatch(/^I gave my 4 year old/);
+    expect(g[0].mult).toBeGreaterThan(200);
+  });
+});

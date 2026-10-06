@@ -45,7 +45,8 @@ export interface ScanResult {
   performance?: Performance;
 }
 export interface TopPost { title: string; url: string; published_at: string; metric: number; metric_label: string; kind: string; hook: string; sponsored: boolean; cover?: string | null; on_screen?: string | null; video?: string | null; spoken?: string | null; on_video?: string | null; audio?: "voice" | "music" | "silent" | "unread" | null; lyrics?: string | null }
-export interface Performance { top: TopPost[]; median: number; metric_label: string; formats: { kind: string; count: number; avg: number }[]; hooks: { hook: string; count: number; avg: number }[]; window_days: number; items: number }
+export interface Opener { key: string; label: string; count: number; avg: number; mult: number | null; examples: string[] }
+export interface Performance { top: TopPost[]; median: number; metric_label: string; formats: { kind: string; count: number; avg: number }[]; hooks: { hook: string; count: number; avg: number }[]; openers: Opener[]; window_days: number; items: number }
 
 // A one-line "hook": the first clause of a caption/title, trimmed to something a manager can quote.
 export const hookOf = (t: string) => { const first = String(t || "").split(/\r?\n/).map((l) => l.trim()).find((l) => l.length > 0) || ""; return first.replace(/\s+/g, " ").split(/(?<=[.!?])\s|\s\|\s/)[0].trim().slice(0, 90); };
@@ -61,6 +62,30 @@ export const hookShape = (t: string) => {
   if (/^i |^we /.test(h)) return "First person";
   return "Other";
 };
+/** The opening in the creator's own words, reduced to a comparable key: first N words, lowercased,
+ *  emoji and punctuation stripped, numbers collapsed to '#'. "I gave my 4 year old $10" and
+ *  "I gave my 4 year old $15" share a key; "How to Swaddle" and "How to Hold" do not. */
+export function openerKey(line: string, words = 3): string {
+  return String(line || "").toLowerCase().replace(/https?:\/\/\S+/g, " ").replace(/[^\p{L}\p{N}' ]+/gu, " ").replace(/\d+([.,]\d+)?/g, "#").replace(/\s+/g, " ").trim().split(" ").filter(Boolean).slice(0, words).join(" ");
+}
+
+/** Openings that repeat, grouped by their own first words rather than a fixed template. Each group is
+ *  labelled with its most common literal line and measured against the creator's median. */
+export function groupOpeners(rows: { line: string; metric: number }[], median: number, minCount = 2, words = 3): Opener[] {
+  const m = new Map<string, { count: number; sum: number; lines: Map<string, number> }>();
+  for (const r of rows) {
+    const k = openerKey(r.line, words); if (k.split(" ").length < 2) continue;
+    const e = m.get(k) || m.set(k, { count: 0, sum: 0, lines: new Map() }).get(k)!;
+    e.count++; e.sum += r.metric;
+    const lit = String(r.line || "").replace(/\s+/g, " ").trim().slice(0, 90); e.lines.set(lit, (e.lines.get(lit) || 0) + 1);
+  }
+  return [...m.entries()].filter(([, v]) => v.count >= minCount).map(([key, v]) => {
+    const ranked = [...v.lines.entries()].sort((a, b) => b[1] - a[1]);
+    const avg = Math.round(v.sum / v.count);
+    return { key, label: ranked[0][0], count: v.count, avg, mult: median >= 100 ? +(avg / median).toFixed(1) : null, examples: ranked.slice(0, 4).map(([l]) => l) };
+  }).sort((a, b) => (b.mult ?? 0) - (a.mult ?? 0) || b.avg - a.avg).slice(0, 12);
+}
+
 function summarizePerformance(items: { title: string; url: string; published_at: string; metric: number; kind: string; sponsored: boolean; cover?: string | null; video?: string | null }[], metric_label: string, windowDays: number): Performance {
   const sorted = [...items].sort((a, b) => b.metric - a.metric);
   const vals = sorted.map((i) => i.metric).sort((a, b) => a - b);
@@ -71,6 +96,7 @@ function summarizePerformance(items: { title: string; url: string; published_at:
     median, metric_label, window_days: windowDays, items: items.length,
     formats: by((i) => i.kind).map((x) => ({ kind: x.k, count: x.count, avg: x.avg })),
     hooks: by((i) => hookShape(i.title)).filter((x) => x.count >= 2 && x.k !== "Other").map((x) => ({ hook: x.k, count: x.count, avg: x.avg })),
+    openers: groupOpeners(items.map((i) => ({ line: hookOf(i.title), metric: i.metric })), median),
   };
 }
 

@@ -133,7 +133,7 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
               ))}
             </div>
             <div className="space-y-4">
-              <LaneHooks hooks={digest.hooks} note={digest.note} />
+              <LaneHooks openers={digest.openers} note={digest.note} />
               <LaneRoster creators={digest.creators} />
               <div className="card p-4"><div className="label mb-2">New sponsors in the lane</div>{digest.newBrands.length ? <ul className="space-y-1 text-[13px]">{digest.newBrands.slice(0, 8).map((b, i) => <li key={i} className="flex justify-between gap-3"><span>{b.brand_id ? <Link href={`/brands/${b.brand_id}`} className="font-medium hover:text-accent">{b.brand}</Link> : <span className="font-medium">{b.brand}</span>} <span className="text-muted">paid {b.creator}</span></span><span className="num text-[11px] text-muted">{new Date(b.when).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span></li>)}</ul> : <div className="text-[12.5px] text-muted">None flagged in the last 30 days.</div>}</div>
             </div>

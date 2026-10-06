@@ -142,7 +142,7 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
         <section className="mx-auto mt-6 max-w-5xl">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
             <div><div className="label">What's performing</div><div className="text-[13px] text-muted">Best {Math.min(6, perf.top.length)} of {perf.items} posts · median {perf.median >= 1e3 ? `${Math.round(perf.median / 1e3)}K` : perf.median} {perf.metric_label}. The bold line is what a viewer hears or sees first; the rows under it show the other channels.</div></div>
-            {hooks.length > 0 && <div className="num text-[11px] text-muted">openers that work: {hooks.map((h: any) => `"${h.hook}" ×${h.count}`).join(" · ")}</div>}
+            {(perf.openers?.length ? <div className="num text-[11px] text-muted">openings they repeat: {(perf.openers as any[]).slice(0, 4).map((o) => `"${o.label}" ×${o.count}${o.mult ? ` (${o.mult}x median)` : ""}`).join(" · ")}</div> : hooks.length > 0 ? <div className="num text-[11px] text-muted">openers that work: {hooks.map((h: any) => `"${h.hook}" ×${h.count}`).join(" · ")}</div> : null)}
           </div>
           <div className="grid gap-2 md:grid-cols-2">{perf.top.slice(0, 6).map((t: any, i: number) => <HookCard key={t.url} t={t} rank={i + 1} perf={perf} platform={p} creatorId={isHouse ? creator.id : undefined} />)}</div>
         </section>); })()}

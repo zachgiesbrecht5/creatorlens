@@ -1,35 +1,37 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import type { LaneHook, LaneCreator } from "@/lib/lane-digest";
+import type { LaneHook, LaneCreator, LaneOpener } from "@/lib/lane-digest";
 
 const fmtK = (n: number | null | undefined) => (n == null ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
 const d = (s: string | null) => (s ? new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
 const pct = (g: number | null) => (g == null ? null : `${g >= 0 ? "+" : ""}${(g * 100).toFixed(1)}%`);
 
-/** Hook shapes winning in the lane: each bar is the average multiple of the creator's OWN median
- *  (size-neutral). Click a row to see the posts behind it and the line that was said. */
-export function LaneHooks({ hooks, note, printHref = true }: { hooks: LaneHook[]; note: string; printHref?: boolean }) {
+/** Openings that repeat in the lane, in the creators' own words: grouped by the first words of what's
+ *  said (or the caption when there's no audio), no preset categories. Each bar is the average multiple of
+ *  the creator's OWN median (size-neutral). Click a row to see the posts behind it. */
+export function LaneHooks({ hooks, openers, note, printHref = true }: { hooks?: LaneHook[]; openers: LaneOpener[]; note: string; printHref?: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
-  const max = Math.max(...hooks.map((h) => h.mult ?? 0), 1);
-  if (!hooks.length) return null;
+  const rows = openers.map((o) => ({ id: o.key, label: o.label, mult: o.mult, avg: o.avg, posts: o.posts, creators: o.creators, examples: o.examples, said: o.said }));
+  const max = Math.max(...rows.map((h) => h.mult ?? 0), 1);
+  if (!rows.length) return null;
   return (
     <div className="card mt-3 p-4">
-      <div className="num mb-0.5 text-[10.5px] tracking-[0.15em] text-muted">HOOK SHAPES WINNING IN THE LANE</div>
-      <div className="mb-3 text-[11.5px] text-muted">Bar = how far posts with this opener beat their own creator's median, on average. Click one to see the posts.</div>
+      <div className="num mb-0.5 text-[10.5px] tracking-[0.15em] text-muted">OPENINGS THAT REPEAT IN THE LANE</div>
+      <div className="mb-3 text-[11.5px] text-muted">Grouped by the first words actually said or written, not a template. Bar = how far posts with this opening beat their own creator's median. Click one to see the posts.</div>
       <div className="space-y-1">
-        {hooks.map((h) => {
-          const on = open === h.hook;
+        {rows.map((h) => {
+          const on = open === h.id;
           return (
-            <div key={h.hook}>
-              <button onClick={() => setOpen(on ? null : h.hook)} className="grid w-full grid-cols-[150px_1fr_150px] items-center gap-3 rounded-md px-1 py-1 text-left text-[12.5px] hover:bg-surface2" aria-expanded={on}>
-                <span className="truncate font-medium">"{h.hook}"</span>
+            <div key={h.id}>
+              <button onClick={() => setOpen(on ? null : h.id)} className="grid w-full grid-cols-[220px_1fr_150px] items-center gap-3 rounded-md px-1 py-1 text-left text-[12.5px] hover:bg-surface2" aria-expanded={on}>
+                <span className="truncate font-medium" title={h.label}>"{h.label}"{h.said && <span className="num ml-1.5 rounded bg-[#2f5bff] px-1 text-[9px] font-bold text-white">SAID</span>}</span>
                 <div className="h-2 rounded-full bg-surface2"><div className="h-2 rounded-full" style={{ width: `${Math.max(4, ((h.mult ?? 0) / max) * 100)}%`, background: on ? "#2f5bff" : "#2E1B5B" }} /></div>
                 <span className="num text-right text-[10.5px] text-muted" title={`raw average ${fmtK(h.avg)}`}>{h.mult != null ? `${h.mult}x median` : `avg ${fmtK(h.avg)}`} · {h.posts} posts · {h.creators} creator{h.creators === 1 ? "" : "s"}</span>
               </button>
               {on && (
                 <div className="mb-2 ml-1 mt-1 rounded-md border border-line bg-surface p-3">
-                  {h.examples.length === 0 ? <div className="text-[12px] text-muted">None of these posts made a creator's top 10, so there's nothing to show yet. The shape is counted from all {h.posts} posts in their captions.</div> : (
+                  {h.examples.length === 0 ? <div className="text-[12px] text-muted">None of these posts made a creator's top 10, so there's nothing to show yet. The opening is counted from all {h.posts} posts in their captions.</div> : (
                     <>
                       <div className="num mb-1.5 text-[10px] uppercase tracking-wide text-muted">Best examples in the lane</div>
                       <ul className="space-y-1.5">{h.examples.map((p) => (

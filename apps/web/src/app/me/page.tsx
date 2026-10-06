@@ -127,7 +127,7 @@ export default async function CreatorHome() {
                 </a>
               ))}</div>
             )}
-            <LaneHooks hooks={digest.hooks} note={digest.note} />
+            <LaneHooks openers={digest.openers} note={digest.note} />
             <LaneRoster creators={digest.creators} you={{ followers: me?.followers || r.followers || null, growth30: g30 != null ? g30 / 100 : g14 != null ? g14 / 100 : null, median: perf?.median ?? null }} />
           </section>
 
