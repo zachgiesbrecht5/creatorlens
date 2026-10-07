@@ -5,6 +5,8 @@ import { PrinterMachine } from "@/components/PrinterMachine";
 import type { TL } from "@/components/PrintTimeline";
 import { Reprint } from "@/components/Reprint";
 import { WatchButton } from "@/components/WatchButton";
+import { LaneFollowButton } from "@/components/LaneFollowButton";
+import { portalViewer } from "@/lib/creator-portal";
 import { NeighborsButton } from "@/components/NeighborsButton";
 import { Tour } from "@/components/Tour";
 import { PRINT_TOUR } from "@/components/tours";
@@ -51,6 +53,9 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
   const { data: watchRow } = user ? await admin.from("watchlist").select("handle,roster_creator_id").eq("user_id", user.id).eq("platform", p).eq("handle", creator.handle.toLowerCase()).maybeSingle() : { data: null };
   const watching = !!watchRow;
   const watchFor = watchRow?.roster_creator_id || null;
+  // a creator (or a manager previewing one) gets their own lane button, not the manager's watch control
+  const viewer = user ? await portalViewer() : null;
+  const laneRow = viewer ? (await admin.from("watchlist").select("added_by").eq("roster_creator_id", viewer.roster.id).eq("platform", p).ilike("handle", creator.handle).maybeSingle()).data : null;
   // the map: every dated deal by brand, plus the "why then" lines
   const [{ data: dealMonths }, { data: insights }] = await Promise.all([
     admin.from("partnerships").select("brand_id,published_at").eq("creator_id", creator.id).neq("status", "rejected").not("published_at", "is", null).limit(1000),
@@ -106,8 +111,9 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
             </div>
             {user && <div className="pw-actions" data-tour="actions">
               {!active && <Reprint platform={p} handle={creator.handle} />}
-              <WatchButton platform={p} handle={creator.handle} initial={watching} roster={(roster || []).map((r) => ({ id: r.id, name: r.name }))} initialFor={watchFor} />
-              <NeighborsButton creatorId={creator.id} paused={process.env.NEIGHBORHOODS_PAUSED === "1"} />
+              {viewer ? <LaneFollowButton platform={p} handle={creator.handle} initial={!!laneRow} addedBy={laneRow?.added_by || null} firstName={String(viewer.roster.name || "").split(" ")[0]} />
+                : <WatchButton platform={p} handle={creator.handle} initial={watching} roster={(roster || []).map((r) => ({ id: r.id, name: r.name }))} initialFor={watchFor} />}
+              {!viewer && <NeighborsButton creatorId={creator.id} paused={process.env.NEIGHBORHOODS_PAUSED === "1"} />}
               {unlocked && active && <span className="btn-like opacity-50" title="Re-printing; the PDF updates when the new print lands">download PDF ↓</span>}
               {unlocked && !active && <a href={`/api/print/pdf?platform=${p}&handle=${encodeURIComponent(creator.handle)}`} className="btn-like" title="PDF with recurring sponsors, every disclosed deal, and clickable links to the posts">download PDF ↓</a>}
             </div>}

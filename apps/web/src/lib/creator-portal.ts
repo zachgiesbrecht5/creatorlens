@@ -24,6 +24,24 @@ export async function creatorContext() {
 
 /** Guard for /me pages: creators only, portal on; everyone else goes home.
  *  Managers can preview a creator's page with ?as=<rosterCreatorId> (cookie-backed so links inside the preview keep working). */
+/** Like requireCreator but never redirects: the creator's roster row when the viewer is a creator (or a
+ *  manager previewing one), else null. For pages and APIs that behave differently for creators. */
+export async function portalViewer(): Promise<{ profile: any; roster: any; enabled: boolean; preview: boolean } | null> {
+  const { cookies } = await import("next/headers");
+  const jar = await cookies();
+  const previewId = jar.get("sp_preview_as")?.value || null;
+  if (previewId) {
+    const profile = await currentProfile();
+    if (profile) {
+      const admin = supabaseAdmin();
+      const { data: r } = await admin.from("roster_creators").select("*").eq("id", previewId).maybeSingle();
+      if (r && (r.user_id === profile.id || (profile.org_id && r.org_id === profile.org_id) || profile.plan === "admin")) return { profile, roster: r, enabled: true, preview: true };
+    }
+  }
+  const ctx = await creatorContext();
+  return ctx ? { ...ctx, preview: false } : null;
+}
+
 export async function requireCreator(asId?: string | null) {
   const { cookies } = await import("next/headers");
   const jar = await cookies();

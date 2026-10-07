@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { creatorContext } from "@/lib/creator-portal";
+import { portalViewer } from "@/lib/creator-portal";
 import { supabaseAdmin } from "@/lib/supabase";
 import { track, alert } from "@/lib/track";
 
 // Creators follow creators in their own lane. Stored on the manager's watchlist, filed under this roster row, marked added_by=creator.
 export async function POST(req: NextRequest) {
-  const ctx = await creatorContext(); if (!ctx || !ctx.enabled) return NextResponse.json({ error: "Not available" }, { status: 403 });
+  const ctx = await portalViewer(); if (!ctx || !ctx.enabled) return NextResponse.json({ error: "Not available" }, { status: 403 });
   const { platform, handle: raw } = await req.json().catch(() => ({}));
   const handle = String(raw || "").trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?(instagram\.com|youtube\.com)\//, "").replace(/\/.*$/, "").toLowerCase();
   if (!handle || !["instagram", "youtube"].includes(platform)) return NextResponse.json({ error: "Enter a handle" }, { status: 400 });
@@ -22,10 +22,18 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, handle, name: known?.display_name || null, avatar: known?.avatar_url || null, followers: known?.followers || null });
 }
 export async function DELETE(req: NextRequest) {
-  const ctx = await creatorContext(); if (!ctx || !ctx.enabled) return NextResponse.json({ error: "Not available" }, { status: 403 });
+  const ctx = await portalViewer(); if (!ctx || !ctx.enabled) return NextResponse.json({ error: "Not available" }, { status: 403 });
   const { platform, handle } = await req.json().catch(() => ({}));
   const admin = supabaseAdmin();
   await admin.from("watchlist").delete().eq("user_id", ctx.roster.user_id).eq("roster_creator_id", ctx.roster.id).eq("added_by", "creator").eq("platform", platform).ilike("handle", String(handle || ""));
   track(ctx.roster.user_id, "creator_unfollowed", { roster_creator_id: ctx.roster.id, creator: ctx.roster.name, platform, handle: String(handle || "").toLowerCase() });
   return NextResponse.json({ ok: true });
+}
+
+// GET ?platform=&handle= -> is this creator in my lane, and who added them
+export async function GET(req: NextRequest) {
+  const ctx = await portalViewer(); if (!ctx || !ctx.enabled) return NextResponse.json({ error: "Not available" }, { status: 403 });
+  const platform = req.nextUrl.searchParams.get("platform") || ""; const handle = String(req.nextUrl.searchParams.get("handle") || "").toLowerCase();
+  const { data } = await supabaseAdmin().from("watchlist").select("added_by").eq("roster_creator_id", ctx.roster.id).eq("platform", platform).ilike("handle", handle).maybeSingle();
+  return NextResponse.json({ inLane: !!data, addedBy: data?.added_by || null });
 }
