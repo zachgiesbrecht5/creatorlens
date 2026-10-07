@@ -4,6 +4,7 @@ import { requireCreator } from "@/lib/creator-portal";
 import { supabaseAdmin } from "@/lib/supabase";
 import { laneDigest, laneTopPosts } from "@/lib/lane-digest";
 import { LaneCards } from "@/components/LaneCards";
+import { cleanLine } from "@/lib/clean-text";
 import { laneLaunches } from "@/lib/launches";
 import { parsePulse } from "@/lib/pulse-html";
 
@@ -41,7 +42,7 @@ export default async function CreatorHome() {
   const sumShares = last30.reduce((a, o) => a + (o.shares || 0), 0), sumSaves = last30.reduce((a, o) => a + (o.saves || 0), 0), sumReach = last30.reduce((a, o) => a + (o.reach || 0), 0);
   // "your best" by shares + saves when owned data exists (the numbers that drive discovery), else public engagement
   const ownBest = hasOwned ? [...(owned || [])].sort((a, b) => (b.shares || 0) + (b.saves || 0) - ((a.shares || 0) + (a.saves || 0))).slice(0, 4) : [];
-  const hookFor = (permalink: string, caption: string) => { const t = (perf?.top || []).find((x: any) => x.url === permalink); return t ? { line: t.spoken || t.on_video || t.on_screen || t.hook, src: t.spoken ? "spoken" : t.on_video ? "on_video" : t.on_screen ? "on_screen" : "hook", thumb: t.thumb } : { line: String(caption || "").split(/\r?\n/).find((l) => l.trim()) || "", src: "hook", thumb: null }; };
+  const hookFor = (permalink: string, caption: string) => { const t = (perf?.top || []).find((x: any) => x.url === permalink); return t ? { line: cleanLine(t.spoken || t.on_video || t.on_screen || t.hook), src: t.spoken ? "spoken" : t.on_video ? "on_video" : t.on_screen ? "on_screen" : "hook", thumb: t.thumb } : { line: cleanLine(String(caption || "").split(/\r?\n/).find((l) => l.trim()) || ""), src: "hook", thumb: null }; };
   // growth from scan history
   const { data: snaps } = me ? await admin.from("performance_snapshots").select("captured_at,followers,median").eq("creator_id", me.id).order("captured_at", { ascending: false }).limit(60) : { data: [] as any[] };
   const at = (days: number) => (snaps || []).find((s) => new Date(s.captured_at).getTime() <= Date.now() - days * 864e5 && s.followers);
@@ -177,7 +178,7 @@ function Stat({ label, value, sub, good = true }: { label: string; value: string
 }
 function PostCard({ t, median, label, rank, items }: { t: any; median: number; label: string; rank: number; items: number }) {
   const src = t.spoken ? "spoken" : t.on_video ? "on_video" : t.on_screen ? "on_screen" : "hook";
-  const line = t.spoken || t.on_video || t.on_screen || t.hook || t.title;
+  const line = cleanLine(t.spoken || t.on_video || t.on_screen || t.hook || t.title);
   return (
     <a href={t.url} target="_blank" rel="noreferrer" className="post-card">
       {t.thumb ? <img src={`data:image/jpeg;base64,${t.thumb}`} alt="" className="post-thumb" /> : <div className="post-thumb bg-surface2" />}

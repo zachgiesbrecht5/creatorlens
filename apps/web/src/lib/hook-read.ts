@@ -1,3 +1,5 @@
+import { cleanLine } from "./clean-text";
+
 // One reading of a top post's opening, shared by the web print and the PDF.
 // A short video has three channels and a viewer gets them in this order:
 // what is SAID (audio), what is WRITTEN on the video, then the CAPTION under it.
@@ -14,7 +16,7 @@ export const decodeEntities = (s: string) => String(s || "")
   .replace(/&#0*39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">")
   .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&amp;/g, "&");
 
-const clean = (s: string | null | undefined) => (s == null ? null : decodeEntities(String(s)).replace(/\s+/g, " ").trim());
+const clean = (s: string | null | undefined) => (s == null ? null : cleanLine(decodeEntities(String(s)).replace(/\s+/g, " ").trim()));
 
 export function readHook(t: any, platform: string): HookRead {
   const spoken = clean(t.spoken), onVideo = clean(t.on_video), onCover = clean(t.on_screen), caption = clean(t.hook || t.title) || "";

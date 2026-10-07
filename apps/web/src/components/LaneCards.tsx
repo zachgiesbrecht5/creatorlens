@@ -2,17 +2,18 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { LaneTopPost } from "@/lib/lane-digest";
+import { cleanLine } from "@/lib/clean-text";
 
 const fmtK = (n: number | null | undefined) => (n == null ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
 const d = (s: string | null | undefined) => (s ? new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
 
 /** What a viewer gets first: the spoken line when there is one, else text on video, else the caption. */
 function opening(t: any): { line: string; src: string; cls: string } {
-  if (t.audio === "voice" && t.spoken) return { line: t.spoken, src: "SAID", cls: "bg-[#2f5bff] text-white" };
-  if (t.on_video) return { line: t.on_video, src: "ON VIDEO", cls: "bg-[#6b38c7] text-white" };
-  if (t.on_screen) return { line: t.on_screen, src: "ON COVER", cls: "bg-[#6b38c7] text-white" };
+  if (t.audio === "voice" && t.spoken) return { line: cleanLine(t.spoken), src: "SAID", cls: "bg-[#2f5bff] text-white" };
+  if (t.on_video) return { line: cleanLine(t.on_video), src: "ON VIDEO", cls: "bg-[#6b38c7] text-white" };
+  if (t.on_screen) return { line: cleanLine(t.on_screen), src: "ON COVER", cls: "bg-[#6b38c7] text-white" };
   const why = t.audio === "sound" ? "TRENDING SOUND" : t.audio === "music" ? "MUSIC" : t.audio === "nofile" ? "NO AUDIO FILE" : "CAPTION";
-  return { line: t.hook || t.title || "", src: why, cls: "bg-[#5b6472] text-white" };
+  return { line: cleanLine(t.hook || t.title || ""), src: why, cls: "bg-[#5b6472] text-white" };
 }
 
 /** The lane's best posts as cards. `all` and `talking` are two pre-fetched lists; the toggle swaps them. */

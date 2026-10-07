@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { LaneHook, LaneCreator, LaneOpener } from "@/lib/lane-digest";
+import { cleanLine } from "@/lib/clean-text";
 
 const fmtK = (n: number | null | undefined) => (n == null ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
 const d = (s: string | null) => (s ? new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
@@ -25,7 +26,7 @@ export function LaneHooks({ hooks, openers, note, printHref = true }: { hooks?: 
           return (
             <div key={h.id}>
               <button onClick={() => setOpen(on ? null : h.id)} className="grid w-full grid-cols-[220px_1fr_150px] items-center gap-3 rounded-md px-1 py-1 text-left text-[12.5px] hover:bg-surface2" aria-expanded={on}>
-                <span className="truncate font-medium" title={h.label}>"{h.label}"{h.said && <span className="num ml-1.5 rounded bg-[#2f5bff] px-1 text-[9px] font-bold text-white">SAID</span>}</span>
+                <span className="truncate font-medium" title={cleanLine(h.label)}>"{cleanLine(h.label)}"{h.said && <span className="num ml-1.5 rounded bg-[#2f5bff] px-1 text-[9px] font-bold text-white">SAID</span>}</span>
                 <div className="h-2 rounded-full bg-surface2"><div className="h-2 rounded-full" style={{ width: `${Math.max(4, ((h.mult ?? 0) / max) * 100)}%`, background: on ? "#2f5bff" : "#2E1B5B" }} /></div>
                 <span className="num text-right text-[10.5px] text-muted" title={`raw average ${fmtK(h.avg)}`}>{h.mult != null ? `${h.mult}x median` : `avg ${fmtK(h.avg)}`} · {h.posts} posts · {h.creators} creator{h.creators === 1 ? "" : "s"}</span>
               </button>
@@ -38,7 +39,7 @@ export function LaneHooks({ hooks, openers, note, printHref = true }: { hooks?: 
                         <li key={p.url} className="flex items-start gap-2 text-[12.5px]">
                           <span className="num w-14 flex-none text-right font-semibold">{fmtK(p.metric)}</span>
                           <span className="min-w-0 flex-1">
-                            <a href={p.url} target="_blank" rel="noreferrer" className="block truncate hover:text-accent">"{p.on_screen || p.hook || p.title}"</a>
+                            <a href={p.url} target="_blank" rel="noreferrer" className="block truncate hover:text-accent">"{cleanLine(p.on_screen || p.hook || p.title)}"</a>
                             <span className="num text-[10.5px] text-muted">{p.on_screen ? "said / on video · " : "caption · "}{printHref ? <Link href={`/c/${p.platform}/${p.handle}`} className="hover:text-accent">{p.creator}</Link> : p.creator} · {p.mult ? `${p.mult}x their median · ` : ""}{d(p.published_at)}{p.sponsored ? " · sponsored" : ""}</span>
                           </span>
                         </li>))}</ul>
@@ -70,7 +71,7 @@ export function LaneRoster({ creators, printHref = true, you }: { creators: Lane
               <td className="num text-right">{fmtK(c.followers)}</td>
               <td className={`num text-right ${c.growth30 != null && c.growth30 < 0 ? "text-bad" : c.growth30 != null ? "text-ok" : ""}`}>{pct(c.growth30) || <span className="text-dim">not yet</span>}</td>
               <td className="num text-right">{fmtK(c.median)}{c.items ? <span className="text-[10px] text-muted"> / {c.items}</span> : ""}</td>
-              <td className="text-[12px]">{c.leans ? `"${c.leans}"` : <span className="text-dim">no pattern</span>}</td>
+              <td className="text-[12px]">{c.leans ? `"${cleanLine(c.leans)}"` : <span className="text-dim">no pattern</span>}</td>
               <td className="num text-[11px] text-muted">{d(c.lastPrinted)}</td>
             </tr>
           ))}
