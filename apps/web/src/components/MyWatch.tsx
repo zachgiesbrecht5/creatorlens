@@ -2,7 +2,7 @@
 import { useState } from "react";
 type Row = { platform: string; handle: string; added_by: string; name: string; avatar: string | null; followers: number | null; category: string | null; top: { hook: string; metric: number; url: string }[] };
 const fmtK = (n: number | null) => (!n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
-export function MyWatch({ rows, platform: defaultPlatform }: { rows: Row[]; platform: string }) {
+export function MyWatch({ rows, platform: defaultPlatform, children }: { rows: Row[]; platform: string; children?: React.ReactNode }) {
   const [list, setList] = useState(rows);
   const [handle, setHandle] = useState(""); const [platform, setPlatform] = useState(defaultPlatform); const [busy, setBusy] = useState(false); const [msg, setMsg] = useState<string | null>(null);
   async function add() {
@@ -15,12 +15,19 @@ export function MyWatch({ rows, platform: defaultPlatform }: { rows: Row[]; plat
   async function remove(h: string, p: string) { await fetch("/api/me/watch", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ platform: p, handle: h }) }); setList((l) => l.filter((x) => !(x.handle === h && x.platform === p))); }
   return (
     <div>
-      <div className="card mb-5 flex flex-wrap items-center gap-2 p-4">
-        <div className="seg"><button className={platform === "instagram" ? "on" : ""} onClick={() => setPlatform("instagram")}>Instagram</button><button className={platform === "youtube" ? "on" : ""} onClick={() => setPlatform("youtube")}>YouTube</button></div>
-        <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@handle" className="input-flat !w-64 !py-1.5 font-mono text-[13px]" onKeyDown={(e) => e.key === "Enter" && handle && add()} />
-        <button onClick={add} disabled={busy || !handle} className="btn-dark !py-1.5 !text-[12px] disabled:opacity-50">follow</button>
-        {msg && <span className="num text-[11px] text-muted">{msg}</span>}
+      <div className="card mb-6 p-5" style={{ borderTop: "3px solid #2f5bff" }}>
+        <div className="label mb-1">Follow a creator</div>
+        <p className="mb-3 text-[13px] text-muted">Paste a handle. Sponsorprint prints their last 250 posts and their best openings start showing up below within a day.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="seg"><button className={platform === "instagram" ? "on" : ""} onClick={() => setPlatform("instagram")}>Instagram</button><button className={platform === "youtube" ? "on" : ""} onClick={() => setPlatform("youtube")}>YouTube</button></div>
+          <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@handle or profile link" className="input-flat !w-72 !py-2 font-mono text-[13px]" onKeyDown={(e) => e.key === "Enter" && handle && add()} autoFocus />
+          <button onClick={add} disabled={busy || !handle} className="btn-dark !py-2 !text-[12.5px] disabled:opacity-50">{busy ? "adding…" : "follow"}</button>
+          {msg && <span className="num text-[11px] text-muted">{msg}</span>}
+        </div>
+        <div className="num mt-2 text-[10.5px] text-dim">{list.length} in your lane{list.filter((c) => c.added_by !== "creator").length ? ` · ${list.filter((c) => c.added_by !== "creator").length} picked by your manager` : ""} · up to 25 of your own</div>
       </div>
+      {children}
+      <div className="mb-3 mt-8"><div className="label mb-1">Who's in your lane</div><p className="text-[13px] text-muted">Unfollow your own picks any time; your manager's are marked.</p></div>
       {!list.length && <div className="card p-6 text-[13px] text-muted">No one yet. Add a creator you rate and their best hooks start showing up on your home page.</div>}
       <div className="grid gap-3 md:grid-cols-2">
         {list.map((c) => (
