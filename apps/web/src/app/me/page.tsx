@@ -2,7 +2,8 @@ import Link from "next/link";
 import { LaneHooks, LaneRoster } from "@/components/LaneHooks";
 import { requireCreator } from "@/lib/creator-portal";
 import { supabaseAdmin } from "@/lib/supabase";
-import { laneDigest } from "@/lib/lane-digest";
+import { laneDigest, laneTopPosts } from "@/lib/lane-digest";
+import { LaneCards } from "@/components/LaneCards";
 import { laneLaunches } from "@/lib/launches";
 import { parsePulse } from "@/lib/pulse-html";
 
@@ -46,6 +47,7 @@ export default async function CreatorHome() {
   const at = (days: number) => (snaps || []).find((s) => new Date(s.captured_at).getTime() <= Date.now() - days * 864e5 && s.followers);
   const g14 = pct(me?.followers, at(14)?.followers), g30 = pct(me?.followers, at(30)?.followers);
   const digest = await laneDigest(r.user_id, r.id, 30);
+  const [laneAll, laneTalking] = await Promise.all([laneTopPosts(digest.rowIds, { limit: 8, days: 60 }), laneTopPosts(digest.rowIds, { limit: 8, days: 60, voiceOnly: true })]);
   const launches = lane ? (await laneLaunches(lane)).filter((l) => l.status === "open" || l.status === "soon").slice(0, 4) : [];
   const since = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
   const { data: pitched } = await admin.from("tracker_rows").select("brand").eq("user_id", r.user_id).eq("tab", "outreach").gte("date_sent", since).ilike("creator", `%${first}%`).limit(60);
@@ -61,7 +63,6 @@ export default async function CreatorHome() {
   const own = (perf?.top || []).slice(0, 4);
   const pulse = lastPulse ? parsePulse(lastPulse.body || "") : null;
   // the lane feed: thumbnails + hooks, source-tagged
-  const feed = digest.posts.slice(0, 9);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -117,16 +118,8 @@ export default async function CreatorHome() {
 
           {/* lane feed */}
           <section>
-            <div className="mb-3 flex items-end justify-between gap-4"><div><div className="label">Trending in your lane · last 30 days</div><h2 className="h2">Hooks that are working for creators like you</h2><p className="mt-1 text-[13px] text-muted">From the {digest.creators.length} creator{digest.creators.length === 1 ? "" : "s"} you and your team follow. Ranked by how far each post beat that creator's own median. Bold line is what a viewer hears or sees first.</p></div><Link href="/me/watchlist" className="btn-ghost !py-1.5 !text-[12px] whitespace-nowrap">your lane →</Link></div>
-            {!feed.length ? <div className="card p-6 text-[13.5px] text-muted">{digest.creators.length ? "Prints are landing; hooks show here within a day." : "Follow a few creators you rate and their best hooks start showing up here every week."}</div> : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{feed.map((p) => (
-                <a key={p.url} href={p.url} target="_blank" rel="noreferrer" className="feed-card">
-                  <div className="feed-top"><span className="num text-[18px] font-bold">{fmtK(p.metric)}</span><span className="num text-[10.5px] text-ok">{p.mult ? `${p.mult}x their median` : `#${p.rank} for them`}</span></div>
-                  <div className="feed-hook">"{p.on_screen || p.hook || p.title}"</div>
-                  <div className="feed-meta"><span className="pill-src">{p.on_screen ? "said / on video" : "caption"}</span><span className="num text-[10.5px] text-muted">{p.creator} · {d(p.published_at)} · {p.kind}{p.sponsored ? " · sponsored" : ""}</span></div>
-                </a>
-              ))}</div>
-            )}
+            <div className="mb-3 flex items-end justify-between gap-4"><div><div className="label">Trending in your lane · last 60 days</div><h2 className="h2">Hooks that are working for creators like you</h2><p className="mt-1 text-[13px] text-muted">From the {digest.creators.length} creator{digest.creators.length === 1 ? "" : "s"} you and your team follow. Ranked by how far each post beat that creator's own median. Bold line is what a viewer hears or sees first.</p></div><Link href="/me/watchlist" className="btn-ghost !py-1.5 !text-[12px] whitespace-nowrap">your lane →</Link></div>
+            <LaneCards all={laneAll} talking={laneTalking} printHref title="" />
             <LaneHooks openers={digest.openers} note={digest.note} />
             <LaneRoster creators={digest.creators} you={{ followers: me?.followers || r.followers || null, growth30: g30 != null ? g30 / 100 : g14 != null ? g14 / 100 : null, median: perf?.median ?? null }} />
           </section>

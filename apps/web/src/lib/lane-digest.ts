@@ -27,6 +27,7 @@ export type LaneCreator = {
 };
 export type LaneDigest = {
   since: string;
+  rowIds: string[];         // this creator's roster rows across the org (the lane is shared)
   creators: LaneCreator[];
   posts: LanePost[];
   hooks: LaneHook[];
@@ -127,6 +128,7 @@ export async function laneDigest(userId: string, rosterCreatorId: string, days =
   const total = laneCreators.reduce((s, c) => s + (c.items || 0), 0);
   return {
     since,
+    rowIds,
     creators: laneCreators.sort((a, b) => (b.followers || 0) - (a.followers || 0)),
     posts: posts.slice(0, 12),
     hooks: hooksOut,
@@ -134,4 +136,16 @@ export async function laneDigest(userId: string, rosterCreatorId: string, days =
     newBrands,
     note: total ? `Openings are grouped by the first words actually said (top posts with audio) or written in the caption (all ${total.toLocaleString("en-US")} posts across ${laneCreators.length} creators). Only openings used more than once appear. Each post is measured against its own creator's median, so account size doesn't tilt the bars.` : "",
   };
+}
+
+
+export type LaneTopPost = { creator_id: string; handle: string; platform: string; display_name: string; avatar_url: string | null; followers: number | null; median: number | null; metric_label: string | null; mult: number | null; score: number; post: any };
+
+/** The lane's best posts as cards (thumbnails kept, CDN links dropped), ranked by a blend of size and
+ *  how far each beat its own creator's median (capped at 100x). One RPC, no 13 MB JSON. */
+export async function laneTopPosts(rowIds: string[], opts: { limit?: number; days?: number; voiceOnly?: boolean } = {}): Promise<LaneTopPost[]> {
+  if (!rowIds.length) return [];
+  const { data, error } = await supabaseAdmin().rpc("lane_top_posts", { p_roster_ids: rowIds, p_limit: opts.limit ?? 24, p_days: opts.days ?? 365, p_voice_only: !!opts.voiceOnly });
+  if (error) { console.warn("lane_top_posts failed", error.message); return []; }
+  return (data || []) as LaneTopPost[];
 }
