@@ -266,6 +266,8 @@ export const MASS_SPONSOR_BRANDS: string[] = [
 ];
 
 export const JUNK_DOMAINS: string[] = [
+  // mail providers: an address in a description is contact info, never a sponsor
+  "gmail", "hotmail", "outlook", "yahoo", "icloud", "protonmail", "proton", "aol", "live", "me", "mail",
   // music / stock libraries credited in descriptions, never sponsors
   "extrememusic", "epidemicsound", "artlist", "musicbed", "uppbeat", "soundstripe", "storyblocks", "envato", "audiojungle", "premiumbeat", "audiio", "lickd",
   "extreme music", "epidemic sound",

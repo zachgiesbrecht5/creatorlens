@@ -183,7 +183,7 @@ export function detectInstagram(caption: string | null | undefined, ownHandle?: 
     return out;
   };
 
-  const out: Record<string, { brand: string; type: string; score: number; label: "High" | "Medium" | "Low"; evidence: string }> = {};
+  const out: Record<string, { brand: string; type: string; score: number; label: "High" | "Medium" | "Low"; evidence: string; named?: boolean }> = {};
   for (const cand of candidates) {
     let chosen: Tier | null = null;
     let aIdx = cand.idx, aLen = cand.len;
@@ -209,7 +209,17 @@ export function detectInstagram(caption: string | null | undefined, ownHandle?: 
     }
     const key = cand.brand.toLowerCase();
     if (!out[key] || chosen.score > out[key].score) {
-      out[key] = { brand: cand.brand, type: chosen.type, score: chosen.score, label: chosen.label, evidence: snip(aIdx, aLen) };
+      out[key] = { brand: cand.brand, type: chosen.type, score: chosen.score, label: chosen.label, evidence: snip(aIdx, aLen), named: !!cand.self };
+    }
+  }
+
+  // Co-mention rule: when the post names its partner (#XPartner, "sponsored by X", "paid partnership
+  // with X"), every other brand that only sat near a generic "#ad" is a co-mention (the retailer, the
+  // platform, a tagged friend), not a second sponsor. "#YTTPPartner ... amazon Prime Day" is one deal.
+  const namedPaid = Object.values(out).some((o) => o.named && o.score >= 8);
+  if (namedPaid) {
+    for (const o of Object.values(out)) {
+      if (!o.named && o.score >= 4) { o.type = "Co-mention (another brand is the named partner)"; o.score = 2; o.label = "Low"; }
     }
   }
 

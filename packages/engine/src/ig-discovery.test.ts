@@ -51,3 +51,30 @@ describe("openers from the data", () => {
     expect(g[0].mult).toBeGreaterThan(200);
   });
 });
+
+import { detectYouTube } from "./youtube";
+import { detectInstagram as detIg } from "./instagram";
+describe("attribution fixes", () => {
+  it("credits the sponsor sentence to the brand it names, not every link", () => {
+    const d = detectYouTube({ id: "v", title: "Dad builds", description: "Thanks to Ridge for sponsoring this video! Head to https://ridge.com/LTT\nMy dbrand skin: https://dbrand.com/shop\nBusiness: hello@gmail.com", tags: [] } as any);
+    const ridge = d.find((x) => /ridge/i.test(x.brand)); const dbrand = d.find((x) => /dbrand/i.test(x.brand));
+    expect(ridge?.confidenceLabel).toBe("High");
+    expect(dbrand?.confidenceLabel).toBe("Low");
+    expect(d.some((x) => /gmail/i.test(x.brand))).toBe(false);
+  });
+  it("a bare link or plain hashtag is never High on its own", () => {
+    const d = detectYouTube({ id: "v", title: "CUDA tutorial", description: "Docs: https://nvidia.com/cuda\nThis video is sponsored by Babbel. #ad", tags: [] } as any);
+    expect(d.find((x) => /nvidia/i.test(x.brand))?.confidenceLabel).toBe("Low");
+    expect(d.find((x) => /babbel/i.test(x.brand))?.confidenceLabel).toBe("High");
+  });
+  it("does not let a brand name run across lines", () => {
+    const d = detectYouTube({ id: "v", title: "t", description: "This video is sponsored by Chapter.\nOriginal video source: youtube.com", tags: [] } as any);
+    expect(d.find((x) => /chapter/i.test(x.brand))?.brand).toBe("Chapter");
+  });
+  it("Instagram: the named partner is the deal, co-tagged brands drop to Low", () => {
+    const f = detIg("Grabbed my last bottle right before amazon Prime Day rolled around #YTTPPartner #ad");
+    const yttp = f.find((x) => /yttp/i.test(x.brand)); const amazon = f.find((x) => /amazon/i.test(x.brand));
+    expect(yttp?.label).toBe("High");
+    if (amazon) expect(amazon.label).toBe("Low");
+  });
+});

@@ -35,6 +35,8 @@ export type LaneDigest = {
   note: string;             // one honest line about what the shapes are measured on
 };
 
+// Reads creators_slim (performance without base64 thumbnails): a lane of 130 creators is ~0.5 MB
+// instead of 13 MB, which is the difference between a page and a timeout.
 // "What's working in this creator's lane": the creators watched under them, their best
 // recent posts relative to their own median, the hook shapes that recur (measured against
 // each creator's own median so a 5M account and a 50K account count the same), and the
@@ -53,7 +55,7 @@ export async function laneDigest(userId: string, rosterCreatorId: string, days =
   const { data: watches } = await admin.from("watchlist").select("platform,handle,added_by").in("user_id", memberIds).in("roster_creator_id", rowIds);
   const addedBy = new Map((watches || []).map((w) => [`${w.platform}:${String(w.handle).toLowerCase()}`, w.added_by as string]));
   const pairs = (watches || []).map((w) => `and(platform.eq.${w.platform},handle.ilike.${w.handle})`);
-  const { data: creators } = pairs.length ? await admin.from("creators").select("id,handle,platform,display_name,avatar_url,followers,last_scanned_at,performance").or(pairs.join(",")) : { data: [] };
+  const { data: creators } = pairs.length ? await admin.from("creators_slim").select("id,handle,platform,display_name,avatar_url,followers,last_scanned_at,performance").or(pairs.join(",")) : { data: [] };
 
   // 30-day follower growth from the snapshots each print leaves behind
   const ids = (creators || []).map((c) => c.id);

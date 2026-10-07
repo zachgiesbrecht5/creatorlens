@@ -10,10 +10,12 @@ export interface Signals {
   reasons: string[];
 }
 
+export type BrandMethod = "explicit" | "partner_tag" | "code" | "url" | "tag";
 export interface BrandCandidate {
   name: string;
   score: number;
   evidence: string;
+  method?: BrandMethod;   // how the brand was found; decides whether the video's sponsor language applies to it
 }
 
 export interface Detection {
@@ -158,22 +160,27 @@ export function normalizeBrandName(name: string): string {
 const URL_RE = /(?:https?:\/\/)?(?:www\.)?([a-z0-9][a-z0-9-]{1,25})\.(?:com|co|io|org|net)(?:\/\S*)?/gi;
 const domainOf = (u: string) => u.replace(/https?:\/\//, "").replace(/^www\./, "").split(".")[0];
 
+const EMAIL_RE = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+
 export function extractBrands(fullText: string, description: string): BrandCandidate[] {
+  // an email address is never a sponsor: "business@gmail.com" must not become a Gmail deal
+  fullText = fullText.replace(EMAIL_RE, " ");
+  description = description.replace(EMAIL_RE, " ");
   const brands: BrandCandidate[] = [];
   const seen: Record<string, boolean> = {};
   const aliases = getAliases();
 
   // METHOD 1: explicit sponsor grammar
   const explicitPatterns: { re: RegExp; score: number }[] = [
-    { re: /(?:[Tt]hank\s+[Yy]ou,?\s+(?:[Tt]o\s+)?|[Tt]hanks,?\s+(?:[Tt]o\s+)?)([A-Z0-9][A-Za-z0-9\s&:'!.\-]{1,40}?)\s+for\s+(?:sponsoring|supporting|partnering|sending)/g, score: 5 },
-    { re: /(?:sponsored|partnered?)\s+(?:by|with)\s+([A-Za-z][A-Za-z0-9\s&'.\-]{1,35})/gi, score: 4 },
-    { re: /(?:thanks?\s+to)\s+([A-Za-z][A-Za-z0-9\s&'.\-]{1,35})\s+(?:for|who|!)/gi, score: 4 },
-    { re: /(?:brought\s+to\s+you\s+by|presented\s+by)\s+([A-Za-z][A-Za-z0-9\s&'.\-]{1,35})/gi, score: 4 },
-    { re: /(?:video|episode|content)\s+(?:is\s+)?(?:sponsored|brought\s+to\s+you|presented)\s+(?:by|with)\s+([A-Za-z][A-Za-z0-9\s&'.\-]{1,35})/gi, score: 5 },
-    { re: /in\s+collaboration\s+with\s+([A-Za-z][A-Za-z0-9\s&'.\-]{1,35})/gi, score: 3 },
-    { re: /(?:sent|provided|gifted|supplied)\s+(?:by|from)\s+([A-Za-z][A-Za-z0-9\s&'.\-]{1,35})/gi, score: 3 },
-    { re: /(?:courtesy\s+of)\s+([A-Za-z][A-Za-z0-9\s&'.\-]{1,35})/gi, score: 3 },
-    { re: /(?:received\s+(?:this|a|the)\s+.{0,20}\s+from)\s+([A-Za-z][A-Za-z0-9\s&'.\-]{1,35})/gi, score: 3 },
+    { re: /(?:[Tt]hank\s+[Yy]ou,?\s+(?:[Tt]o\s+)?|[Tt]hanks,?\s+(?:[Tt]o\s+)?)([A-Z0-9][A-Za-z0-9 \t&:'!.\-]{1,40}?)\s+for\s+(?:sponsoring|supporting|partnering|sending)/g, score: 5 },
+    { re: /(?:sponsored|partnered?)\s+(?:by|with)\s+([A-Za-z][A-Za-z0-9 \t&'.\-]{1,35})/gi, score: 4 },
+    { re: /(?:thanks?\s+to)\s+([A-Za-z][A-Za-z0-9 \t&'.\-]{1,35})\s+(?:for|who|!)/gi, score: 4 },
+    { re: /(?:brought\s+to\s+you\s+by|presented\s+by)\s+([A-Za-z][A-Za-z0-9 \t&'.\-]{1,35})/gi, score: 4 },
+    { re: /(?:video|episode|content)\s+(?:is\s+)?(?:sponsored|brought\s+to\s+you|presented)\s+(?:by|with)\s+([A-Za-z][A-Za-z0-9 \t&'.\-]{1,35})/gi, score: 5 },
+    { re: /in\s+collaboration\s+with\s+([A-Za-z][A-Za-z0-9 \t&'.\-]{1,35})/gi, score: 3 },
+    { re: /(?:sent|provided|gifted|supplied)\s+(?:by|from)\s+([A-Za-z][A-Za-z0-9 \t&'.\-]{1,35})/gi, score: 3 },
+    { re: /(?:courtesy\s+of)\s+([A-Za-z][A-Za-z0-9 \t&'.\-]{1,35})/gi, score: 3 },
+    { re: /(?:received\s+(?:this|a|the)\s+.{0,20}\s+from)\s+([A-Za-z][A-Za-z0-9 \t&'.\-]{1,35})/gi, score: 3 },
   ];
   for (const p of explicitPatterns) {
     p.re.lastIndex = 0;
@@ -182,7 +189,7 @@ export function extractBrands(fullText: string, description: string): BrandCandi
       const name = cleanBrandCapture(m[1]);
       if (name && !seen[name.toLowerCase()]) {
         seen[name.toLowerCase()] = true;
-        brands.push({ name, score: p.score, evidence: m[0].trim().substring(0, 120) });
+        brands.push({ name, score: p.score, evidence: m[0].trim().substring(0, 120), method: "explicit" });
       }
     }
   }
@@ -208,7 +215,7 @@ export function extractBrands(fullText: string, description: string): BrandCandi
       const dl = domain.toLowerCase();
       if (domain && !seen[dl] && !isJunkBrand(dl)) {
         seen[dl] = true;
-        brands.push({ name: domain, score: 3, evidence: line.substring(0, 120) });
+        brands.push({ name: domain, score: 3, evidence: line.substring(0, 120), method: "url" });
       }
     }
   }
@@ -223,7 +230,11 @@ export function extractBrands(fullText: string, description: string): BrandCandi
       const path = m[2].toLowerCase();
       if (path.length >= 3 && path.length <= 25 && !isJunkBrand(d) && !isSocialPlatformDomain(d) && !seen[d]) {
         seen[d] = true;
-        brands.push({ name: d, score: 2, evidence: m[0].substring(0, 120) });
+        // the line this link sits on: an offer on the same line ("get 30% off", "use code") is the brand's own signal
+        const ls = fullText.lastIndexOf("\n", m.index) + 1, le = fullText.indexOf("\n", m.index);
+        const line = fullText.substring(ls, le === -1 ? undefined : le);
+        const offer = /code|%\s*off|discount|coupon|free trial/i.test(line);
+        brands.push({ name: d, score: offer ? 3 : 2, evidence: (offer ? line.trim() : m[0]).substring(0, 120), method: offer ? "code" : "url" });
       }
     }
   }
@@ -240,7 +251,7 @@ export function extractBrands(fullText: string, description: string): BrandCandi
       const b = m[1].toLowerCase();
       if (b && !seen[b] && !isJunkBrand(b)) {
         seen[b] = true;
-        brands.push({ name: b, score: 3, evidence: m[0].trim().substring(0, 120) });
+        brands.push({ name: b, score: 3, evidence: m[0].trim().substring(0, 120), method: "code" });
       }
     }
   }
@@ -258,7 +269,7 @@ export function extractBrands(fullText: string, description: string): BrandCandi
         const hasCreatorPath = /\.[a-z]{2,3}\/[a-z][a-z0-9_-]{2,25}$/i.test(u);
         const lineHasCode = /code|%\s*off|discount|coupon|free/i.test(topLine);
         seen[d] = true;
-        brands.push({ name: d, score: hasCreatorPath ? 3 : lineHasCode ? 3 : 2, evidence: topLine.substring(0, 120) });
+        brands.push({ name: d, score: hasCreatorPath ? 3 : lineHasCode ? 3 : 2, evidence: topLine.substring(0, 120), method: lineHasCode ? "code" : "url" });
       }
     }
   }
@@ -277,7 +288,7 @@ export function extractBrands(fullText: string, description: string): BrandCandi
       const d = domainOf(u).toLowerCase();
       if (d && !seen[d] && !isJunkBrand(d) && !isSocialPlatformDomain(d)) {
         seen[d] = true;
-        brands.push({ name: d, score: 3, evidence: dLine.substring(0, 120) });
+        brands.push({ name: d, score: 3, evidence: dLine.substring(0, 120), method: dLine.toLowerCase().includes(d) ? "code" : "url" });
       }
     }
   }
@@ -296,13 +307,13 @@ export function extractBrands(fullText: string, description: string): BrandCandi
         const core = pShape[1];
         if (!seen[core] && !isCommonWord(core) && !isJunkBrand(core)) {
           seen[core] = true;
-          brands.push({ name: aliases[core] || cleanBrandCapture(core), score: 4, evidence: "#" + htName + " (partner-style hashtag)" });
+          brands.push({ name: aliases[core] || cleanBrandCapture(core), score: 4, evidence: "#" + htName + " (partner-style hashtag)", method: "partner_tag" });
         }
         continue;
       }
       if (!aliases[htLower]) continue;
       seen[htLower] = true;
-      brands.push({ name: aliases[htLower], score: 2, evidence: "#" + htName + " (hashtag in description)" });
+      brands.push({ name: aliases[htLower], score: 2, evidence: "#" + htName + " (hashtag in description)", method: "tag" });
     }
   }
 
@@ -346,10 +357,18 @@ export interface VideoInput {
 }
 
 /** Full detection for one video: signals + brands, normalized and filtered. */
+/** Sponsor sentences in the text (one line or sentence each), lowercased: the places a brand must be
+ *  NAMED in for the video's sponsor language to count for it. */
+function sponsorSentences(fullText: string): string[] {
+  return fullText.toLowerCase().split(/\n|(?<=[.!?])\s+/).filter((l) => /sponsor|paid partnership|paid promotion|brought to you by|presented by|thanks? to .{1,40} for|partnered with|in collaboration with|#ad\b|#sponsored\b/.test(l));
+}
+const nameForms = (nl: string) => { const forms = new Set([nl, nl.replace(/[^a-z0-9]/g, ""), nl.replace(/\s+/g, "")]); return [...forms].filter((f) => f.length >= 3); };
+
 export function detectYouTube(video: VideoInput, selfKeys: SelfKeys = {}): Detection[] {
   const fullText = (video.title || "") + "\n" + (video.description || "") + "\n" + (video.tags || []).join(" ");
   const signals = scoreSignals(fullText);
   const brands = extractBrands(fullText, video.description || "");
+  const sentences = sponsorSentences(fullText);
   const out: Detection[] = [];
   const seenPerVideo: Record<string, boolean> = {};
   for (const b of brands) {
@@ -360,12 +379,19 @@ export function detectYouTube(video: VideoInput, selfKeys: SelfKeys = {}): Detec
     if (isSelfRef(nl, selfKeys)) continue;
     if (seenPerVideo[nl]) continue;
     seenPerVideo[nl] = true;
-    const confidence = signals.score + b.score;
+    // The video's sponsor language belongs to the brand it names. A brand found through explicit grammar
+    // or a partner hashtag is named by construction; a brand found through a link or a plain hashtag
+    // earns the video-wide signals only if a sponsor sentence mentions it. Otherwise it stands on its
+    // own evidence: a discount code on its line is Medium, a bare link or tag is Low.
+    const method = b.method || "url";
+    const named = method === "explicit" || method === "partner_tag" || nameForms(nl).some((f) => sentences.some((sn) => sn.includes(f)));
+    const confidence = named ? signals.score + b.score : method === "code" ? Math.min(b.score + 1, 4) : Math.min(b.score, 2);
+    const signalText = named ? signals.reasons.join(", ") : method === "code" ? "Discount Code" : method === "tag" ? "Hashtag only" : "Link only";
     out.push({
       brand: normalized,
       confidenceScore: confidence,
       confidenceLabel: confidence >= 5 ? "High" : confidence >= 3 ? "Medium" : "Low",
-      signals: signals.reasons.join(", "),
+      signals: signalText,
       evidence: b.evidence,
       isMassSponsor: isMassSponsor(nl),
     });

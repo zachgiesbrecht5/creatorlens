@@ -70,6 +70,15 @@ const IG_CORPUS: { caption: string; own?: string }[] = [
 
 const norm = (rows: any[]) => rows.map((r) => `${r.brand}|${r.score ?? r.confidenceScore}|${r.label ?? r.confidenceLabel}`).sort();
 
+// Deliberate departures from the Apps Script engine (Oct 2026 attribution fix): the video's sponsor
+// language now belongs only to the brand it names. Brands found through a link or a plain hashtag
+// stand on their own evidence. The legacy engine gave every link the whole video's score.
+const INTENDED: Record<string, Record<string, string>> = {
+  "My morning routine": { "Trade": "Trade|4|Medium" },           // creator-path link with "30% off" in a video sponsored by AG1
+  "Unboxing": { "Awin1": "Awin1|2|Low" },                         // an affiliate-network link under a Sony seeding line was never a Sony-level deal
+};
+const applyIntended = (title: string, rows: string[]) => rows.map((r) => { const b = r.split("|")[0]; return INTENDED[title]?.[b] || r; }).sort();
+
 describe.skipIf(!have)("parity with the original Apps Script engine", () => {
   const L = legacy();
 
@@ -92,7 +101,7 @@ describe.skipIf(!have)("parity with the original Apps Script engine", () => {
         legacyRows.push({ brand: n, score: c, label: c >= 5 ? "High" : c >= 3 ? "Medium" : "Low" });
       }
       const port = detectYouTube({ title: v.title, description: v.description }, v.self ? buildSelfRefKeys(v.self[0], v.self[1]) : {});
-      expect(norm(port), v.title).toEqual(norm(legacyRows));
+      expect(norm(port), v.title).toEqual(applyIntended(v.title, norm(legacyRows)));
     }
   });
 
