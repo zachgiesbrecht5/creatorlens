@@ -65,7 +65,7 @@ export async function classifyCreator(sb: SupabaseClient, creatorId: string, for
   const k = (s: string) => s.toLowerCase().replace(/^@/, "").replace(/[^a-z0-9]/g, "");
   for (const b of ownBrands) keys.add(k(b));
   const selfKeys = [k(c.handle), k(c.display_name || "")].filter((s) => s.length >= 5);
-  const { data: theirBrands } = await sb.from("brand_wall").select("brand_id,brand").eq("creator_id", creatorId);
+  const { data: theirBrands } = await sb.from("brand_wall_mv").select("brand_id,brand").eq("creator_id", creatorId);
   const flag: string[] = [];
   for (const b of theirBrands || []) {
     const bk = k(b.brand);

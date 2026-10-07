@@ -64,7 +64,7 @@ export async function writeCreatorUpdates(sb: SupabaseClient, force = false): Pr
       const { data: me } = await sb.from("creators").select("category").eq("platform", r.platform === "youtube" ? "youtube" : "instagram").ilike("handle", String(r.handle || "").replace(/^@/, "")).maybeSingle();
       const cat = me?.category || laneCat;
       if (cat) {
-        const { data: laneRows } = await sb.from("brand_wall").select("brand_id,creators!inner(category)").eq("creators.category", cat).eq("is_junk", false).eq("is_mass_sponsor", false).limit(3000);
+        const { data: laneRows } = await sb.from("brand_wall_mv").select("brand_id,creators!inner(category)").eq("creators.category", cat).eq("is_junk", false).eq("is_mass_sponsor", false).limit(3000);
         const bids = [...new Set((laneRows || []).map((x: any) => x.brand_id))];
         if (bids.length) {
           const { data: ls } = await sb.from("launch_signals").select("kind,product,summary,posted_at,spoken,on_video,window_start,window_end,brands(name)").in("brand_id", bids).gte("posted_at", new Date(Date.now() - 60 * 864e5).toISOString()).order("posted_at", { ascending: false }).limit(5);

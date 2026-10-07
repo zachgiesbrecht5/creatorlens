@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     const { data: rc } = await admin.from("roster_creators").select("name,handle,platform").eq("id", n.roster_creator_id).single();
     if (rc) { seedName = rc.name; const { data: c } = await admin.from("creators").select("id").eq("platform", rc.platform === "youtube" ? "youtube" : "instagram").ilike("handle", String(rc.handle || "").replace(/^@/, "")).maybeSingle(); seedId = c?.id || null; }
   } else if (seedId) { const { data: c } = await admin.from("creators").select("display_name,handle").eq("id", seedId).single(); seedName = c?.display_name || c?.handle || seedName; }
-  const { data: seedWall } = seedId ? await admin.from("brand_wall").select("brand_id").eq("creator_id", seedId) : { data: [] };
+  const { data: seedWall } = seedId ? await admin.from("brand_wall_mv").select("brand_id").eq("creator_id", seedId) : { data: [] };
   const seedBrands = new Set((seedWall || []).map((w) => w.brand_id));
 
   // neighbor creators in the index
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   if (!ids.length) return NextResponse.json({ items: [], seedName });
   const nameOf = new Map((creators || []).map((c) => [c.id, c.display_name || c.handle]));
   const [{ data: wall }, { data: parts }] = await Promise.all([
-    admin.from("brand_wall").select("creator_id,brand_id,brand,category,deals,repeat_partner").in("creator_id", ids).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low"),
+    admin.from("brand_wall_mv").select("creator_id,brand_id,brand,category,deals,repeat_partner").in("creator_id", ids).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low"),
     admin.from("partnerships").select("creator_id,brand_id,published_at").in("creator_id", ids).neq("status", "rejected").not("published_at", "is", null).limit(3000),
   ]);
   const agg = new Map<string, { brand_id: string; brand: string; category: string | null; months: Set<string>; deals: number; repeat: boolean; who: Set<string> }>();

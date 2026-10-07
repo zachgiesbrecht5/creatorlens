@@ -27,5 +27,6 @@ export async function POST(req: NextRequest) {
   // refresh rollups so the leaderboard drops it
   const { data: agg } = await admin.from("partnerships").select("creator_id").eq("brand_id", brandId).neq("status", "rejected");
   await admin.from("brands").update({ deal_count: agg?.length ?? 0, creator_count: new Set((agg || []).map((a) => a.creator_id)).size }).eq("id", brandId);
+  admin.rpc("refresh_brand_wall").then(() => {}, () => {});
   return NextResponse.json({ ok: true, scope: scope === "brand" ? "brand" : "pair" });
 }

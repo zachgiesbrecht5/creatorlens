@@ -20,7 +20,7 @@ export default async function SharedBrand({ params }: { params: Promise<{ token:
   const { data: brand } = await admin.from("brands").select("id,name,category,website,verticals,creator_count,deal_count,last_seen,platform_counts,ig_handle").eq("id", share.brand_id).single();
   if (!brand) return <p>Brand not found.</p>;
 
-  const { data: wall } = await admin.from("brand_wall").select("creator_id,deals,evidence,repeat_partner, creators(handle,display_name,platform,followers,avatar_url,category)").eq("brand_id", brand.id).order("deals", { ascending: false }).limit(200);
+  const { data: wall } = await admin.from("brand_wall_mv").select("creator_id,deals,evidence,repeat_partner, creators(handle,display_name,platform,followers,avatar_url,category)").eq("brand_id", brand.id).order("deals", { ascending: false }).limit(200);
   const { data: dealRows } = await admin.from("partnerships").select("published_at,platform,confidence_label,content_url,creator_id,creators(id,handle,display_name,followers,category,avatar_url)").eq("brand_id", brand.id).neq("status", "rejected").not("published_at", "is", null).order("published_at", { ascending: true }).limit(500);
   const repeatIds = new Set((wall || []).filter((r: any) => r.repeat_partner).map((r: any) => r.creator_id));
   const deals: Deal[] = (dealRows || []).filter((d: any) => d.creators).map((d: any) => ({ published_at: d.published_at, platform: d.platform, confidence_label: d.confidence_label, content_url: d.content_url, repeat: repeatIds.has(d.creator_id), creator: d.creators }));

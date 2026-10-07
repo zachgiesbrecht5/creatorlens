@@ -40,6 +40,16 @@ function cleanText<T>(v: T): T {
 }
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
 
+// ── brand_wall_mv refresh (debounced) ───────────────────────────
+let wallRefreshing: Promise<void> | null = null; let wallDirty = false;
+async function refreshBrandWall(): Promise<void> {
+  if (wallRefreshing) { wallDirty = true; return wallRefreshing; }
+  wallRefreshing = (async () => {
+    do { wallDirty = false; const { error } = await sb.rpc("refresh_brand_wall"); if (error) log("brand_wall refresh failed", error.message); } while (wallDirty);
+  })().finally(() => { wallRefreshing = null; });
+  return wallRefreshing;
+}
+
 // ── Token pool for Instagram ───────────────────────────────────
 async function pickIgToken() {
   const { data } = await sb.from("ig_connections").select("*")
@@ -150,6 +160,8 @@ async function persist(job: any, result: ScanResult) {
   // brand categories for anything new, then the verticals rollup.
   const touched = [...new Set(brandIds.values())];
   try {
+    // brand_wall_mv is materialized (the live view cost 2-3 s per read); refresh it so the print shows its deals, then mark done.
+    await refreshBrandWall();
     // Mark done first so the print shows up, then enrich in the background.
     await sb.from("scan_jobs").update({ status: "done", finished_at: new Date().toISOString(), rows_found: result.rows.length }).eq("id", job.id);
     classifyCreator(sb, creator.id, true).then(() => explainCreatorDeals(sb, creator.id)).catch((e: any) => log("enrich failed", e?.message));

@@ -15,7 +15,7 @@ export async function laneLaunches(category: string | null, excludeBrandIds: Set
   if (!category) return [];
   const admin = supabaseAdmin();
   const since = new Date(Date.now() - days * 864e5).toISOString();
-  const { data: lane } = await admin.from("brand_wall").select("brand_id,creator_id,creators!inner(category)").eq("creators.category", category).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).limit(5000);
+  const { data: lane } = await admin.from("brand_wall_mv").select("brand_id,creator_id,creators!inner(category)").eq("creators.category", category).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).limit(5000);
   const count = new Map<string, Set<string>>();
   for (const r of (lane || []) as any[]) (count.get(r.brand_id) || count.set(r.brand_id, new Set()).get(r.brand_id)!).add(r.creator_id);
   const ids = [...count.keys()].filter((id) => !excludeBrandIds.has(id));

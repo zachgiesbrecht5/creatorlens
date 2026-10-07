@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
   const handles = cands.map((c) => String(c.handle).toLowerCase());
   const { data: creators } = handles.length ? await admin.from("creators").select("id,handle,platform,last_scanned_at").or(handles.map((h) => `handle.ilike.${h}`).join(",")) : { data: [] };
   const ids = (creators || []).map((c) => c.id);
-  const { data: walls } = ids.length ? await admin.from("brand_wall").select("creator_id,brand,deals").in("creator_id", ids).eq("is_junk", false).limit(400) : { data: [] };
+  const { data: walls } = ids.length ? await admin.from("brand_wall_mv").select("creator_id,brand,deals").in("creator_id", ids).eq("is_junk", false).limit(400) : { data: [] };
   const enriched = cands.map((c) => {
     const job = (jobs || []).find((j) => j.id === c.job_id);
     const cr = (creators || []).find((x) => x.platform === c.platform && String(x.handle).toLowerCase() === String(c.handle).toLowerCase());

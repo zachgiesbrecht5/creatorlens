@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   const tracker = (await trackerStatuses(profile.id, [{ id: b?.id || "x", name, website: b?.website || null }]))[b?.id || "x"];
   if (!b) return NextResponse.json({ found: false, name, tracker: tracker ? { state: tracker.state, label: tracker.label, detail: tracker.detail || null } : null, note: "Not in the Sponsorprint index yet; no disclosed creator deals found for this name." });
   const [{ data: wall }, { data: contacts }, { data: launches }] = await Promise.all([
-    admin.from("brand_wall").select("creator_id,deals,last_seen,content_url,creators(display_name,handle,platform,followers,category)").eq("brand_id", b.id).eq("is_junk", false).eq("is_self_brand", false).neq("best_label", "Low").order("last_seen", { ascending: false }).limit(40),
+    admin.from("brand_wall_mv").select("creator_id,deals,last_seen,content_url,creators(display_name,handle,platform,followers,category)").eq("brand_id", b.id).eq("is_junk", false).eq("is_self_brand", false).neq("best_label", "Low").order("last_seen", { ascending: false }).limit(40),
     admin.from("contacts").select("name,title,email,source").eq("brand_id", b.id).eq("house_only", false),
     admin.from("launch_signals").select("kind,product,summary,posted_at,url,spoken,on_video,window_start,window_end").eq("brand_id", b.id).order("posted_at", { ascending: false }).limit(5),
   ]);

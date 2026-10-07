@@ -20,9 +20,9 @@ export async function GET(req: NextRequest) {
   const handle = r ? String(r.handle || "").replace(/^@/, "").toLowerCase() : who;
   const { data: me } = await admin.from("creators").select("id,category,display_name,followers").eq("platform", platform).ilike("handle", handle).maybeSingle();
   if (!me?.category) return NextResponse.json({ error: `Creator @${handle} isn't printed yet or has no lane; print them on sponsorprint.com first`, creator: handle }, { status: 404 });
-  const { data: mineWall } = await admin.from("brand_wall").select("brand_id").eq("creator_id", me.id);
+  const { data: mineWall } = await admin.from("brand_wall_mv").select("brand_id").eq("creator_id", me.id);
   const mine = new Set((mineWall || []).map((w) => w.brand_id));
-  const { data: lane } = await admin.from("brand_wall").select("brand_id,brand,category,website,creator_id,deals,last_seen,creators!inner(category,display_name,handle,followers)").eq("creators.category", me.category).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").limit(6000);
+  const { data: lane } = await admin.from("brand_wall_mv").select("brand_id,brand,category,website,creator_id,deals,last_seen,creators!inner(category,display_name,handle,followers)").eq("creators.category", me.category).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").limit(6000);
   const agg = new Map<string, any>();
   for (const w of (lane || []) as any[]) { if (mine.has(w.brand_id) || w.creator_id === me.id) continue; const e = agg.get(w.brand_id) || agg.set(w.brand_id, { brand_id: w.brand_id, brand: w.brand, category: w.category, website: w.website, deals: 0, last_seen: null, creators: new Map() }).get(w.brand_id); e.deals += Number(w.deals || 0); if (!e.last_seen || w.last_seen > e.last_seen) e.last_seen = w.last_seen; e.creators.set(w.creator_id, { name: w.creators.display_name || w.creators.handle, handle: w.creators.handle, followers: w.creators.followers }); }
   let list = [...agg.values()].map((e) => ({ ...e, lane_creators: e.creators.size, proof: [...e.creators.values()].slice(0, 4), creators: undefined })).sort((a, b) => b.lane_creators - a.lane_creators || b.deals - a.deals).slice(0, 300);

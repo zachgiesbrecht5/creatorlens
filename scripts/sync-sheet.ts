@@ -28,7 +28,7 @@ const sb = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
   await writeTab(sheet, "App Partnerships", rows);
   console.log(`App Partnerships: ${rows.length - 1} rows`);
 
-  const { data: wall } = await sb.from("brand_wall").select("*, creators(handle,platform)").order("deals", { ascending: false }).limit(20000);
+  const { data: wall } = await sb.from("brand_wall_mv").select("*, creators(handle,platform)").order("deals", { ascending: false }).limit(20000);
   const w: (string | number | null)[][] = [["Creator", "Platform", "Brand", "Deals", "Best", "First seen", "Last seen", "Repeat partner", "Creators booked", "Evidence", "URL"]];
   for (const r of (wall || []) as any[]) w.push([r.creators?.handle, r.creators?.platform, r.brand, Number(r.deals), r.best_label, r.first_seen?.slice(0, 10) || "", r.last_seen?.slice(0, 10) || "", r.repeat_partner ? "Yes" : "", Number(r.creators_booked), r.evidence, r.content_url]);
   await writeTab(sheet, "App Brand Wall", w);

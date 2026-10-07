@@ -33,7 +33,7 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
   const lastScan = rawScan ? await enrichScan(admin, rawScan as any) : null;
   const { data: share } = await admin.from("brand_shares").select("token,views").eq("brand_id", brand.id).is("revoked_at", null).limit(1).maybeSingle();
   if (profile) track(profile.id, "brand_view", { brand_id: brand.id, brand: brand.name });
-  let rowsQ = admin.from("brand_wall").select("*, creators(handle,display_name,platform,followers,avatar_url,category)").eq("brand_id", id).order("deals", { ascending: false });
+  let rowsQ = admin.from("brand_wall_mv").select("*, creators(handle,display_name,platform,followers,avatar_url,category)").eq("brand_id", id).order("deals", { ascending: false });
   if (scope) rowsQ = rowsQ.in("creator_id", scope.length ? scope : ["00000000-0000-0000-0000-000000000000"]);
   const { data: rows } = await rowsQ;
   // every deal, for the timeline

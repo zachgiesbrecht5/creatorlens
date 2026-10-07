@@ -87,10 +87,10 @@ async function runOne(sb: SupabaseClient, id: string, userId: string, rosterId: 
   //    same brands as this one. Proven-paid, same lane by definition.
   const { data: seedRow } = await sb.from("creators").select("id").eq("platform", platform).ilike("handle", handle).maybeSingle();
   if (seedRow) {
-    const { data: myBrands } = await sb.from("brand_wall").select("brand_id").eq("creator_id", seedRow.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low");
+    const { data: myBrands } = await sb.from("brand_wall_mv").select("brand_id").eq("creator_id", seedRow.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low");
     const bids = (myBrands || []).map((b) => b.brand_id);
     if (bids.length) {
-      const { data: shared } = await sb.from("brand_wall").select("creator_id,brand,creators!inner(id,handle,display_name,avatar_url,followers,platform,external_id,last_scanned_at)").in("brand_id", bids).neq("creator_id", seedRow.id).eq("creators.platform", platform).limit(600);
+      const { data: shared } = await sb.from("brand_wall_mv").select("creator_id,brand,creators!inner(id,handle,display_name,avatar_url,followers,platform,external_id,last_scanned_at)").in("brand_id", bids).neq("creator_id", seedRow.id).eq("creators.platform", platform).limit(600);
       const tally = new Map<string, { c: any; brands: Set<string> }>();
       for (const row of (shared || []) as any[]) { const c = row.creators; if (!c) continue; const e = tally.get(c.id) || tally.set(c.id, { c, brands: new Set() }).get(c.id)!; e.brands.add(row.brand); }
       const ranked = [...tally.values()].filter((e) => inBand(e.c.followers) && !seen.has(String(e.c.handle).toLowerCase())).sort((a, b) => b.brands.size - a.brands.size);

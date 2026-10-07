@@ -13,7 +13,7 @@ export async function enrichScan(admin: SupabaseClient, scan: { id: string; stat
   const { data: jobs } = keys.length ? await admin.from("scan_jobs").select("platform,handle,status").in("handle", keys).order("created_at", { ascending: false }) : { data: [] as any[] };
   const creators = [...(ytC || []), ...(igC || [])];
   const ids = creators.map((c) => c.id);
-  const { data: booked } = ids.length ? await admin.from("brand_wall").select("creator_id,deals").eq("brand_id", scan.brand_id).in("creator_id", ids) : { data: [] as any[] };
+  const { data: booked } = ids.length ? await admin.from("brand_wall_mv").select("creator_id,deals").eq("brand_id", scan.brand_id).in("creator_id", ids) : { data: [] as any[] };
   const rows = found.map((f) => {
     const platform = f.platform || "youtube";
     const c = platform === "youtube" ? creators.find((x) => x.platform === "youtube" && x.external_id === f.external_id) : creators.find((x) => x.platform === "instagram" && String(x.handle).toLowerCase() === String(f.handle).toLowerCase());

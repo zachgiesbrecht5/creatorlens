@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   // a prefilled Gmail compose URL the client opens in a new tab.
   const { data: gc } = await admin.from("google_connections").select("refresh_token,email").eq("user_id", profile.id).maybeSingle();
 
-  if (!creatorId) { const { data: proof } = await admin.from("brand_wall").select("creator_id").eq("brand_id", brandId).eq("is_junk", false).eq("is_self_brand", false).neq("best_label", "Low").order("deals", { ascending: false }).limit(1).maybeSingle(); creatorId = proof?.creator_id || null; }
+  if (!creatorId) { const { data: proof } = await admin.from("brand_wall_mv").select("creator_id").eq("brand_id", brandId).eq("is_junk", false).eq("is_self_brand", false).neq("best_label", "Low").order("deals", { ascending: false }).limit(1).maybeSingle(); creatorId = proof?.creator_id || null; }
   if (!creatorId) return NextResponse.json({ error: "No proof creator for this brand yet; print someone they've paid first" }, { status: 400 });
   const [{ data: brand }, { data: creator }, { data: evidence }, { data: others }, { data: contact }] = await Promise.all([
     admin.from("brands").select("name,domain,deal_count,creator_count").eq("id", brandId).single(),
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
 
   // The pitched creator's own past partners, from their print if they're in the index (real names only).
   const { data: mineRow } = await admin.from("creators").select("id").eq("platform", mine.platform === "youtube" ? "youtube" : "instagram").ilike("handle", String(mine.handle || "").replace(/^@/, "")).maybeSingle();
-  const { data: mineWall } = mineRow ? await admin.from("brand_wall").select("brand,deals,last_seen").eq("creator_id", mineRow.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").order("last_seen", { ascending: false }).limit(6) : { data: [] };
+  const { data: mineWall } = mineRow ? await admin.from("brand_wall_mv").select("brand,deals,last_seen").eq("creator_id", mineRow.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").order("last_seen", { ascending: false }).limit(6) : { data: [] };
   const ownPartners = (mineWall || []).map((w) => w.brand).filter((b) => b.toLowerCase() !== brand.name.toLowerCase()).slice(0, 3);
   const { data: brandRow } = await admin.from("brands").select("category,site_title,site_description").eq("id", brandId).maybeSingle();
   const q = Math.floor(new Date().getMonth() / 3) + 1;

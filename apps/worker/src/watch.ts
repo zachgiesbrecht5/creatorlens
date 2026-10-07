@@ -14,7 +14,7 @@ export async function keepWatch(sb: SupabaseClient): Promise<number> {
   for (const w of watches || []) {
     const { data: c } = await sb.from("creators").select("id,last_scanned_at").eq("platform", w.platform).ilike("handle", w.handle).maybeSingle();
     if (c) {
-      const { data: wall } = await sb.from("brand_wall").select("brand_id,brand,deals").eq("creator_id", c.id).eq("is_junk", false).eq("is_self_brand", false);
+      const { data: wall } = await sb.from("brand_wall_mv").select("brand_id,brand,deals").eq("creator_id", c.id).eq("is_junk", false).eq("is_self_brand", false);
       const known = new Set((w.known_brands || []) as string[]);
       const fresh = (wall || []).filter((b) => !known.has(b.brand));
       if (fresh.length && known.size > 0) {   // first check just baselines

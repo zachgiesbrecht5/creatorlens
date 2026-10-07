@@ -34,7 +34,7 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
   let timeline: TL[] = []; let myBrands: { id: string; name: string; deals: number; last: string | null }[] = [];
   if (me) {
     const [{ data: wall }, { data: months }, { data: why }] = await Promise.all([
-      admin.from("brand_wall").select("brand_id,brand,category,deals,last_seen,repeat_partner").eq("creator_id", me.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").order("last_seen", { ascending: false }),
+      admin.from("brand_wall_mv").select("brand_id,brand,category,deals,last_seen,repeat_partner").eq("creator_id", me.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").order("last_seen", { ascending: false }),
       admin.from("partnerships").select("brand_id,published_at").eq("creator_id", me.id).neq("status", "rejected").not("published_at", "is", null).limit(1000),
       admin.from("deal_insights").select("brand_id,why,season").eq("creator_id", me.id),
     ]);
@@ -49,7 +49,7 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
   const mine = new Set(myBrands.map((b) => b.id));
   let laneBrands: LaneBrand[] = [];
   if (lane) {
-    const { data: rows } = await admin.from("brand_wall").select("brand_id,brand,category,website,deals,last_seen,creator_id,creators!inner(id,handle,platform,display_name,avatar_url,followers,category)").eq("creators.category", lane).neq("creator_id", me?.id || "00000000-0000-0000-0000-000000000000").eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").limit(4000);
+    const { data: rows } = await admin.from("brand_wall_mv").select("brand_id,brand,category,website,deals,last_seen,creator_id,creators!inner(id,handle,platform,display_name,avatar_url,followers,category)").eq("creators.category", lane).neq("creator_id", me?.id || "00000000-0000-0000-0000-000000000000").eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").limit(4000);
     const agg = new Map<string, any>();
     for (const x of (rows || []) as any[]) {
       if (mine.has(x.brand_id)) continue;

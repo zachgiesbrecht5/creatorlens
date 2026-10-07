@@ -49,7 +49,7 @@ export async function writeWeeklyPulses(sb: SupabaseClient, force = false): Prom
     const { data: reqs } = await sb.from("requests").select("text,status,reply").eq("roster_creator_id", r.id).neq("status", "done").limit(5);
     let launchLines: string[] = [];
     if (me?.category) {
-      const { data: laneRows } = await sb.from("brand_wall").select("brand_id,creators!inner(category)").eq("creators.category", me.category).eq("is_junk", false).eq("is_mass_sponsor", false).limit(3000);
+      const { data: laneRows } = await sb.from("brand_wall_mv").select("brand_id,creators!inner(category)").eq("creators.category", me.category).eq("is_junk", false).eq("is_mass_sponsor", false).limit(3000);
       const bids = [...new Set((laneRows || []).map((x: any) => x.brand_id))];
       if (bids.length) { const { data: ls } = await sb.from("launch_signals").select("kind,product,posted_at,spoken,on_video,window_start,window_end,brands(name)").in("brand_id", bids).gte("posted_at", new Date(Date.now() - 45 * 864e5).toISOString()).order("posted_at", { ascending: false }).limit(4); launchLines = ((ls || []) as any[]).map((l) => `${l.brands?.name}: ${l.kind}${l.product ? ` of ${l.product}` : ""} on ${String(l.posted_at).slice(0, 10)}${l.spoken || l.on_video ? ` (they said: "${(l.spoken || l.on_video).slice(0, 80)}")` : ""}; window ${d(l.window_start)} to ${d(l.window_end)}`); }
     }

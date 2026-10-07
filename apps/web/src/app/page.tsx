@@ -32,7 +32,7 @@ export default async function Home() {
   const fmtK = (n: number | null) => (!n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
   const samples: { handle: string; name?: string; avatar?: string | null; platform: string; followers: string; lines: { brand: string; domain?: string | null; tag: string; when: string; deals: number; repeat?: boolean }[]; contact: string | null; href: string }[] = [];
   if (heroCreators?.length) {
-    const { data: walls } = await admin.from("brand_wall").select("creator_id,brand,evidence,deals,last_seen,repeat_partner,website").in("creator_id", heroCreators.map((c) => c.id)).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).lte("deals", 40);
+    const { data: walls } = await admin.from("brand_wall_mv").select("creator_id,brand,evidence,deals,last_seen,repeat_partner,website").in("creator_id", heroCreators.map((c) => c.id)).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).lte("deals", 40);
     for (const c of heroCreators) {
       const rows = (walls || []).filter((w) => w.creator_id === c.id).sort((a, b) => String(b.last_seen).localeCompare(String(a.last_seen))).slice(0, 6);
       if (rows.length < 4) continue;
@@ -52,7 +52,7 @@ export default async function Home() {
   // Fresh off the printer: creators the discover agent picked and printed, public to everyone signed in.
   const { data: fresh } = await admin.from("creators").select("id,platform,handle,display_name,avatar_url,followers,category,discover_reason,discovered_at").eq("is_public", true).not("last_scanned_at", "is", null).order("discovered_at", { ascending: false }).limit(9);
   const freshIds = (fresh || []).map((f) => f.id);
-  const { data: freshWalls } = freshIds.length ? await admin.from("brand_wall").select("creator_id,brand,deals").in("creator_id", freshIds).eq("is_junk", false).eq("is_self_brand", false) : { data: [] };
+  const { data: freshWalls } = freshIds.length ? await admin.from("brand_wall_mv").select("creator_id,brand,deals").in("creator_id", freshIds).eq("is_junk", false).eq("is_self_brand", false) : { data: [] };
   const freshCards = (fresh || []).map((f) => { const w = (freshWalls || []).filter((x) => x.creator_id === f.id).sort((a, b) => Number(b.deals) - Number(a.deals)); return { ...f, brands: w.length, top: w.slice(0, 3).map((x) => x.brand) }; });
   // today's drop
   let dropCards: any[] = [];
@@ -61,7 +61,7 @@ export default async function Home() {
     const items = ((drop?.items || []) as { creator_id: string; reason: string }[]);
     if (items.length) {
       const { data: cs } = await admin.from("creators").select("id,platform,handle,display_name,avatar_url,followers").in("id", items.map((i) => i.creator_id));
-      const { data: ws } = await admin.from("brand_wall").select("creator_id,brand,deals").in("creator_id", items.map((i) => i.creator_id)).eq("is_junk", false).eq("is_self_brand", false);
+      const { data: ws } = await admin.from("brand_wall_mv").select("creator_id,brand,deals").in("creator_id", items.map((i) => i.creator_id)).eq("is_junk", false).eq("is_self_brand", false);
       dropCards = items.map((i) => { const c = (cs || []).find((x) => x.id === i.creator_id); if (!c) return null; const w = (ws || []).filter((x) => x.creator_id === c.id).sort((a, b) => Number(b.deals) - Number(a.deals)); return { ...c, reason: i.reason, brands: w.length, top: w.slice(0, 3).map((x) => x.brand) }; }).filter(Boolean);
     }
   }

@@ -14,7 +14,7 @@ export async function explainCreatorDeals(sb: SupabaseClient, creatorId: string)
   if (!client) return 0;
   const { data: creator } = await sb.from("creators").select("id,handle,display_name,platform,followers,category,bio").eq("id", creatorId).single();
   if (!creator) return 0;
-  const { data: wall } = await sb.from("brand_wall").select("brand_id,brand,category,deals,first_seen,last_seen,evidence,repeat_partner,is_mass_sponsor").eq("creator_id", creatorId).eq("is_junk", false);
+  const { data: wall } = await sb.from("brand_wall_mv").select("brand_id,brand,category,deals,first_seen,last_seen,evidence,repeat_partner,is_mass_sponsor").eq("creator_id", creatorId).eq("is_junk", false);
   const { data: have } = await sb.from("deal_insights").select("brand_id").eq("creator_id", creatorId);
   const done = new Set((have || []).map((h) => h.brand_id));
   const todo = (wall || []).filter((w) => !done.has(w.brand_id)).slice(0, 40);

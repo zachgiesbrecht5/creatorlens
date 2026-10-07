@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   if (!c) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!(await canSeeCreator(profile.id, seesAll, c))) return NextResponse.json({ error: "Unlock this print first" }, { status: 403 });
   const [{ data: wall }, { data: recent }, { data: months }] = await Promise.all([
-    admin.from("brand_wall").select("brand_id,brand,category,deals,first_seen,last_seen,repeat_partner,content_url,best_label").eq("creator_id", c.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).order("last_seen", { ascending: false }),
+    admin.from("brand_wall_mv").select("brand_id,brand,category,deals,first_seen,last_seen,repeat_partner,content_url,best_label").eq("creator_id", c.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).order("last_seen", { ascending: false }),
     admin.from("partnerships").select("brand_id,content_url,content_title,published_at,brands(name)").eq("creator_id", c.id).neq("status", "rejected").not("content_url", "is", null).order("published_at", { ascending: false }).limit(8),
     admin.from("partnerships").select("brand_id,published_at").eq("creator_id", c.id).neq("status", "rejected").not("published_at", "is", null).limit(2000),
   ]);

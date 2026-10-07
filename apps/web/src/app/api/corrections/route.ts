@@ -23,5 +23,6 @@ export async function POST(req: Request) {
   } else {
     await admin.from("corrections").update({ status: "dismissed" }).eq("id", id);
   }
+  admin.rpc("refresh_brand_wall").then(() => {}, () => {});
   return NextResponse.json({ ok: true });
 }
