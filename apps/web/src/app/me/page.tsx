@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { laneDigest, laneTopPosts } from "@/lib/lane-digest";
 import { LaneCards } from "@/components/LaneCards";
 import { LaneBrief } from "@/components/LaneBrief";
+import { IgConnectCard } from "@/components/IgConnectCard";
 import { laneBrief, fitBand } from "@/lib/lane-brief";
 import { cleanLine } from "@/lib/clean-text";
 import { laneLaunches } from "@/lib/launches";
@@ -21,8 +22,9 @@ const pct = (a: number | null | undefined, b: number | null | undefined) => (a &
 const STATUS: Record<string, string> = { confirmed: "confirmed", in_production: "in production", delivered: "delivered", invoiced: "invoiced", paid: "paid", cancelled: "cancelled" };
 const SRC: Record<string, string> = { spoken: "said", on_video: "on video", on_screen: "on cover", hook: "caption" };
 
-export default async function CreatorHome() {
+export default async function CreatorHome({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const { roster: r, preview } = await requireCreator();
+  const sp = await searchParams;
   const admin = supabaseAdmin();
   const first = r.name.split(" ")[0];
   const platform = r.platform === "youtube" ? "youtube" : "instagram";
@@ -73,6 +75,9 @@ export default async function CreatorHome() {
     <div className="mx-auto max-w-6xl">
       {preview && <div className="mb-4 flex items-center justify-between rounded-lg border border-warn/40 bg-warn/10 px-4 py-2 text-[12.5px]"><span>Previewing as <b>{r.name}</b>. Nothing here is visible to them until their portal is on.</span><a href="/api/portal/preview?clear=1" className="num text-[11px] text-accent hover:underline">end preview</a></div>}
 
+      {/* the creator's own Instagram connection, when they have a login of their own (preview shows the manager's) */}
+      {r.creator_user_id && !preview && <IgConnectCard userId={r.creator_user_id} next="/me" who="creator" status={sp.ig} />}
+
       {/* hero */}
       <section className="hero-card">
         <div className="flex flex-wrap items-center gap-5">
@@ -83,15 +88,15 @@ export default async function CreatorHome() {
             <div className="num mt-1 text-[12px] text-white/60">@{String(r.handle || "").replace(/^@/, "")}{(r as any).refreshed_at ? ` · profile as of ${new Date((r as any).refreshed_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</div>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label={platform === "youtube" ? "subscribers" : "followers"} value={fmtK(me?.followers || r.followers)} sub={g30 != null ? `${g30 >= 0 ? "+" : ""}${g30.toFixed(1)}% in 30d` : g14 != null ? `${g14 >= 0 ? "+" : ""}${g14.toFixed(1)}% in 14d` : "tracking from today"} good={(g30 ?? g14 ?? 0) >= 0} />
+            <Stat href="/me/followers" label={platform === "youtube" ? "subscribers" : "followers"} value={fmtK(me?.followers || r.followers)} sub={g30 != null ? `${g30 >= 0 ? "+" : ""}${g30.toFixed(1)}% in 30d` : g14 != null ? `${g14 >= 0 ? "+" : ""}${g14.toFixed(1)}% in 14d` : "tracking from today"} good={(g30 ?? g14 ?? 0) >= 0} />
             {hasOwned ? <>
-              <Stat label="shares · 30 days" value={fmtK(sumShares)} sub={`median ${fmtK(medShares)} per post`} />
-              <Stat label="saves · 30 days" value={fmtK(sumSaves)} sub={`median ${fmtK(medSaves)} per post`} />
-              <Stat label="reach · 30 days" value={fmtK(sumReach)} sub={`median ${fmtK(medReach)} per post`} />
+              <Stat href="/me/engagement" label="shares · 30 days" value={fmtK(sumShares)} sub={`median ${fmtK(medShares)} per post`} />
+              <Stat href="/me/engagement" label="saves · 30 days" value={fmtK(sumSaves)} sub={`median ${fmtK(medSaves)} per post`} />
+              <Stat href="/me/engagement" label="reach · 30 days" value={fmtK(sumReach)} sub={`median ${fmtK(medReach)} per post`} />
             </> : <>
-              <Stat label={`median ${perf?.metric_label || "engagement"}`} value={fmtK(perf?.median)} sub={perf ? `${perf.items} posts in window` : ""} />
-              <Stat label="live projects" value={String(live.length)} sub={pending ? `${money(pending)} pending` : "nothing pending"} />
-              <Stat label="pitched this week" value={String(pitchedBrands.length)} sub={convo.length ? `${convo.length} in conversation` : "by your team"} />
+              <Stat href="/me/engagement" label={`median ${perf?.metric_label || "engagement"}`} value={fmtK(perf?.median)} sub={perf ? `${perf.items} posts in window` : ""} />
+              <Stat href="/me/projects" label="live projects" value={String(live.length)} sub={pending ? `${money(pending)} pending` : "nothing pending"} />
+              <Stat href="/me/pitched" label="pitched this week" value={String(pitchedBrands.length)} sub={convo.length ? `${convo.length} in conversation` : "by your team"} />
             </>}
           </div>
         </div>
@@ -178,8 +183,9 @@ export default async function CreatorHome() {
   );
 }
 
-function Stat({ label, value, sub, good = true }: { label: string; value: string; sub?: string; good?: boolean }) {
-  return <div className="rounded-xl bg-white/[0.07] px-3.5 py-3"><div className="num text-[10px] uppercase tracking-[0.12em] text-white/50">{label}</div><div className="mt-0.5 text-[22px] font-bold leading-none text-white">{value}</div>{sub && <div className={`num mt-1 text-[10.5px] ${good ? "text-emerald-300" : "text-rose-300"}`}>{sub}</div>}</div>;
+function Stat({ label, value, sub, good = true, href }: { label: string; value: string; sub?: string; good?: boolean; href?: string }) {
+  const body = <><div className="num text-[10px] uppercase tracking-[0.12em] text-white/50">{label}{href && <span className="float-right text-white/30">→</span>}</div><div className="mt-0.5 text-[22px] font-bold leading-none text-white">{value}</div>{sub && <div className={`num mt-1 text-[10.5px] ${good ? "text-emerald-300" : "text-rose-300"}`}>{sub}</div>}</>;
+  return href ? <Link href={href} className="block rounded-xl bg-white/[0.07] px-3.5 py-3 transition hover:bg-white/[0.13]" title="Open">{body}</Link> : <div className="rounded-xl bg-white/[0.07] px-3.5 py-3">{body}</div>;
 }
 function PostCard({ t, median, label, rank, items }: { t: any; median: number; label: string; rank: number; items: number }) {
   const src = t.spoken ? "spoken" : t.on_video ? "on_video" : t.on_screen ? "on_screen" : "hook";

@@ -13,12 +13,14 @@ import { Tour } from "@/components/Tour";
 import { HOME_TOUR } from "@/components/tours";
 import { supabaseAdmin, currentAccess } from "@/lib/supabase";
 import { fmt } from "@/lib/fmt";
+import { IgConnectCard } from "@/components/IgConnectCard";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   { const cc = await creatorContext(); if (cc) redirect("/me"); }
-  const { profile: user, admin: seesAll } = await currentAccess();
+  const sp = await searchParams;
+  const { profile: user, admin: seesAll, insider } = await currentAccess();
   const admin = supabaseAdmin();
   const [{ count: creators }, { count: brands }, { count: deals }] = await Promise.all([
     admin.from("creators").select("*", { count: "exact", head: true }),
@@ -106,6 +108,7 @@ export default async function Home() {
         </div>
       </section>
 
+      {user && insider && <div className="mt-6"><IgConnectCard userId={user.id} next="/" status={sp.ig} /></div>}
       {watchNew > 0 && <Link href="/watchlist" className="mt-6 flex items-center justify-between rounded-lg border border-ok/30 bg-okSoft/60 px-4 py-3 text-[13px] hover:border-ok"><span><b>{watchNew}</b> creator{watchNew === 1 ? "" : "s"} on your watchlist picked up new brands this week</span><span className="num text-[11px] text-ok">see what's new →</span></Link>}
       {user && (
         <div className="mt-6 flex flex-wrap items-center gap-3">

@@ -3,7 +3,8 @@ import { currentUser, supabaseAdmin } from "@/lib/supabase";
 import { redirectTo } from "@/lib/origin";
 
 const V = "v25.0";
-const fail = (req: NextRequest, msg: string) => NextResponse.redirect(redirectTo(req, `/settings?ig=${encodeURIComponent(msg)}`));
+const nextOf = (req: NextRequest) => { try { const n = JSON.parse(Buffer.from(req.nextUrl.searchParams.get("state") || "", "base64url").toString()).n; return typeof n === "string" && /^\/[a-z0-9\-\/]*$/i.test(n) ? n : "/settings"; } catch { return "/settings"; } };
+const fail = (req: NextRequest, msg: string) => NextResponse.redirect(redirectTo(req, `${nextOf(req)}?ig=${encodeURIComponent(msg)}`));
 
 export async function GET(req: NextRequest) {
   const user = await currentUser();
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
     }
     if (pageIgIds.size) await admin.from("ig_connections").update({ owned: true }).in("ig_user_id", [...pageIgIds]);
   } catch { /* business edges are optional */ }
-  const res = NextResponse.redirect(redirectTo(req, "/settings?ig=ok"));
+  const res = NextResponse.redirect(redirectTo(req, `${nextOf(req)}?ig=ok`));
   res.cookies.delete("cl_ig_state");
   return res;
 }
