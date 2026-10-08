@@ -153,7 +153,7 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
 
           {/* lane feed */}
           <section>
-            <div className="mb-3 flex items-end justify-between gap-4"><div><div className="label">Your lane · what to do with it</div><h2 className="h2">What {digest.creators.length} creator{digest.creators.length === 1 ? "" : "s"} like you are being rewarded for</h2><p className="mt-1 text-[13px] text-muted">Counted from the people you and your team follow, each post against its own creator's median. First the direction, then the proof.</p></div><Link href="/me/watchlist" className="btn-ghost !py-1.5 !text-[12px] whitespace-nowrap">your lane →</Link></div>
+            <div className="mb-3 flex items-end justify-between gap-4"><div><div className="label">Your lane · what to do with it</div><h2 className="h2">What {digest.creators.length} creator{digest.creators.length === 1 ? "" : "s"} like you are being rewarded for</h2><p className="mt-1 text-[13px] text-muted">Counted from the people you and your team follow, each post against its own creator's median. First the direction, then the proof.</p></div><div className="flex gap-2"><Link href="/me/feed" className="btn-ghost !py-1.5 !text-[12px] whitespace-nowrap">swipe the feed</Link><Link href="/me/watchlist" className="btn-ghost !py-1.5 !text-[12px] whitespace-nowrap">your lane →</Link></div></div>
             <LaneBrief brief={brief} first={first} laneSize={digest.creators.length} />
             <div className="mt-6"><LaneCards all={laneAll} talking={laneTalking} printHref fit={band} limit={8} title="The proof · last 60 days" /></div>
             <LaneHooks openers={digest.openers} note={digest.note} />

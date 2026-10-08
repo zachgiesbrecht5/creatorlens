@@ -38,6 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <NavLink href="/me">Home</NavLink>
                   <NavLink href="/me/projects">Projects</NavLink>
                   <NavLink href="/me/watchlist">Your lane</NavLink>
+                  <NavLink href="/me/feed">Feed</NavLink>
                   <form action="/auth/signout" method="post" className="ml-2"><button className="rounded-md px-2.5 py-1.5 text-dim hover:bg-surface2 hover:text-fg">Sign out</button></form>
                 </>
               ) : profile ? (

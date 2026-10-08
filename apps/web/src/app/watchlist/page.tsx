@@ -40,7 +40,7 @@ export default async function Watchlist({ searchParams }: { searchParams: Promis
   const cr = (p: string, h: string) => (creators || []).find((c) => c.platform === p && c.handle.toLowerCase() === h.toLowerCase());
   const unseen = eventsShown.filter((e) => !e.seen);
   // what the creators themselves did in their portal: follows and unfollows in the last 30 days
-  const { data: actsRaw } = await admin.from("events").select("id,name,props,created_at").in("user_id", members).in("name", ["creator_followed", "creator_unfollowed", "creator_muted", "creator_unmuted"]).gte("created_at", new Date(Date.now() - 30 * 864e5).toISOString()).order("created_at", { ascending: false }).limit(40);
+  const { data: actsRaw } = await admin.from("events").select("id,name,props,created_at").in("user_id", members).in("name", ["creator_followed", "creator_unfollowed", "creator_muted", "creator_unmuted", "creator_saved_idea"]).gte("created_at", new Date(Date.now() - 30 * 864e5).toISOString()).order("created_at", { ascending: false }).limit(40);
   const acts = (actsRaw || []).filter((a) => matches(norm((a.props as any)?.roster_creator_id)));
   return (
     <div className="mx-auto max-w-4xl">
@@ -60,7 +60,7 @@ export default async function Watchlist({ searchParams }: { searchParams: Promis
           <div className="label mb-2">From your creators</div>
           <ul className="space-y-1.5">{acts.map((a) => { const pr = a.props as any; return (
             <li key={a.id} className="flex items-baseline justify-between gap-3 text-[13px]">
-              <span><b>{pr.creator}</b> {a.name === "creator_followed" ? "started following" : a.name === "creator_unfollowed" ? "unfollowed" : a.name === "creator_muted" ? "hid your pick" : "put back your pick"} <Link href={`/c/${pr.platform}/${pr.handle}`} className="font-medium hover:text-accent">{pr.name || `@${pr.handle}`}</Link>{a.name === "creator_followed" ? " in their lane" : a.name === "creator_muted" ? " from their lane (your watch is still on)" : ""}</span>
+              <span><b>{pr.creator}</b> {a.name === "creator_saved_idea" ? <>saved an idea from the feed: <i>{pr.idea}</i></> : <>{a.name === "creator_followed" ? "started following" : a.name === "creator_unfollowed" ? "unfollowed" : a.name === "creator_muted" ? "hid your pick" : "put back your pick"} <Link href={`/c/${pr.platform}/${pr.handle}`} className="font-medium hover:text-accent">{pr.name || `@${pr.handle}`}</Link>{a.name === "creator_followed" ? " in their lane" : a.name === "creator_muted" ? " from their lane (your watch is still on)" : ""}</>}</span>
               <span className="num shrink-0 text-[10.5px] text-dim">{new Date(a.created_at).toLocaleDateString()}</span>
             </li>); })}</ul>
           <div className="mt-2 text-[11px] text-dim">Their follows feed the lane you both see. When they hide one of your picks it stays on your watchlist and just stops showing in their portal.</div>
