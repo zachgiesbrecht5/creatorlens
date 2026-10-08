@@ -49,7 +49,7 @@ export async function runNeighborhoods(sb: SupabaseClient, limit = 1): Promise<n
 }
 
 export async function houseIgToken(sb: SupabaseClient): Promise<IgToken | null> {
-  const { data } = await sb.from("ig_connections").select("ig_user_id,access_token").or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
+  const { data } = await sb.from("ig_connections").select("ig_user_id,access_token").eq("api_host", "facebook").or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
   return data ? { igUserId: data.ig_user_id, accessToken: data.access_token } : null;
 }
 

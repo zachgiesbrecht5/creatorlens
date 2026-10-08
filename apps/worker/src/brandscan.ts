@@ -53,7 +53,7 @@ async function spendYt(sb: SupabaseClient, units: number) {
 }
 
 async function igToken(sb: SupabaseClient): Promise<(IgToken & { id: string }) | null> {
-  const { data } = await sb.from("ig_connections").select("id,ig_user_id,access_token").eq("healthy", true).or(`cooldown_until.is.null,cooldown_until.lt.${new Date().toISOString()}`).order("calls_this_hour", { ascending: true }).limit(1).maybeSingle();
+  const { data } = await sb.from("ig_connections").select("id,ig_user_id,access_token").eq("healthy", true).eq("api_host", "facebook").or(`cooldown_until.is.null,cooldown_until.lt.${new Date().toISOString()}`).order("calls_this_hour", { ascending: true }).limit(1).maybeSingle();
   return data ? { id: data.id, igUserId: data.ig_user_id, accessToken: data.access_token } : null;
 }
 

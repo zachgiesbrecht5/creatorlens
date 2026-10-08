@@ -35,20 +35,29 @@ export async function GET(req: NextRequest) {
       access_token: token, healthy: true, cooldown_until: null, last_error: null,
     }, { onConflict: "ig_user_id" });
   }
-  // Instagram accounts inside the user's business portfolios (owned, or assigned by a creator):
-  // each one is readable for insights (saves, shares, reach) and adds its own hourly allowance.
+  // Instagram accounts inside the user's business portfolios (owned, or assigned by a creator): each one is
+  // readable for insights (saves, shares, reach, follows) and adds its own hourly allowance. The Business node
+  // exposes several edges and not every portfolio supports every one, so each is tried on its own and failures
+  // are logged rather than swallowed (an earlier version asked for a non-existent edge and silently got nothing).
+  const EDGES = ["owned_instagram_accounts", "instagram_business_accounts", "instagram_accounts", "owned_instagram_assets", "client_instagram_assets"];
+  const portfolio: { id: string; username: string | null; business: string }[] = [];
   try {
-    const biz: any = await (await fetch(`https://graph.facebook.com/${V}/me/businesses?fields=id,name&access_token=${token}`)).json();
+    const biz: any = await (await fetch(`https://graph.facebook.com/${V}/me/businesses?fields=id,name&limit=50&access_token=${token}`)).json();
     for (const b of biz.data || []) {
-      for (const edge of ["owned_instagram_accounts", "client_instagram_accounts"]) {
+      for (const edge of EDGES) {
         const r: any = await (await fetch(`https://graph.facebook.com/${V}/${b.id}/${edge}?fields=id,username&limit=100&access_token=${token}`)).json();
-        for (const ig of r.data || []) {
-          await admin.from("ig_connections").upsert({ user_id: user.id, ig_user_id: String(ig.id), ig_username: ig.username, fb_user_id: fbUserId, access_token: token, healthy: true, cooldown_until: null, last_error: null, owned: true }, { onConflict: "ig_user_id" });
-        }
+        if (r.error) { console.warn(`[ig] ${b.name}/${edge}: ${r.error.message}`); continue; }
+        for (const ig of r.data || []) if (!portfolio.some((p) => p.id === String(ig.id))) portfolio.push({ id: String(ig.id), username: ig.username || null, business: b.name });
       }
     }
+    for (const p of portfolio) {
+      if (!p.username) { const u: any = await (await fetch(`https://graph.facebook.com/${V}/${p.id}?fields=username&access_token=${token}`)).json().catch(() => ({})); p.username = u?.username || null; }
+      if (!p.username) continue;
+      await admin.from("ig_connections").upsert({ user_id: user.id, ig_user_id: p.id, ig_username: p.username, fb_user_id: fbUserId, access_token: token, healthy: true, cooldown_until: null, last_error: null, owned: true }, { onConflict: "ig_user_id" });
+    }
     if (pageIgIds.size) await admin.from("ig_connections").update({ owned: true }).in("ig_user_id", [...pageIgIds]);
-  } catch { /* business edges are optional */ }
+    console.log(`[ig] portfolio accounts: ${portfolio.map((p) => `${p.username || p.id} (${p.business})`).join(", ") || "none"}`);
+  } catch (e: any) { console.warn("[ig] business edges failed", e?.message); }
   const res = NextResponse.redirect(redirectTo(req, `${nextOf(req)}?ig=ok`));
   res.cookies.delete("cl_ig_state");
   return res;

@@ -26,7 +26,7 @@ const YT_KEY = process.env.YT_API_KEY || "";
 type Seed = { platform: "youtube" | "instagram"; handle: string; name: string; followers: number | null; niche: string | null; bio: string | null; why: string };
 
 async function houseIgToken(sb: SupabaseClient): Promise<IgToken | null> {
-  const { data } = await sb.from("ig_connections").select("ig_user_id,access_token").eq("healthy", true).or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
+  const { data } = await sb.from("ig_connections").select("ig_user_id,access_token").eq("healthy", true).eq("api_host", "facebook").or("cooldown_until.is.null,cooldown_until.lt.now()").limit(1).maybeSingle();
   return data ? { igUserId: data.ig_user_id, accessToken: data.access_token } : null;
 }
 
@@ -59,7 +59,7 @@ export async function discover(sb: SupabaseClient): Promise<number> {
   const usedIg = (recentJobs || []).filter((j) => j.platform === "instagram").length;
   const { data: hq } = await sb.from("house_quota").select("yt_units").eq("day", day).maybeSingle();
   const ytOpen = Number(hq?.yt_units || 0) < YT_DAILY_GUARD;
-  const { data: igTokens } = await sb.from("ig_connections").select("id").or("cooldown_until.is.null,cooldown_until.lt.now()");
+  const { data: igTokens } = await sb.from("ig_connections").select("id").eq("api_host", "facebook").or("cooldown_until.is.null,cooldown_until.lt.now()");
   const igAccounts = (igTokens || []).length;
   const budgets: Record<"youtube" | "instagram", number> = { youtube: ytOpen ? Math.max(0, YT_PER_HOUR - usedYt) : 0, instagram: Math.max(0, IG_PER_HOUR * igAccounts - usedIg) };
   if (budgets.youtube <= 0 && budgets.instagram <= 0) return 0;

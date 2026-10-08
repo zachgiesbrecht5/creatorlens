@@ -53,7 +53,7 @@ async function refreshBrandWall(): Promise<void> {
 // ── Token pool for Instagram ───────────────────────────────────
 async function pickIgToken() {
   const { data } = await sb.from("ig_connections").select("*")
-    .eq("healthy", true).or(`cooldown_until.is.null,cooldown_until.lt.${new Date().toISOString()}`)
+    .eq("healthy", true).eq("api_host", "facebook").or(`cooldown_until.is.null,cooldown_until.lt.${new Date().toISOString()}`)
     .order("calls_this_hour", { ascending: true }).limit(1);
   const t = data?.[0];
   if (!t) return null;
