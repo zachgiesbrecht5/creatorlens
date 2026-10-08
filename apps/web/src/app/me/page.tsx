@@ -58,11 +58,12 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
   const band = fitBand(me?.followers || r.followers);
   const digest = await laneDigest(r.user_id, r.id, 30, { fit: band });
   const [laneAll, laneTalking] = await Promise.all([laneTopPosts(digest.rowIds, { limit: 24, days: 60 }), laneTopPosts(digest.rowIds, { limit: 24, days: 60, voiceOnly: true })]);
-  const brief = laneBrief(digest, laneAll, { performance: perf });
+  const { data: fb } = await admin.from("brief_feedback").select("key").eq("roster_creator_id", r.id).eq("kind", "opener").eq("vote", -1);
+  const brief = laneBrief(digest, laneAll, { performance: perf }, { hidden: new Set((fb || []).map((x) => x.key)) });
   // one sentence of direction, built from the brief; the page never opens blank
   const move = (() => {
     const o = brief.tryThis[0];
-    if (o) return { text: `Open a post with "${cleanLine(o.label)}" this week.`, why: `${o.creators} creator${o.creators === 1 ? "" : "s"} in your lane got ${o.mult ?? "over 2"}x their median with it${o.said ? ", said out loud in the first second" : ""}, and it's not in your last 250 posts.`, href: "/me/watchlist" };
+    if (o) return { text: `Open a post with "${cleanLine(o.stem)}" this week.`, why: `${o.creators} creator${o.creators === 1 ? "" : "s"} in your lane got ${o.mult ?? "over 2"}x their median with it${o.said ? ", said out loud in the first second" : ""}, and it's not in your last 250 posts.`, href: "/me/watchlist" };
     const g = brief.gaps[0];
     if (g) return { text: `Film something about ${g.label}.`, why: `${g.lanePosts} of the lane's best posts are about it; none of your top posts are.`, href: "/me/watchlist" };
     if (brief.own[0]) return { text: `Make another one like "${cleanLine(brief.own[0].line)}".`, why: `${brief.own[0].mult ? `${brief.own[0].mult}x your median` : "your best post in the window"}; the lane has nothing new to steal this week.`, href: "/me/engagement" };

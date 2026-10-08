@@ -136,7 +136,7 @@ export async function laneDigest(userId: string, rosterCreatorId: string, days =
     key, label: [...v.labels.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || key, posts: v.posts, creators: v.creators.size,
     mult: v.multPosts ? +(v.sumMult / v.multPosts).toFixed(1) : null, avg: Math.round(v.sumAvg / Math.max(1, v.posts)), said: v.said > 0,
     examples: v.examples.sort((a, b) => (b.mult ?? 0) - (a.mult ?? 0) || b.metric - a.metric).slice(0, 4),
-  })).sort((a, b) => (b.mult ?? 0) - (a.mult ?? 0) || b.posts - a.posts).slice(0, 8);
+  })).sort((a, b) => (b.mult ?? 0) - (a.mult ?? 0) || b.posts - a.posts).slice(0, 40);   // the brief needs a deep pool; LaneHooks shows the top 8
   const total = laneCreators.reduce((s, c) => s + (c.items || 0), 0);
   return {
     since,

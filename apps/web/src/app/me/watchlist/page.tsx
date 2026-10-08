@@ -17,7 +17,8 @@ export default async function MyWatchlist() {
   const band = fitBand(me?.followers || r.followers);
   const digest = await laneDigest(r.user_id, r.id, 30, { fit: band });
   const [all, talking] = await Promise.all([laneTopPosts(digest.rowIds, { limit: 48, days: 180 }), laneTopPosts(digest.rowIds, { limit: 48, days: 180, voiceOnly: true })]);
-  const brief = laneBrief(digest, all, { performance: me?.performance || null });
+  const { data: fb } = await admin.from("brief_feedback").select("key").eq("roster_creator_id", r.id).eq("kind", "opener").eq("vote", -1);
+  const brief = laneBrief(digest, all, { performance: me?.performance || null }, { hidden: new Set((fb || []).map((x) => x.key)) });
   const [{ data: watches }, { data: mutes }] = await Promise.all([
     admin.from("watchlist").select("platform,handle,added_by,added_at").eq("user_id", r.user_id).eq("roster_creator_id", r.id).order("added_at", { ascending: false }),
     admin.from("lane_mutes").select("platform,handle").eq("roster_creator_id", r.id),

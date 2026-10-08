@@ -28,11 +28,11 @@ export function topicsOf(text: string): string[] {
   return TOPICS.filter((x) => x.re.test(t)).map((x) => x.key);
 }
 
-export type BriefOpener = LaneOpener & { topics: string[] };
+export type BriefOpener = LaneOpener & { topics: string[]; stem: string; score: number; fit: "same" | "new" | "off" };
 export type BriefGap = { key: string; label: string; lanePosts: number; creators: number; example: LaneTopPost | null };
 export type BriefOwn = { line: string; url: string; metric: number; mult: number | null; published_at: string; thumb: string | null; src: string };
 export type LaneBrief = {
-  tryThis: BriefOpener[];       // openings the lane rewards that the creator hasn't used
+  tryThis: BriefOpener[];       // openings the lane rewards that the creator hasn't used, best first (up to 8; the UI shows 3)
   gaps: BriefGap[];             // topics in the lane's best that the creator's best don't cover
   own: BriefOwn[];              // the creator's own top 3 by multiple of their median
   ownTopics: string[];
@@ -41,7 +41,18 @@ export type LaneBrief = {
 
 const lineOf = (t: any) => String(t?.spoken || t?.on_video || t?.on_screen || t?.hook || t?.title || "");
 
-export function laneBrief(digest: LaneDigest, lanePosts: LaneTopPost[], own: { performance: any | null }): LaneBrief {
+/** The words the group actually shares, shown with an ellipsis so a group isn't mislabelled by one post's full line. */
+function stemOf(o: LaneOpener): string {
+  const lines = [o.label, ...o.examples.map((e) => e.on_screen || e.hook || e.title)].filter(Boolean).map((l) => String(l).replace(/\s+/g, " ").trim());
+  const words = lines.map((l) => l.split(" "));
+  let n = 0;
+  while (words.every((w) => w[n] && w[n].toLowerCase().replace(/[^\p{L}\p{N}']/gu, "") === words[0][n].toLowerCase().replace(/[^\p{L}\p{N}']/gu, ""))) n++;
+  const shared = words[0].slice(0, Math.max(n, o.key.split(" ").length)).join(" ");
+  const longest = Math.max(...words.map((w) => w.length));
+  return shared.length < lines[0].length && longest > shared.split(" ").length ? `${shared}…` : lines[0];
+}
+
+export function laneBrief(digest: LaneDigest, lanePosts: LaneTopPost[], own: { performance: any | null }, opts: { hidden?: Set<string> } = {}): LaneBrief {
   const perf = own.performance || null;
   const median = Number(perf?.median || 0);
   const ownTop: any[] = perf?.top || [];
@@ -51,10 +62,19 @@ export function laneBrief(digest: LaneDigest, lanePosts: LaneTopPost[], own: { p
   const ownTopics = new Set(topicsOf(ownText));
 
   const used = digest.openers.filter((o) => ownKeys.has(o.key)).length;
+  // Quality bar: more than one creator, at least three posts, a real lift. Rank by evidence (creators, posts) times a
+  // capped multiple, with a bonus when the subject is one the creator already works in and a penalty when it's
+  // nothing to do with them. Thumbs-down keys are left out.
   const tryThis: BriefOpener[] = digest.openers
-    .filter((o) => !ownKeys.has(o.key) && (o.creators >= 2 || o.said) && (o.mult ?? 0) >= 2)
-    .map((o) => ({ ...o, topics: topicsOf([o.label, ...o.examples.map((e) => e.on_screen || e.hook || e.title)].join(" \n ")) }))
-    .slice(0, 3);
+    .filter((o) => !ownKeys.has(o.key) && !opts.hidden?.has(o.key) && o.creators >= 2 && o.posts >= 3 && (o.mult ?? 0) >= 2)
+    .map((o) => {
+      const topics = topicsOf([o.label, ...o.examples.map((e) => e.on_screen || e.hook || e.title)].join(" \n "));
+      const fit: BriefOpener["fit"] = topics.some((t) => ownTopics.has(t)) ? "same" : topics.length ? "new" : "off";
+      const score = Math.log(o.posts + 1) * Math.sqrt(o.creators) * Math.log(Math.min(o.mult ?? 1, 50) + 1) * (fit === "same" ? 1.5 : fit === "new" ? 1 : 0.6) * (o.said ? 1.15 : 1);
+      return { ...o, topics, stem: stemOf(o), score, fit };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
 
   // topics: count lane top posts (one creator counts once per topic) vs the creator's own
   const byTopic = new Map<string, { posts: number; creators: Set<string>; example: LaneTopPost | null }>();

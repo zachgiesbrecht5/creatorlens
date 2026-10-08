@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LaneBrief as Brief } from "@/lib/lane-brief";
 import { TOPICS } from "@/lib/lane-brief";
 import { cleanLine } from "@/lib/clean-text";
+import { TryThis } from "@/components/TryThis";
 
 const fmtK = (n: number | null | undefined) => (n == null ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
 const d = (s: string | null | undefined) => (s ? new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
@@ -18,23 +19,10 @@ export function LaneBrief({ brief, first, laneSize, printHref = true }: { brief:
       <div className="card p-5" style={{ borderTop: "3px solid #2f5bff" }}>
         <div className="label mb-1">Try this week</div>
         <h2 className="h2">Openings your lane rewards that you haven't used</h2>
-        <p className="mt-1 text-[13px] text-muted">From the first words actually said or written in {laneSize} creators' posts, measured against each creator's own median. None of these appear in your last 250 posts.</p>
+        <p className="mt-1 text-[13px] text-muted">Patterns that more than one creator in your lane gets rewarded for, grouped by the words they share, measured against each creator's own median. None of them appear in your last 250 posts. Thumbs up to keep one, thumbs down for the next.</p>
         {!brief.tryThis.length ? (
           <div className="mt-3 text-[13px] text-muted">{brief.usedOpeners ? `You already use ${brief.usedOpeners} of the openings that repeat in your lane. Nothing new to steal this week; the cards below show what each one is doing.` : "Not enough repeated openings in the lane yet. Follow a few more creators you rate and this fills in after their first print."}</div>
-        ) : (
-          <ol className="mt-4 space-y-3">
-            {brief.tryThis.map((o, i) => { const ex = o.examples[0]; return (
-              <li key={o.key} className="grid gap-3 rounded-lg border border-line bg-surface p-3 sm:grid-cols-[28px_1fr_auto]">
-                <div className="num text-[18px] font-bold text-accent">{i + 1}</div>
-                <div className="min-w-0">
-                  <div className="text-[15px] font-semibold leading-snug">"{cleanLine(o.label)}"{o.said && <span className="num ml-2 rounded bg-[#2f5bff] px-1 text-[9px] font-bold text-white align-middle">SAID</span>}</div>
-                  <div className="num mt-1 text-[11px] text-muted">{o.posts} post{o.posts === 1 ? "" : "s"} · {o.creators} creator{o.creators === 1 ? "" : "s"} · {o.mult != null ? `${o.mult}x their median on average` : `avg ${fmtK(o.avg)}`}{o.topics.length ? ` · ${o.topics.slice(0, 2).map(topicLabel).join(", ")}` : ""}</div>
-                  {ex && <div className="mt-2 text-[12.5px]">Best example: <a href={ex.url} target="_blank" rel="noreferrer" className="font-medium hover:text-accent">"{cleanLine(ex.on_screen || ex.hook || ex.title)}"</a> <span className="num text-[11px] text-muted">· {fmtK(ex.metric)}{ex.mult ? ` · ${ex.mult}x their median` : ""} · {printHref ? <Link href={`/c/${ex.platform}/${ex.handle}`} className="hover:text-accent">{ex.creator}</Link> : ex.creator} · {d(ex.published_at)}</span></div>}
-                  <div className="mt-1.5 text-[12px] text-dim">Why you: {o.said ? "it's a spoken first line, so it works with you on camera and no text on screen." : "it's a written opener, so it works as a caption or the first on-screen line."}{o.topics.some((t) => brief.ownTopics.includes(t)) ? ` Same subject you already post about (${o.topics.filter((t) => brief.ownTopics.includes(t)).slice(0, 2).map(topicLabel).join(", ")}), a new way in.` : o.topics.length ? ` A subject your top posts don't cover yet (${o.topics.slice(0, 2).map(topicLabel).join(", ")}).` : ""}</div>
-                </div>
-              </li>); })}
-          </ol>
-        )}
+        ) : <TryThis candidates={brief.tryThis} ownTopics={brief.ownTopics} printHref={printHref} />}
       </div>
 
       {/* 2. gaps */}

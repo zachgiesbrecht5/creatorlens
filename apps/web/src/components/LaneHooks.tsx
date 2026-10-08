@@ -13,7 +13,7 @@ const pct = (g: number | null) => (g == null ? null : `${g >= 0 ? "+" : ""}${(g 
  *  the creator's OWN median (size-neutral). Click a row to see the posts behind it. */
 export function LaneHooks({ hooks, openers, note, printHref = true }: { hooks?: LaneHook[]; openers: LaneOpener[]; note: string; printHref?: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
-  const rows = openers.map((o) => ({ id: o.key, label: o.label, mult: o.mult, avg: o.avg, posts: o.posts, creators: o.creators, examples: o.examples, said: o.said }));
+  const rows = openers.slice(0, 8).map((o) => ({ id: o.key, label: o.label, mult: o.mult, avg: o.avg, posts: o.posts, creators: o.creators, examples: o.examples, said: o.said }));
   const max = Math.max(...rows.map((h) => h.mult ?? 0), 1);
   if (!rows.length) return null;
   return (
