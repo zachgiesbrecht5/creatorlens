@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
 
-/** The creator's version of the watch button. Their lane is theirs: follow anyone, unfollow their own picks.
- *  A manager's pick stays (the manager removes it from the Watchlist page). */
+/** The creator's version of the watch button. Their lane is theirs: follow anyone, remove anyone.
+ *  Removing a manager's pick hides it for them only; the manager keeps the watch. */
 export function LaneFollowButton({ platform, handle, initial, addedBy, firstName }: { platform: string; handle: string; initial: boolean; addedBy: string | null; firstName?: string }) {
   const [on, setOn] = useState(initial);
   const [by, setBy] = useState<string | null>(addedBy);
@@ -13,12 +13,14 @@ export function LaneFollowButton({ platform, handle, initial, addedBy, firstName
     const r = await fetch("/api/me/watch", { method: on ? "DELETE" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ platform, handle }) });
     const j = await r.json().catch(() => ({})); setBusy(false);
     if (!r.ok) { setErr(j.error || "failed"); return; }
-    if (on) { setOn(false); setBy(null); } else { setOn(true); setBy("creator"); }
+    if (on) { setOn(false); setBy(j.removed === "muted" ? "muted" : null); } else { setOn(true); setBy(j.unmuted ? addedBy : "creator"); }
   }
-  if (on && by && by !== "creator") return <button disabled className="!border-ok/40 !text-ok" title={`${firstName ? firstName + "'s" : "Your"} manager added this creator to the lane. Ask them to remove it.`}>in your lane · manager's pick</button>;
+  const managers = on && by && by !== "creator";
+  const label = busy ? "…" : on ? (managers ? "in your lane · manager's pick · remove" : "in your lane ✓ · unfollow") : by === "muted" ? "hidden from your lane · put back" : "+ follow in your lane";
+  const title = on ? (managers ? `${firstName ? firstName + "'s" : "Your"} manager added this creator. Remove hides them from your lane only; your manager keeps the watch.` : "Unfollow: their posts stop feeding your lane") : "Follow: their best posts feed your lane every week";
   return (
     <span className="inline-flex items-center gap-2">
-      <button onClick={toggle} disabled={busy} className={on ? "!border-ok/40 !text-ok" : ""} title={on ? "Unfollow: their posts stop feeding your lane" : "Follow: their best posts feed your lane every week"}>{busy ? "…" : on ? "in your lane ✓ · unfollow" : "+ follow in your lane"}</button>
+      <button onClick={toggle} disabled={busy} className={on ? "!border-ok/40 !text-ok" : ""} title={title}>{label}</button>
       {err && <span className="num text-[11px] text-bad">{err}</span>}
     </span>
   );

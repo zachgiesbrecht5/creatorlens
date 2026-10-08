@@ -34,6 +34,8 @@ export type LaneDigest = {
   openers: LaneOpener[];
   newBrands: { creator: string; brand: string; brand_id: string | null; when: string }[];
   note: string;             // one honest line about what the shapes are measured on
+  muted: string[];          // "platform:handle" the creator hid from their lane
+  outsideBand: number;      // lane creators dropped by the fit band (0 when no band)
 };
 
 // Reads creators_slim (performance without base64 thumbnails): a lane of 130 creators is ~0.5 MB
@@ -42,7 +44,7 @@ export type LaneDigest = {
 // recent posts relative to their own median, the hook shapes that recur (measured against
 // each creator's own median so a 5M account and a 50K account count the same), and the
 // brands any of them picked up. Computed live from the index; nothing to run.
-export async function laneDigest(userId: string, rosterCreatorId: string, days = 30): Promise<LaneDigest> {
+export async function laneDigest(userId: string, rosterCreatorId: string, days = 30, opts: { fit?: { min: number; max: number } | null } = {}): Promise<LaneDigest> {
   const admin = supabaseAdmin();
   const since = new Date(Date.now() - days * 864e5).toISOString();
   // the lane is shared across the org: watches filed under any teammate's row for the same creator count
@@ -53,10 +55,20 @@ export async function laneDigest(userId: string, rosterCreatorId: string, days =
   const key = String(rr?.handle || rr?.name || "").replace(/^@/, "").toLowerCase();
   const { data: twins } = key ? await admin.from("roster_creators").select("id").in("user_id", memberIds).or(`handle.ilike.${key},handle.ilike.@${key},name.ilike.${key}`) : { data: [] };
   const rowIds = [...new Set([rosterCreatorId, ...(twins || []).map((t) => t.id)])];
-  const { data: watches } = await admin.from("watchlist").select("platform,handle,added_by").in("user_id", memberIds).in("roster_creator_id", rowIds);
+  const [{ data: watchesRaw }, { data: mutesRaw }] = await Promise.all([
+    admin.from("watchlist").select("platform,handle,added_by").in("user_id", memberIds).in("roster_creator_id", rowIds),
+    admin.from("lane_mutes").select("platform,handle").in("roster_creator_id", rowIds),
+  ]);
+  // the creator took these out of their own lane (manager keeps the watch; it just doesn't show here)
+  const muted = new Set((mutesRaw || []).map((m) => `${m.platform}:${String(m.handle).toLowerCase()}`));
+  const watches = (watchesRaw || []).filter((w) => !muted.has(`${w.platform}:${String(w.handle).toLowerCase()}`));
   const addedBy = new Map((watches || []).map((w) => [`${w.platform}:${String(w.handle).toLowerCase()}`, w.added_by as string]));
   const pairs = (watches || []).map((w) => `and(platform.eq.${w.platform},handle.ilike.${w.handle})`);
-  const { data: creators } = pairs.length ? await admin.from("creators_slim").select("id,handle,platform,display_name,avatar_url,followers,last_scanned_at,performance").or(pairs.join(",")) : { data: [] };
+  const { data: creatorsAll } = pairs.length ? await admin.from("creators_slim").select("id,handle,platform,display_name,avatar_url,followers,last_scanned_at,performance").or(pairs.join(",")) : { data: [] };
+  // fit band: only accounts within a size range of this creator (unknown size passes, so new follows still show)
+  const fit = opts.fit || null;
+  const creators = (creatorsAll || []).filter((c) => !fit || !c.followers || (c.followers >= fit.min && c.followers <= fit.max));
+  const outsideBand = (creatorsAll || []).length - creators.length;
 
   // 30-day follower growth from the snapshots each print leaves behind
   const ids = (creators || []).map((c) => c.id);
@@ -134,6 +146,8 @@ export async function laneDigest(userId: string, rosterCreatorId: string, days =
     hooks: hooksOut,
     openers: openersOut,
     newBrands,
+    muted: [...muted],
+    outsideBand,
     note: total ? `Openings are grouped by the first words actually said (top posts with audio) or written in the caption (all ${total.toLocaleString("en-US")} posts across ${laneCreators.length} creators). Only openings used more than once appear. Each post is measured against its own creator's median, so account size doesn't tilt the bars.` : "",
   };
 }

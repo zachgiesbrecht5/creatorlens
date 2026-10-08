@@ -56,6 +56,7 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
   // a creator (or a manager previewing one) gets their own lane button, not the manager's watch control
   const viewer = user ? await portalViewer() : null;
   const laneRow = viewer ? (await admin.from("watchlist").select("added_by").eq("roster_creator_id", viewer.roster.id).eq("platform", p).ilike("handle", creator.handle).maybeSingle()).data : null;
+  const laneMuted = viewer && laneRow ? !!(await admin.from("lane_mutes").select("handle").eq("roster_creator_id", viewer.roster.id).eq("platform", p).ilike("handle", creator.handle).maybeSingle()).data : false;
   // the map: every dated deal by brand, plus the "why then" lines
   const [{ data: dealMonths }, { data: insights }] = await Promise.all([
     admin.from("partnerships").select("brand_id,published_at").eq("creator_id", creator.id).neq("status", "rejected").not("published_at", "is", null).limit(1000),
@@ -111,7 +112,7 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
             </div>
             {user && <div className="pw-actions" data-tour="actions">
               {!active && <Reprint platform={p} handle={creator.handle} />}
-              {viewer ? <LaneFollowButton platform={p} handle={creator.handle} initial={!!laneRow} addedBy={laneRow?.added_by || null} firstName={String(viewer.roster.name || "").split(" ")[0]} />
+              {viewer ? <LaneFollowButton platform={p} handle={creator.handle} initial={!!laneRow && !laneMuted} addedBy={laneMuted ? "muted" : laneRow?.added_by || null} firstName={String(viewer.roster.name || "").split(" ")[0]} />
                 : <WatchButton platform={p} handle={creator.handle} initial={watching} roster={(roster || []).map((r) => ({ id: r.id, name: r.name }))} initialFor={watchFor} />}
               {!viewer && <NeighborsButton creatorId={creator.id} paused={process.env.NEIGHBORHOODS_PAUSED === "1"} />}
               {unlocked && active && <span className="btn-like opacity-50" title="Re-printing; the PDF updates when the new print lands">download PDF ↓</span>}

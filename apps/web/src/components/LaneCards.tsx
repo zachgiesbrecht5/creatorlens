@@ -17,15 +17,24 @@ function opening(t: any): { line: string; src: string; cls: string } {
 }
 
 /** The lane's best posts as cards. `all` and `talking` are two pre-fetched lists; the toggle swaps them. */
-export function LaneCards({ all, talking, printHref = true, title = "Best in your lane", sub }: { all: LaneTopPost[]; talking: LaneTopPost[]; printHref?: boolean; title?: string; sub?: string }) {
-  const [mode, setMode] = useState<"all" | "talking">(talking.length >= 4 ? "talking" : "all");
-  const rows = mode === "talking" ? talking : all;
+export function LaneCards({ all, talking, printHref = true, title = "Best in your lane", sub, fit, limit }: { all: LaneTopPost[]; talking: LaneTopPost[]; printHref?: boolean; title?: string; sub?: string; fit?: { min: number; max: number } | null; limit?: number }) {
+  const inBand = (r: LaneTopPost) => !fit || !r.followers || (r.followers >= fit.min && r.followers <= fit.max);
+  const [mode, setMode] = useState<"all" | "talking">(talking.filter(inBand).length >= 4 ? "talking" : "all");
+  // fit: accounts near this creator's size (0.3x to 5x). On by default when it leaves enough to look at.
+  const [fitOn, setFitOn] = useState<boolean>(!!fit && (mode === "talking" ? talking : all).filter(inBand).length >= 4);
+  const base = mode === "talking" ? talking : all;
+  const rows = (fitOn ? base.filter(inBand) : base).slice(0, limit ?? base.length);
+  const hidden = fitOn ? base.length - base.filter(inBand).length : 0;
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>{title && <div className="label">{title}</div>}{sub && <p className="mt-1 text-[13px] text-muted">{sub}</p>}</div>
-        <div className="seg"><button className={mode === "talking" ? "on" : ""} onClick={() => setMode("talking")}>talking openers</button><button className={mode === "all" ? "on" : ""} onClick={() => setMode("all")}>everything</button></div>
+        <div className="flex flex-wrap items-center gap-2">
+          {fit && <div className="seg" title={`${fmtK(fit.min)} to ${fmtK(fit.max)} followers`}><button className={fitOn ? "on" : ""} onClick={() => setFitOn(true)}>my size</button><button className={!fitOn ? "on" : ""} onClick={() => setFitOn(false)}>everyone</button></div>}
+          <div className="seg"><button className={mode === "talking" ? "on" : ""} onClick={() => setMode("talking")}>talking openers</button><button className={mode === "all" ? "on" : ""} onClick={() => setMode("all")}>everything</button></div>
+        </div>
       </div>
+      {fit && fitOn && hidden > 0 && <div className="num mb-2 text-[10.5px] text-dim">{hidden} post{hidden === 1 ? "" : "s"} from accounts outside {fmtK(fit.min)}–{fmtK(fit.max)} followers hidden · "everyone" shows them</div>}
       {!rows.length ? <div className="card p-6 text-[13.5px] text-muted">{mode === "talking" ? "No reels with a spoken opening yet; prints land weekly." : "Follow a few creators you rate and their best posts show up here."}</div> : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {rows.map((r) => { const t = r.post; const o = opening(t); return (

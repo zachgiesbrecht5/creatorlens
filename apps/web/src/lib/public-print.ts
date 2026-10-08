@@ -6,7 +6,7 @@ export async function publicPrint(platform: string, handle: string) {
   const admin = supabaseAdmin();
   const { data: c } = await admin.from("creators").select("id,platform,handle,display_name,avatar_url,followers,category,bio,last_scanned_at").eq("platform", platform).ilike("handle", handle).maybeSingle();
   if (!c || !c.last_scanned_at) return null;
-  const { data: wall } = await admin.from("brand_wall_mv").select("brand_id,brand,category,deals,first_seen,last_seen,repeat_partner,confidence").eq("creator_id", c.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).order("last_seen", { ascending: false });
+  const { data: wall } = await admin.from("brand_wall_mv").select("brand_id,brand,category,deals,first_seen,last_seen,repeat_partner").eq("creator_id", c.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).order("last_seen", { ascending: false });
   const { data: months } = await admin.from("partnerships").select("brand_id,published_at").eq("creator_id", c.id).neq("status", "rejected").not("published_at", "is", null).limit(1000);
   const monthsBy = new Map<string, Set<string>>();
   for (const m of months || []) { (monthsBy.get(m.brand_id) || monthsBy.set(m.brand_id, new Set()).get(m.brand_id)!).add(String(m.published_at).slice(0, 7)); }

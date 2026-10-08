@@ -4,6 +4,8 @@ import { requireCreator } from "@/lib/creator-portal";
 import { supabaseAdmin } from "@/lib/supabase";
 import { laneDigest, laneTopPosts } from "@/lib/lane-digest";
 import { LaneCards } from "@/components/LaneCards";
+import { LaneBrief } from "@/components/LaneBrief";
+import { laneBrief, fitBand } from "@/lib/lane-brief";
 import { cleanLine } from "@/lib/clean-text";
 import { laneLaunches } from "@/lib/launches";
 import { parsePulse } from "@/lib/pulse-html";
@@ -47,8 +49,10 @@ export default async function CreatorHome() {
   const { data: snaps } = me ? await admin.from("performance_snapshots").select("captured_at,followers,median").eq("creator_id", me.id).order("captured_at", { ascending: false }).limit(60) : { data: [] as any[] };
   const at = (days: number) => (snaps || []).find((s) => new Date(s.captured_at).getTime() <= Date.now() - days * 864e5 && s.followers);
   const g14 = pct(me?.followers, at(14)?.followers), g30 = pct(me?.followers, at(30)?.followers);
-  const digest = await laneDigest(r.user_id, r.id, 30);
-  const [laneAll, laneTalking] = await Promise.all([laneTopPosts(digest.rowIds, { limit: 8, days: 60 }), laneTopPosts(digest.rowIds, { limit: 8, days: 60, voiceOnly: true })]);
+  const band = fitBand(me?.followers || r.followers);
+  const digest = await laneDigest(r.user_id, r.id, 30, { fit: band });
+  const [laneAll, laneTalking] = await Promise.all([laneTopPosts(digest.rowIds, { limit: 24, days: 60 }), laneTopPosts(digest.rowIds, { limit: 24, days: 60, voiceOnly: true })]);
+  const brief = laneBrief(digest, laneAll, { performance: perf });
   const launches = lane ? (await laneLaunches(lane)).filter((l) => l.status === "open" || l.status === "soon").slice(0, 4) : [];
   const since = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
   const { data: pitched } = await admin.from("tracker_rows").select("brand").eq("user_id", r.user_id).eq("tab", "outreach").gte("date_sent", since).ilike("creator", `%${first}%`).limit(60);
@@ -119,8 +123,9 @@ export default async function CreatorHome() {
 
           {/* lane feed */}
           <section>
-            <div className="mb-3 flex items-end justify-between gap-4"><div><div className="label">Trending in your lane · last 60 days</div><h2 className="h2">Hooks that are working for creators like you</h2><p className="mt-1 text-[13px] text-muted">From the {digest.creators.length} creator{digest.creators.length === 1 ? "" : "s"} you and your team follow. Ranked by how far each post beat that creator's own median. Bold line is what a viewer hears or sees first.</p></div><Link href="/me/watchlist" className="btn-ghost !py-1.5 !text-[12px] whitespace-nowrap">your lane →</Link></div>
-            <LaneCards all={laneAll} talking={laneTalking} printHref title="" />
+            <div className="mb-3 flex items-end justify-between gap-4"><div><div className="label">Your lane · what to do with it</div><h2 className="h2">What {digest.creators.length} creator{digest.creators.length === 1 ? "" : "s"} like you are being rewarded for</h2><p className="mt-1 text-[13px] text-muted">Counted from the people you and your team follow, each post against its own creator's median. First the direction, then the proof.</p></div><Link href="/me/watchlist" className="btn-ghost !py-1.5 !text-[12px] whitespace-nowrap">your lane →</Link></div>
+            <LaneBrief brief={brief} first={first} laneSize={digest.creators.length} />
+            <div className="mt-6"><LaneCards all={laneAll} talking={laneTalking} printHref fit={band} limit={8} title="The proof · last 60 days" /></div>
             <LaneHooks openers={digest.openers} note={digest.note} />
             <LaneRoster creators={digest.creators} you={{ followers: me?.followers || r.followers || null, growth30: g30 != null ? g30 / 100 : g14 != null ? g14 / 100 : null, median: perf?.median ?? null }} />
           </section>

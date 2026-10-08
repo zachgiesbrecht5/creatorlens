@@ -3,13 +3,25 @@ import { portalViewer } from "@/lib/creator-portal";
 import { supabaseAdmin } from "@/lib/supabase";
 import { track, alert } from "@/lib/track";
 
-// Creators follow creators in their own lane. Stored on the manager's watchlist, filed under this roster row, marked added_by=creator.
+// Creators shape their own lane. Their follows are stored on the manager's watchlist, filed under this
+// roster row, marked added_by=creator. Removing a MANAGER's pick never deletes the manager's watch: it
+// adds a lane_mutes row so the creator stops seeing it, and the manager is told.
+const clean = (raw: unknown) => String(raw || "").trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?(instagram\.com|youtube\.com)\//, "").replace(/\/.*$/, "").toLowerCase();
+
 export async function POST(req: NextRequest) {
   const ctx = await portalViewer(); if (!ctx || !ctx.enabled) return NextResponse.json({ error: "Not available" }, { status: 403 });
   const { platform, handle: raw } = await req.json().catch(() => ({}));
-  const handle = String(raw || "").trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?(instagram\.com|youtube\.com)\//, "").replace(/\/.*$/, "").toLowerCase();
+  const handle = clean(raw);
   if (!handle || !["instagram", "youtube"].includes(platform)) return NextResponse.json({ error: "Enter a handle" }, { status: 400 });
   const admin = supabaseAdmin();
+  // following someone you had hidden just unhides them
+  const { data: muted } = await admin.from("lane_mutes").select("handle").eq("roster_creator_id", ctx.roster.id).eq("platform", platform).ilike("handle", handle).maybeSingle();
+  if (muted) {
+    await admin.from("lane_mutes").delete().eq("roster_creator_id", ctx.roster.id).eq("platform", platform).ilike("handle", handle);
+    const { data: known } = await admin.from("creators").select("display_name,avatar_url,followers").eq("platform", platform).ilike("handle", handle).maybeSingle();
+    track(ctx.roster.user_id, "creator_unmuted", { roster_creator_id: ctx.roster.id, creator: ctx.roster.name, platform, handle, name: known?.display_name || null });
+    return NextResponse.json({ ok: true, handle, unmuted: true, name: known?.display_name || null, avatar: known?.avatar_url || null, followers: known?.followers || null });
+  }
   const { count } = await admin.from("watchlist").select("*", { count: "exact", head: true }).eq("roster_creator_id", ctx.roster.id).eq("added_by", "creator");
   if ((count || 0) >= 25) return NextResponse.json({ error: "You're following 25 already; unfollow one first" }, { status: 400 });
   const { data: known } = await admin.from("creators").select("display_name,avatar_url,followers").eq("platform", platform).ilike("handle", handle).maybeSingle();
@@ -21,19 +33,35 @@ export async function POST(req: NextRequest) {
   alert(`${ctx.roster.name} started following @${handle} (${platform})`, { roster_creator_id: ctx.roster.id, platform, handle }).catch(() => {});
   return NextResponse.json({ ok: true, handle, name: known?.display_name || null, avatar: known?.avatar_url || null, followers: known?.followers || null });
 }
+
+// DELETE removes anyone from the creator's lane: own follows are deleted, manager picks are muted.
 export async function DELETE(req: NextRequest) {
   const ctx = await portalViewer(); if (!ctx || !ctx.enabled) return NextResponse.json({ error: "Not available" }, { status: 403 });
-  const { platform, handle } = await req.json().catch(() => ({}));
+  const { platform, handle: raw } = await req.json().catch(() => ({}));
+  const handle = clean(raw);
+  if (!handle || !["instagram", "youtube"].includes(platform)) return NextResponse.json({ error: "bad request" }, { status: 400 });
   const admin = supabaseAdmin();
-  await admin.from("watchlist").delete().eq("user_id", ctx.roster.user_id).eq("roster_creator_id", ctx.roster.id).eq("added_by", "creator").eq("platform", platform).ilike("handle", String(handle || ""));
-  track(ctx.roster.user_id, "creator_unfollowed", { roster_creator_id: ctx.roster.id, creator: ctx.roster.name, platform, handle: String(handle || "").toLowerCase() });
-  return NextResponse.json({ ok: true });
+  const { data: row } = await admin.from("watchlist").select("added_by").eq("roster_creator_id", ctx.roster.id).eq("platform", platform).ilike("handle", handle).maybeSingle();
+  if (row?.added_by === "creator") {
+    await admin.from("watchlist").delete().eq("user_id", ctx.roster.user_id).eq("roster_creator_id", ctx.roster.id).eq("added_by", "creator").eq("platform", platform).ilike("handle", handle);
+    track(ctx.roster.user_id, "creator_unfollowed", { roster_creator_id: ctx.roster.id, creator: ctx.roster.name, platform, handle });
+    return NextResponse.json({ ok: true, removed: "unfollowed" });
+  }
+  await admin.from("lane_mutes").upsert({ roster_creator_id: ctx.roster.id, platform, handle }, { onConflict: "roster_creator_id,platform,handle", ignoreDuplicates: true });
+  const { data: known } = await admin.from("creators").select("display_name").eq("platform", platform).ilike("handle", handle).maybeSingle();
+  track(ctx.roster.user_id, "creator_muted", { roster_creator_id: ctx.roster.id, creator: ctx.roster.name, platform, handle, name: known?.display_name || null });
+  alert(`${ctx.roster.name} hid @${handle} (${platform}) from their lane; your watch is still on`, { roster_creator_id: ctx.roster.id, platform, handle }).catch(() => {});
+  return NextResponse.json({ ok: true, removed: "muted" });
 }
 
-// GET ?platform=&handle= -> is this creator in my lane, and who added them
+// GET ?platform=&handle= -> is this creator in my lane, who added them, and whether I've hidden them
 export async function GET(req: NextRequest) {
   const ctx = await portalViewer(); if (!ctx || !ctx.enabled) return NextResponse.json({ error: "Not available" }, { status: 403 });
-  const platform = req.nextUrl.searchParams.get("platform") || ""; const handle = String(req.nextUrl.searchParams.get("handle") || "").toLowerCase();
-  const { data } = await supabaseAdmin().from("watchlist").select("added_by").eq("roster_creator_id", ctx.roster.id).eq("platform", platform).ilike("handle", handle).maybeSingle();
-  return NextResponse.json({ inLane: !!data, addedBy: data?.added_by || null });
+  const platform = req.nextUrl.searchParams.get("platform") || ""; const handle = clean(req.nextUrl.searchParams.get("handle"));
+  const admin = supabaseAdmin();
+  const [{ data }, { data: m }] = await Promise.all([
+    admin.from("watchlist").select("added_by").eq("roster_creator_id", ctx.roster.id).eq("platform", platform).ilike("handle", handle).maybeSingle(),
+    admin.from("lane_mutes").select("handle").eq("roster_creator_id", ctx.roster.id).eq("platform", platform).ilike("handle", handle).maybeSingle(),
+  ]);
+  return NextResponse.json({ inLane: !!data && !m, addedBy: data?.added_by || null, muted: !!m });
 }
