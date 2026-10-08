@@ -3,7 +3,7 @@
 // of row counts plus a JSON export of the core tables to the `backups` bucket.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { spentToday, DAILY_BUDGET } from "./spend";
-import { keepWatch } from "./watch";
+import { keepWatch, keepRoster } from "./watch";
 import { discover } from "./discover";
 import { brandWatch } from "./brandwatch";
 import { writeWeeklyPulses } from "./pulse";
@@ -58,6 +58,7 @@ export async function nightly(sb: SupabaseClient) {
   }
   log("nightly snapshot", JSON.stringify(counts));
   try { await keepWatch(sb); } catch (e: any) { await alert(sb, "watchlist keeper failed", { error: String(e?.message || e).slice(0, 300) }); }
+  try { await keepRoster(sb); } catch (e: any) { await alert(sb, "roster re-print failed", { error: String(e?.message || e).slice(0, 300) }); }
   try { await discover(sb); } catch (e: any) { await alert(sb, "discover failed", { error: String(e?.message || e).slice(0, 300) }); }
   try { await autoBrandScans(sb); } catch (e: any) { await alert(sb, "auto brand scans failed", { error: String(e?.message || e).slice(0, 300) }); }
   try { await morningDrops(sb); } catch (e: any) { await alert(sb, "morning drops failed", { error: String(e?.message || e).slice(0, 300) }); }

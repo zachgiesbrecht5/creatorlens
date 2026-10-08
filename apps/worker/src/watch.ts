@@ -32,3 +32,26 @@ export async function keepWatch(sb: SupabaseClient): Promise<number> {
   log((watches || []).length, "watched,", events, "events,", queued, "re-prints queued");
   return (watches || []).length;
 }
+
+/** Roster re-prints. Every roster creator on Instagram or YouTube gets a fresh public print once a week
+ *  (free, source=roster), so the engagement page, follower history and lane comparisons stay current even
+ *  before the creator connects their own account. Runs with the nightly job. */
+export async function keepRoster(sb: SupabaseClient): Promise<number> {
+  const { data: rows } = await sb.from("roster_creators").select("id,user_id,platform,handle").in("platform", ["instagram", "youtube"]);
+  let queued = 0;
+  const seen = new Set<string>();
+  for (const r of rows || []) {
+    const handle = String(r.handle || "").replace(/^@/, "").trim().toLowerCase();
+    if (!handle) continue;
+    const key = `${r.platform}:${handle}`; if (seen.has(key)) continue; seen.add(key);
+    const { data: c } = await sb.from("creators").select("id,last_scanned_at").eq("platform", r.platform).ilike("handle", handle).maybeSingle();
+    const stale = !c?.last_scanned_at || Date.now() - new Date(c.last_scanned_at).getTime() > WEEK;
+    if (!stale) continue;
+    const { data: existing } = await sb.from("scan_jobs").select("id").eq("platform", r.platform).ilike("handle", handle).in("status", ["queued", "running", "rate_limited"]).limit(1);
+    if (existing?.length) continue;
+    await sb.from("scan_jobs").insert({ user_id: r.user_id, platform: r.platform, handle, priority: 5, source: "roster" });
+    queued++;
+  }
+  log("roster:", (rows || []).length, "rows,", queued, "weekly re-prints queued");
+  return queued;
+}
