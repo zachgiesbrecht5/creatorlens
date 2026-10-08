@@ -6,6 +6,7 @@ import { laneDigest, laneTopPosts } from "@/lib/lane-digest";
 import { LaneCards } from "@/components/LaneCards";
 import { LaneBrief } from "@/components/LaneBrief";
 import { IgConnectCard } from "@/components/IgConnectCard";
+import { LaneSearch } from "@/components/LaneSearch";
 import { laneBrief, fitBand } from "@/lib/lane-brief";
 import { cleanLine } from "@/lib/clean-text";
 import { laneLaunches } from "@/lib/launches";
@@ -45,7 +46,10 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
   const last30 = (owned || []).filter((o) => new Date(o.posted_at).getTime() > Date.now() - 30 * 864e5);
   const sumShares = last30.reduce((a, o) => a + (o.shares || 0), 0), sumSaves = last30.reduce((a, o) => a + (o.saves || 0), 0), sumReach = last30.reduce((a, o) => a + (o.reach || 0), 0);
   // "your best" by shares + saves when owned data exists (the numbers that drive discovery), else public engagement
-  const ownBest = hasOwned ? [...(owned || [])].sort((a, b) => (b.shares || 0) + (b.saves || 0) - ((a.shares || 0) + (a.saves || 0))).slice(0, 4) : [];
+  // "your best" window: 14 / 30 / 60 / 90 days or everything printed (?best=)
+  const bestDays = [14, 30, 60, 90].includes(Number(sp.best)) ? Number(sp.best) : 0;
+  const inWin = (iso: string | null | undefined) => !bestDays || (!!iso && new Date(iso).getTime() >= Date.now() - bestDays * 864e5);
+  const ownBest = hasOwned ? [...(owned || [])].filter((o) => inWin(o.posted_at)).sort((a, b) => (b.shares || 0) + (b.saves || 0) - ((a.shares || 0) + (a.saves || 0))).slice(0, 4) : [];
   const hookFor = (permalink: string, caption: string) => { const t = (perf?.top || []).find((x: any) => x.url === permalink); return t ? { line: cleanLine(t.spoken || t.on_video || t.on_screen || t.hook), src: t.spoken ? "spoken" : t.on_video ? "on_video" : t.on_screen ? "on_screen" : "hook", thumb: t.thumb } : { line: cleanLine(String(caption || "").split(/\r?\n/).find((l) => l.trim()) || ""), src: "hook", thumb: null }; };
   // growth from scan history
   const { data: snaps } = me ? await admin.from("performance_snapshots").select("captured_at,followers,median").eq("creator_id", me.id).order("captured_at", { ascending: false }).limit(60) : { data: [] as any[] };
@@ -76,7 +80,8 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
   const month = new Date().toISOString().slice(0, 7);
   const paidThisMonth = (projects || []).filter((p) => p.status === "paid" && String(p.paid_at || "").startsWith(month)).reduce((s, p) => s + Number(p.fee || 0), 0);
   const avatar = me?.avatar_thumb ? `data:image/jpeg;base64,${me.avatar_thumb}` : me?.avatar_url || r.avatar_url || null;
-  const own = (perf?.top || []).slice(0, 4);
+  const own = ((perf?.top || []) as any[]).filter((t) => inWin(t.published_at)).slice(0, 4);
+  const WindowPicker = () => <div className="seg">{[[14, "14d"], [30, "30d"], [60, "60d"], [90, "90d"], [0, "all"]].map(([v, l]) => <Link key={String(v)} href={v ? `/me?best=${v}` : "/me"} scroll={false} className={bestDays === v ? "on" : ""}>{l}</Link>)}</div>;
   const pulse = lastPulse ? parsePulse(lastPulse.body || "") : null;
   // the lane feed: thumbnails + hooks, source-tagged
 
@@ -112,6 +117,11 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
         {(r as any).thesis && <div className="mt-5 border-t border-white/10 pt-4 text-[14px] leading-relaxed text-white/85"><span className="num mr-2 text-[10.5px] tracking-[0.15em] text-white/50">WHERE WE'RE TAKING THIS</span>{(r as any).thesis}</div>}
       </section>
 
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="label whitespace-nowrap">Scan any creator</div>
+        <div className="w-full max-w-xl"><LaneSearch platform={platform} compact /></div>
+        <div className="num text-[11px] text-dim">their top posts, what they said first, who paid them · joins your lane</div>
+      </div>
       {move && (
         <Link href={move.href} className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-line bg-surface px-5 py-3.5 hover:border-accent" style={{ borderLeft: "4px solid #2f5bff" }}>
           <span className="num text-[10px] uppercase tracking-[0.15em] text-accent">Your move this week</span>
@@ -133,7 +143,8 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
           {/* your best */}
           {hasOwned ? (
             <section>
-              <div className="mb-3 flex items-end justify-between"><div><div className="label">Your best right now · by shares and saves</div><h2 className="h2">What's carrying your numbers</h2><p className="mt-1 text-[13px] text-muted">Read from your own account. Shares and saves are what the algorithm pays for; these are your posts that earned the most of both.</p></div><Link href={`/c/${platform}/${String(r.handle || "").replace(/^@/, "")}`} className="num text-[11px] text-accent hover:underline">full print →</Link></div>
+              <div className="mb-3 flex flex-wrap items-end justify-between gap-3"><div><div className="label">Your best{bestDays ? ` · last ${bestDays} days` : " right now"} · by shares and saves</div><h2 className="h2">What's carrying your numbers</h2><p className="mt-1 text-[13px] text-muted">Read from your own account. Shares and saves are what the algorithm pays for; these are your posts that earned the most of both.</p></div><div className="flex items-center gap-3"><WindowPicker /><Link href={`/c/${platform}/${String(r.handle || "").replace(/^@/, "")}`} className="num text-[11px] text-accent hover:underline">full print →</Link></div></div>
+              {!ownBest.length && <div className="card p-5 text-[13px] text-muted">Nothing posted in the last {bestDays} days yet.</div>}
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{ownBest.map((o) => { const h = hookFor(o.permalink, o.caption); return (
                 <a key={o.media_id} href={o.permalink} target="_blank" rel="noreferrer" className="post-card">
                   {h.thumb ? <img src={`data:image/jpeg;base64,${h.thumb}`} alt="" className="post-thumb" /> : <div className="post-thumb bg-surface2" />}
@@ -144,10 +155,11 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
                   </div>
                 </a>); })}</div>
             </section>
-          ) : own.length > 0 && (
+          ) : (perf?.top?.length > 0) && (
             <section>
-              <div className="mb-3 flex items-end justify-between"><div><div className="label">Your best right now</div><h2 className="h2">What's carrying your numbers</h2></div><Link href={`/c/${platform}/${String(r.handle || "").replace(/^@/, "")}`} className="num text-[11px] text-accent hover:underline">full print →</Link></div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{own.map((t: any, i: number) => <PostCard key={t.url} t={t} median={perf.median} label={perf.metric_label} rank={i + 1} items={perf.items} />)}</div>
+              <div className="mb-3 flex flex-wrap items-end justify-between gap-3"><div><div className="label">Your best{bestDays ? ` · last ${bestDays} days` : " right now"}</div><h2 className="h2">What's carrying your numbers</h2></div><div className="flex items-center gap-3"><WindowPicker /><Link href={`/c/${platform}/${String(r.handle || "").replace(/^@/, "")}`} className="num text-[11px] text-accent hover:underline">full print →</Link></div></div>
+              {own.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{own.map((t: any, i: number) => <PostCard key={t.url} t={t} median={perf.median} label={perf.metric_label} rank={(perf.top as any[]).indexOf(t) + 1} items={perf.items} />)}</div>
+                : <div className="card p-5 text-[13px] text-muted">None of your top 10 is from the last {bestDays} days. The public print keeps only the 10 best of 250; connect your Instagram and every post in the window shows here.</div>}
             </section>
           )}
 

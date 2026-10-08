@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { LaneSearch } from "@/components/LaneSearch";
 type Row = { platform: string; handle: string; added_by: string; muted?: boolean; name: string; avatar: string | null; followers: number | null; category: string | null; top: { hook: string; metric: number; url: string }[] };
 const fmtK = (n: number | null) => (!n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
 
@@ -7,17 +8,9 @@ const fmtK = (n: number | null) => (!n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)
  *  Creators can take anyone out: their own follows are removed, the manager's picks are hidden for them only. */
 export function MyWatch({ rows, platform: defaultPlatform, children }: { rows: Row[]; platform: string; children?: React.ReactNode }) {
   const [list, setList] = useState(rows);
-  const [handle, setHandle] = useState(""); const [platform, setPlatform] = useState(defaultPlatform); const [busy, setBusy] = useState(false); const [msg, setMsg] = useState<string | null>(null);
+  const platform = defaultPlatform;
   const [showHidden, setShowHidden] = useState(false);
   const active = list.filter((c) => !c.muted), hidden = list.filter((c) => c.muted);
-  async function add() {
-    setBusy(true); setMsg(null);
-    const r = await fetch("/api/me/watch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ platform, handle }) });
-    const j = await r.json(); setBusy(false);
-    if (!r.ok) { setMsg(j.error || "failed"); return; }
-    if (j.unmuted) { setList((l) => l.map((x) => (x.platform === platform && x.handle === j.handle ? { ...x, muted: false } : x))); setHandle(""); setMsg("Back in your lane."); return; }
-    setList((l) => [{ platform, handle: j.handle, added_by: "creator", name: j.name || j.handle, avatar: j.avatar || null, followers: j.followers || null, category: null, top: [] }, ...l]); setHandle(""); setMsg("Added. Their print runs now; hooks show within a day.");
-  }
   async function remove(c: Row) {
     const r = await fetch("/api/me/watch", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ platform: c.platform, handle: c.handle }) });
     const j = await r.json().catch(() => ({}));
@@ -41,14 +34,9 @@ export function MyWatch({ rows, platform: defaultPlatform, children }: { rows: R
   return (
     <div>
       <div className="card mb-6 p-5" style={{ borderTop: "3px solid #2f5bff" }}>
-        <div className="label mb-1">Follow a creator</div>
-        <p className="mb-3 text-[13px] text-muted">Paste a handle. Sponsorprint prints their last 250 posts and their best openings start showing up below within a day. Anyone you don't rate, remove; your lane is yours.</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="seg"><button className={platform === "instagram" ? "on" : ""} onClick={() => setPlatform("instagram")}>Instagram</button><button className={platform === "youtube" ? "on" : ""} onClick={() => setPlatform("youtube")}>YouTube</button></div>
-          <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@handle or profile link" className="input-flat !w-72 !py-2 font-mono text-[13px]" onKeyDown={(e) => e.key === "Enter" && handle && add()} autoFocus />
-          <button onClick={add} disabled={busy || !handle} className="btn-dark !py-2 !text-[12.5px] disabled:opacity-50">{busy ? "adding…" : "follow"}</button>
-          {msg && <span className="num text-[11px] text-muted">{msg}</span>}
-        </div>
+        <div className="label mb-1">Scan any creator</div>
+        <p className="mb-3 text-[13px] text-muted">Type a handle, pick the account, and you get their print: top posts, what was said first, which brands paid them. It joins your lane at the same time. Anyone you don't rate, remove; your lane is yours.</p>
+        <LaneSearch platform={platform} autoFocus onFollowed={(f) => setList((l) => l.some((x) => x.platform === f.platform && x.handle === f.handle) ? l.map((x) => (x.platform === f.platform && x.handle === f.handle ? { ...x, muted: false } : x)) : [{ platform: f.platform, handle: f.handle, added_by: "creator", name: f.name || f.handle, avatar: f.avatar, followers: f.followers, category: null, top: [] }, ...l])} />
         <div className="num mt-2 text-[10.5px] text-dim">{active.length} in your lane · {active.filter((c) => c.added_by === "creator").length} you follow · {active.filter((c) => c.added_by !== "creator").length} picked by your manager{hidden.length ? ` · ${hidden.length} hidden` : ""} · up to 25 of your own</div>
       </div>
       {children}

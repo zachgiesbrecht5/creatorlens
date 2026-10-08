@@ -1,6 +1,6 @@
 // Owned insights. Daily, for every Instagram account in the connection pool marked
 // owned (our business portfolio: Rootfor's own and creators who assigned theirs),
-// read the last 50 posts with saves, shares, reach and views. Stored per post and
+// read the last 100 posts with saves, shares, reach, views, follows and total interactions. Stored per post and
 // shown on the creator's home; the numbers public data can't see.
 import type { SupabaseClient } from "@supabase/supabase-js";
 const V = "v25.0";
@@ -12,13 +12,16 @@ export async function syncOwnedInsights(sb: SupabaseClient): Promise<number> {
   let total = 0;
   for (const c of conns || []) {
     try {
-      const r = await fetch(`https://graph.facebook.com/${V}/${c.ig_user_id}/media?fields=id,permalink,timestamp,caption,media_type,media_product_type,like_count,comments_count,insights.metric(reach,saved,shares,views)&limit=50&access_token=${c.access_token}`);
-      const j: any = await r.json();
-      if (!r.ok || j.error) { log(c.ig_username, "insights failed:", j.error?.message || r.status); await sb.from("ig_connections").update({ insights_synced_at: new Date().toISOString() }).eq("ig_user_id", c.ig_user_id); continue; }
+      // follows + total_interactions are the two numbers the quarterly read is built on; not every media type
+      // supports them, and one unsupported item fails the whole expansion, so fall back to the core set.
+      const fetchMedia = async (metrics: string) => { const r = await fetch(`https://graph.facebook.com/${V}/${c.ig_user_id}/media?fields=id,permalink,timestamp,caption,media_type,media_product_type,like_count,comments_count,insights.metric(${metrics})&limit=100&access_token=${c.access_token}`); const j: any = await r.json(); return { ok: r.ok && !j.error, j, status: r.status }; };
+      let { ok, j, status } = await fetchMedia("reach,saved,shares,views,follows,total_interactions");
+      if (!ok) { log(c.ig_username, "full metric set refused:", j.error?.message || status, "- retrying core set"); ({ ok, j, status } = await fetchMedia("reach,saved,shares,views")); }
+      if (!ok) { log(c.ig_username, "insights failed:", j.error?.message || status); await sb.from("ig_connections").update({ insights_synced_at: new Date().toISOString() }).eq("ig_user_id", c.ig_user_id); continue; }
       const { data: creator } = await sb.from("creators").select("id").eq("platform", "instagram").ilike("handle", c.ig_username).maybeSingle();
       const rows = (j.data || []).map((m: any) => {
         const ins: Record<string, number> = {}; for (const x of m.insights?.data || []) ins[x.name] = Number(x.values?.[0]?.value ?? x.total_value?.value ?? 0);
-        return { ig_user_id: c.ig_user_id, creator_id: creator?.id || null, media_id: String(m.id), permalink: m.permalink, posted_at: m.timestamp, media_type: m.media_product_type || m.media_type, caption: String(m.caption || "").slice(0, 400), likes: m.like_count ?? null, comments: m.comments_count ?? null, saves: ins.saved ?? null, shares: ins.shares ?? null, reach: ins.reach ?? null, views: ins.views ?? null, updated_at: new Date().toISOString() };
+        return { ig_user_id: c.ig_user_id, creator_id: creator?.id || null, media_id: String(m.id), permalink: m.permalink, posted_at: m.timestamp, media_type: m.media_product_type || m.media_type, caption: String(m.caption || "").slice(0, 400), likes: m.like_count ?? null, comments: m.comments_count ?? null, saves: ins.saved ?? null, shares: ins.shares ?? null, reach: ins.reach ?? null, views: ins.views ?? null, follows: ins.follows ?? null, total_interactions: ins.total_interactions ?? null, updated_at: new Date().toISOString() };
       });
       if (rows.length) { const { error } = await sb.from("owned_post_insights").upsert(rows, { onConflict: "media_id" }); if (error) log("upsert failed", error.message); else total += rows.length; }
       await sb.from("ig_connections").update({ insights_synced_at: new Date().toISOString() }).eq("ig_user_id", c.ig_user_id);

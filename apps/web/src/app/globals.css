@@ -390,8 +390,8 @@ table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 
 /* segmented toggle */
 .seg { display: inline-flex; border: 1px solid #e4e6ea; border-radius: 999px; padding: 2px; background: #fff; }
-.seg button { padding: 4px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 500; color: #5b6472; }
-.seg button.on { background: #0b0d12; color: #fff; }
+.seg button, .seg a { padding: 4px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 500; color: #5b6472; }
+.seg button.on, .seg a.on { background: #0b0d12; color: #fff; }
 
 /* the lane feed: hide the scrollbar, keep the snap */
 .feed-box::-webkit-scrollbar { display: none; }
