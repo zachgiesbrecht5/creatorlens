@@ -55,6 +55,15 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
   const digest = await laneDigest(r.user_id, r.id, 30, { fit: band });
   const [laneAll, laneTalking] = await Promise.all([laneTopPosts(digest.rowIds, { limit: 24, days: 60 }), laneTopPosts(digest.rowIds, { limit: 24, days: 60, voiceOnly: true })]);
   const brief = laneBrief(digest, laneAll, { performance: perf });
+  // one sentence of direction, built from the brief; the page never opens blank
+  const move = (() => {
+    const o = brief.tryThis[0];
+    if (o) return { text: `Open a post with "${cleanLine(o.label)}" this week.`, why: `${o.creators} creator${o.creators === 1 ? "" : "s"} in your lane got ${o.mult ?? "over 2"}x their median with it${o.said ? ", said out loud in the first second" : ""}, and it's not in your last 250 posts.`, href: "/me/watchlist" };
+    const g = brief.gaps[0];
+    if (g) return { text: `Film something about ${g.label}.`, why: `${g.lanePosts} of the lane's best posts are about it; none of your top posts are.`, href: "/me/watchlist" };
+    if (brief.own[0]) return { text: `Make another one like "${cleanLine(brief.own[0].line)}".`, why: `${brief.own[0].mult ? `${brief.own[0].mult}x your median` : "your best post in the window"}; the lane has nothing new to steal this week.`, href: "/me/engagement" };
+    return null;
+  })();
   const launches = lane ? (await laneLaunches(lane)).filter((l) => l.status === "open" || l.status === "soon").slice(0, 4) : [];
   const since = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
   const { data: pitched } = await admin.from("tracker_rows").select("brand").eq("user_id", r.user_id).eq("tab", "outreach").gte("date_sent", since).ilike("creator", `%${first}%`).limit(60);
@@ -88,7 +97,7 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
             <div className="num mt-1 text-[12px] text-white/60">@{String(r.handle || "").replace(/^@/, "")}{(r as any).refreshed_at ? ` · profile as of ${new Date((r as any).refreshed_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}</div>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat href="/me/followers" label={platform === "youtube" ? "subscribers" : "followers"} value={fmtK(me?.followers || r.followers)} sub={g30 != null ? `${g30 >= 0 ? "+" : ""}${g30.toFixed(1)}% in 30d` : g14 != null ? `${g14 >= 0 ? "+" : ""}${g14.toFixed(1)}% in 14d` : "tracking from today"} good={(g30 ?? g14 ?? 0) >= 0} />
+            <Stat href="/me/followers" spark={[...(snaps || [])].reverse().filter((x) => x.followers).map((x) => Number(x.followers))} label={platform === "youtube" ? "subscribers" : "followers"} value={fmtK(me?.followers || r.followers)} sub={g30 != null ? `${g30 >= 0 ? "+" : ""}${g30.toFixed(1)}% in 30d` : g14 != null ? `${g14 >= 0 ? "+" : ""}${g14.toFixed(1)}% in 14d` : "tracking from today"} good={(g30 ?? g14 ?? 0) >= 0} />
             {hasOwned ? <>
               <Stat href="/me/engagement" label="shares · 30 days" value={fmtK(sumShares)} sub={`median ${fmtK(medShares)} per post`} />
               <Stat href="/me/engagement" label="saves · 30 days" value={fmtK(sumSaves)} sub={`median ${fmtK(medSaves)} per post`} />
@@ -102,6 +111,22 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
         </div>
         {(r as any).thesis && <div className="mt-5 border-t border-white/10 pt-4 text-[14px] leading-relaxed text-white/85"><span className="num mr-2 text-[10.5px] tracking-[0.15em] text-white/50">WHERE WE'RE TAKING THIS</span>{(r as any).thesis}</div>}
       </section>
+
+      {move && (
+        <Link href={move.href} className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-line bg-surface px-5 py-3.5 hover:border-accent" style={{ borderLeft: "4px solid #2f5bff" }}>
+          <span className="num text-[10px] uppercase tracking-[0.15em] text-accent">Your move this week</span>
+          <span className="text-[15px] font-semibold tracking-tight">{move.text}</span>
+          <span className="text-[12.5px] text-muted">{move.why}</span>
+        </Link>
+      )}
+      {convo.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-ok/30 bg-okSoft/40 px-5 py-3">
+          <span className="num mr-1 text-[10px] uppercase tracking-[0.15em] text-ok">Brands circling you</span>
+          {convo.slice(0, 8).map((p) => <Link key={p.brand} href="/me/pitched" className="rounded-full border border-ok/40 bg-surface px-3 py-1 text-[13px] font-medium hover:border-ok">{p.brand}<span className="num ml-1.5 text-[10px] font-normal text-muted">{p.status}</span></Link>)}
+          {convo.length > 8 && <Link href="/me/pitched" className="num text-[11px] text-muted hover:text-accent">+{convo.length - 8} more</Link>}
+          <span className="num ml-auto text-[11px] text-muted">replied to your team · content that fits them this month moves the deal</span>
+        </div>
+      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.55fr_1fr]">
         <div className="space-y-6">
@@ -183,9 +208,15 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
   );
 }
 
-function Stat({ label, value, sub, good = true, href }: { label: string; value: string; sub?: string; good?: boolean; href?: string }) {
-  const body = <><div className="num text-[10px] uppercase tracking-[0.12em] text-white/50">{label}{href && <span className="float-right text-white/30">→</span>}</div><div className="mt-0.5 text-[22px] font-bold leading-none text-white">{value}</div>{sub && <div className={`num mt-1 text-[10.5px] ${good ? "text-emerald-300" : "text-rose-300"}`}>{sub}</div>}</>;
-  return href ? <Link href={href} className="block rounded-xl bg-white/[0.07] px-3.5 py-3 transition hover:bg-white/[0.13]" title="Open">{body}</Link> : <div className="rounded-xl bg-white/[0.07] px-3.5 py-3">{body}</div>;
+function Mini({ values }: { values: number[] }) {
+  const v = values.filter((n) => Number.isFinite(n)); if (v.length < 2) return null;
+  const min = Math.min(...v), max = Math.max(...v), span = max - min || 1, w = 72, h = 22;
+  const pts = v.map((n, i) => `${((i / (v.length - 1)) * w).toFixed(1)},${(h - ((n - min) / span) * (h - 2) - 1).toFixed(1)}`).join(" ");
+  return <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} className="absolute right-3 top-8 opacity-80" aria-hidden><polyline points={pts} fill="none" stroke="#6ee7b7" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" /></svg>;
+}
+function Stat({ label, value, sub, good = true, href, spark }: { label: string; value: string; sub?: string; good?: boolean; href?: string; spark?: number[] }) {
+  const body = <><div className="num text-[10px] uppercase tracking-[0.12em] text-white/50">{label}{href && <span className="float-right text-white/30">→</span>}</div><div className="mt-0.5 text-[22px] font-bold leading-none text-white">{value}</div>{sub && <div className={`num mt-1 text-[10.5px] ${good ? "text-emerald-300" : "text-rose-300"}`}>{sub}</div>}{spark && <Mini values={spark} />}</>;
+  return href ? <Link href={href} className="relative block rounded-xl bg-white/[0.07] px-3.5 py-3 transition hover:bg-white/[0.13]" title="Open">{body}</Link> : <div className="relative rounded-xl bg-white/[0.07] px-3.5 py-3">{body}</div>;
 }
 function PostCard({ t, median, label, rank, items }: { t: any; median: number; label: string; rank: number; items: number }) {
   const src = t.spoken ? "spoken" : t.on_video ? "on_video" : t.on_screen ? "on_screen" : "hook";

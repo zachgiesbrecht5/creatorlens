@@ -17,7 +17,9 @@ export default async function MyFollowers() {
   const digest = await laneDigest(r.user_id, r.id, 30, { fit: fitBand(now) });
   const laneG = digest.creators.map((c) => c.growth30).filter((g): g is number => g != null).sort((a, b) => a - b);
   const laneMedian = laneG.length ? laneG[Math.floor(laneG.length / 2)] * 100 : null;
-  const faster = digest.creators.filter((c) => c.growth30 != null && c.growth30 * 100 > (g30 ?? -Infinity)).sort((a, b) => (b.growth30 || 0) - (a.growth30 || 0)).slice(0, 5);
+  // leaderboard: everyone in the band with two prints, plus you, ranked by 30-day growth
+  const board = [...digest.creators.filter((c) => c.growth30 != null).map((c) => ({ id: c.id, name: c.name, handle: c.handle, platform: c.platform, avatar: c.avatar, followers: c.followers, g: (c.growth30 || 0) * 100, you: false })), ...(g30 != null ? [{ id: "you", name: r.name, handle: String(r.handle || "").replace(/^@/, ""), platform, avatar: null as string | null, followers: now, g: g30, you: true }] : [])].sort((a, b) => b.g - a.g);
+  const myRank = board.findIndex((b) => b.you) + 1;
   const series = rows.filter((x) => x.followers).map((x) => Number(x.followers));
   const label = platform === "youtube" ? "subscribers" : "followers";
   return (
@@ -35,15 +37,16 @@ export default async function MyFollowers() {
         <Spark values={series} labels={[dShort(rows.find((x) => x.followers)?.captured_at), dShort(rows.filter((x) => x.followers).at(-1)?.captured_at)]} format={fmtK} />
         <div className="num mt-2 text-[10.5px] text-dim">{rows.length} print{rows.length === 1 ? "" : "s"} in the window. The count is read from the public profile at print time; day-to-day noise is normal, the slope is the signal.</div>
       </div>
-      {faster.length > 0 && (
+      {board.length > 1 && (
         <div className="card mt-4 p-5">
-          <div className="label mb-1">Growing faster than you right now</div>
-          <p className="mb-3 text-[13px] text-muted">Lane creators near your size whose 30-day growth beats yours. Their best posts are on <Link href="/me/watchlist" className="text-accent hover:underline">your lane</Link>.</p>
-          <ul className="divide-y divide-line">{faster.map((c) => (
-            <li key={c.id} className="flex items-center justify-between gap-3 py-2 text-[13px]">
-              <span className="flex min-w-0 items-center gap-2">{c.avatar ? <img src={c.avatar} alt="" className="h-6 w-6 rounded-full object-cover" /> : <span className="inline-block h-6 w-6 rounded-full bg-surface2" />}<Link href={`/c/${c.platform}/${c.handle}`} className="truncate font-medium hover:text-accent">{c.name}</Link><span className="num text-[10.5px] text-muted">{fmtK(c.followers)}</span></span>
-              <span className="num text-ok">{signed((c.growth30 || 0) * 100)}</span>
-            </li>))}</ul>
+          <div className="mb-1 flex items-baseline justify-between gap-3"><div className="label">Growth leaderboard · your size · 30 days</div>{myRank > 0 && <span className="num text-[12px] font-semibold">you're #{myRank} of {board.length}</span>}</div>
+          <p className="mb-3 text-[13px] text-muted">Everyone in your lane between {fmtK(fitBand(now)?.min)} and {fmtK(fitBand(now)?.max)} {label} with two prints, ranked by 30-day growth. Their best posts are on <Link href="/me/watchlist" className="text-accent hover:underline">your lane</Link>.</p>
+          <ol className="divide-y divide-line">{board.slice(0, 15).map((c, i) => (
+            <li key={c.id} className={`flex items-center justify-between gap-3 py-2 text-[13px] ${c.you ? "-mx-2 rounded-md bg-accent/10 px-2 font-semibold" : ""}`}>
+              <span className="flex min-w-0 items-center gap-2"><span className="num w-6 text-right text-muted">{i + 1}</span>{c.avatar ? <img src={c.avatar} alt="" className="h-6 w-6 rounded-full object-cover" /> : <span className="inline-block h-6 w-6 rounded-full bg-surface2" />}{c.you ? <span className="truncate">You</span> : <Link href={`/c/${c.platform}/${c.handle}`} className="truncate font-medium hover:text-accent">{c.name}</Link>}<span className="num text-[10.5px] font-normal text-muted">{fmtK(c.followers)}</span></span>
+              <span className={`num ${c.g >= 0 ? "text-ok" : "text-bad"}`}>{signed(c.g)}</span>
+            </li>))}</ol>
+          {myRank > 15 && <div className="num mt-2 text-[11px] text-muted">… you're #{myRank}</div>}
         </div>
       )}
     </div>
