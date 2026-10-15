@@ -23,6 +23,12 @@ const POLL_MS = 1500;
 const CONCURRENCY = Math.max(1, Number(process.env.WORKER_CONCURRENCY || 8));   // scans in flight at once
 const WORKER_ID = `${process.env.RAILWAY_REPLICA_ID || process.env.HOSTNAME || "worker"}-${Math.random().toString(36).slice(2, 6)}`;
 let inFlight = 0;
+// Meta's limit is app-wide (code 4 blocks every token at once), so Instagram public scans are paced across the
+// whole worker instead of firing a nightly batch all at once. ~10-12 Graph calls per scan.
+const IG_SCANS_PER_HOUR = Math.max(1, Number(process.env.IG_SCANS_PER_HOUR || 15));
+const jitter = (min: number, spread: number) => min + Math.random() * spread;
+/** A deferral that should not count as a failed attempt (pacing, cooldowns, app-wide limit). */
+const wait = (msg: string, minutes: number) => Object.assign(new Error(msg), { wait: minutes });
 
 const brandKey = (name: string) => name.toLowerCase().replace(/^@/, "").replace(/[^a-z0-9]/g, "");
 // Strip lone UTF-16 surrogates (an emoji cut in half by slice()) and null bytes; Postgres
@@ -63,9 +69,25 @@ async function pickIgToken() {
   return { id: t.id as string, igUserId: t.ig_user_id as string, accessToken: t.access_token as string };
 }
 
-async function coolDownToken(id: string, err: string) {
-  const until = new Date(Date.now() + 45 * 60 * 1000).toISOString();
+async function coolDownToken(id: string, err: string, minutes = 45) {
+  const until = new Date(Date.now() + minutes * 60 * 1000).toISOString();
   await sb.from("ig_connections").update({ cooldown_until: until, last_error: err.substring(0, 300) }).eq("id", id);
+}
+/** Code 4: the app itself is over its hourly limit, so every Business-login token is blocked, not just this one. */
+async function coolDownAllTokens(err: string, minutes = 60) {
+  const until = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+  await sb.from("ig_connections").update({ cooldown_until: until, last_error: err.substring(0, 300) }).eq("api_host", "facebook").eq("healthy", true);
+}
+async function igScansLastHour(): Promise<number> {
+  const { count } = await sb.from("scan_jobs").select("id", { count: "exact", head: true }).eq("platform", "instagram")
+    .in("status", ["running", "done", "failed"]).gt("started_at", new Date(Date.now() - 3600e3).toISOString());
+  return count ?? 0;
+}
+/** Minutes until the first token comes off cooldown (or 30 if none are healthy at all). */
+async function minutesUntilTokenFree(): Promise<number> {
+  const { data } = await sb.from("ig_connections").select("cooldown_until").eq("healthy", true).eq("api_host", "facebook").order("cooldown_until", { ascending: true }).limit(1);
+  const t = data?.[0]?.cooldown_until ? new Date(data[0].cooldown_until).getTime() : 0;
+  return t ? Math.max(1, (t - Date.now()) / 60e3) : 30;
 }
 
 // ── House YouTube quota ────────────────────────────────────────
@@ -197,12 +219,22 @@ async function runJob(job: any) {
     result = await scanYouTube(YT_API_KEY, job.handle, quick ? { lookbackDays: 365, maxVideos: 150 } : {});
     await ytBudgetSpend(result.quotaUnits);
   } else if (job.platform === "instagram") {
+    // background re-prints (watchlist, roster, discover...) respect the hourly pace; a person's own scan skips the queue
+    const background = !!job.source && job.source !== "roster";   // Rootfor roster re-prints are never held back
+    if (background) {
+      const used = await igScansLastHour();
+      if (used > IG_SCANS_PER_HOUR) throw wait(`Paced: ${used} Instagram scans in the last hour (limit ${IG_SCANS_PER_HOUR})`, jitter(10, 30));
+    }
     const tok = await pickIgToken();
-    if (!tok) throw Object.assign(new Error("No healthy Instagram token available (all cooling down)"), { retry: 30 });
+    if (!tok) throw wait("Waiting for an Instagram token to come off cooldown", jitter(await minutesUntilTokenFree(), 30));
     try {
       result = await scanInstagram(tok, job.handle, job.source === "neighborhood" || job.source === "discover" ? 120 : undefined);
     } catch (e: any) {
-      if (e instanceof IgRateLimitError) { await coolDownToken(tok.id, e.message); throw Object.assign(e, { retry: 15 }); }
+      if (e instanceof IgRateLimitError) {
+        if (e.appWide) { await coolDownAllTokens(e.message); throw wait("Meta app limit reached; all Instagram scans paused for an hour", jitter(60, 45)); }
+        await coolDownToken(tok.id, e.message);
+        throw wait(`Token @${tok.igUserId} rate limited; retrying on another`, jitter(5, 15));
+      }
       throw e;
     }
   } else {
@@ -412,6 +444,14 @@ async function runOne(job: any) {
   try {
     await runJob(job);
   } catch (e: any) {
+    const waitMin = e?.wait as number | undefined;
+    const ageDays = (Date.now() - new Date(job.created_at).getTime()) / 864e5;
+    if (waitMin && ageDays < 4) {
+      // pacing / cooldown: put it back without spending an attempt (claim_scan_jobs adds one each time)
+      await sb.from("scan_jobs").update({ status: "rate_limited", error: e.message, attempts: Math.max(0, (job.attempts ?? 1) - 1), run_after: new Date(Date.now() + waitMin * 60000).toISOString() }).eq("id", job.id);
+      log(`waiting ${job.handle} ${Math.round(waitMin)}m: ${e.message}`);
+      return;
+    }
     const retryMin = e?.retry as number | undefined;
     if (retryMin && job.attempts < 6) {
       await sb.from("scan_jobs").update({ status: "rate_limited", error: e.message, run_after: new Date(Date.now() + retryMin * 60000).toISOString() }).eq("id", job.id);

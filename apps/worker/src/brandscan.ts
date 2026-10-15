@@ -158,7 +158,7 @@ async function scanOne(sb: SupabaseClient, id: string, brandId: string, requeste
         }
       }
     } catch (e: any) {
-      if (e instanceof IgRateLimitError) { ig.notes.push("Instagram rate limit hit; partial results"); await sb.from("ig_connections").update({ cooldown_until: new Date(Date.now() + 45 * 60e3).toISOString(), last_error: String(e.message).slice(0, 300) }).eq("id", tok.id); }
+      if (e instanceof IgRateLimitError) { ig.notes.push("Instagram rate limit hit; partial results"); const q = sb.from("ig_connections").update({ cooldown_until: new Date(Date.now() + (e.appWide ? 60 : 45) * 60e3).toISOString(), last_error: String(e.message).slice(0, 300) }); await (e.appWide ? q.eq("api_host", "facebook") : q.eq("id", tok.id)); }
       else { log("ig discovery failed", e?.message); ig.notes.push(String(e?.message || e).slice(0, 120)); }
     }
   }

@@ -17,7 +17,7 @@ const MODEL = process.env.ANTHROPIC_NEIGHBORHOOD_MODEL || "claude-haiku-4-5";
 // guard. Instagram: 200 calls/hour per connected account, ~4 per print, so 8
 // an hour per account uses ~1/6 of the pool.
 const YT_PER_HOUR = Number(process.env.DISCOVER_YT_PER_HOUR || 15);
-const IG_PER_HOUR = Number(process.env.DISCOVER_IG_PER_HOUR || 8);
+const IG_PER_HOUR = Number(process.env.DISCOVER_IG_PER_HOUR || 3);
 const YT_DAILY_GUARD = Number(process.env.DISCOVER_YT_DAILY_GUARD || 7000);   // stop YouTube discovery once the day's units pass this
 const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "PASTE_ME" ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[discover]", ...a);

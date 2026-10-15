@@ -32,8 +32,11 @@ export interface IgToken {
   accessToken: string;
 }
 
+/** code 4 = app-wide limit (every token is blocked); 17/32/613 = this user's token only. */
 export class IgRateLimitError extends Error {
-  constructor(msg: string) { super(msg); this.name = "IgRateLimitError"; }
+  code: number | null;
+  constructor(msg: string, code: number | null = null) { super(msg); this.name = "IgRateLimitError"; this.code = code; }
+  get appWide() { return this.code === 4; }
 }
 
 async function graph(token: IgToken, query: string) {
@@ -43,7 +46,7 @@ async function graph(token: IgToken, query: string) {
   if (!res.ok || json.error) {
     const e = json.error || {};
     const msg = `Meta ${res.status} code=${e.code} sub=${e.error_subcode}: ${e.message || "unknown"}`;
-    if (e.code === 4 || e.code === 17 || e.code === 32 || e.code === 613 || /rate|limit/i.test(e.message || "")) throw new IgRateLimitError(msg);
+    if (e.code === 4 || e.code === 17 || e.code === 32 || e.code === 613 || /rate|limit/i.test(e.message || "")) throw new IgRateLimitError(msg, typeof e.code === "number" ? e.code : null);
     throw new Error(msg);
   }
   return json;
@@ -113,7 +116,7 @@ export async function hashtagMedia(token: IgToken, tag: string): Promise<{ tag: 
   const base = `https://graph.facebook.com/${GRAPH_VERSION}`;
   const auth = `user_id=${token.igUserId}&access_token=${encodeURIComponent(token.accessToken)}`;
   const q: any = await fetch(`${base}/ig_hashtag_search?q=${encodeURIComponent(clean)}&${auth}`).then((r) => r.json()).catch(() => null);
-  if (q?.error && (q.error.code === 4 || q.error.code === 17 || q.error.code === 613 || /limit/i.test(q.error.message || ""))) throw new IgRateLimitError(`Meta hashtag: ${q.error.message}`);
+  if (q?.error && (q.error.code === 4 || q.error.code === 17 || q.error.code === 613 || /limit/i.test(q.error.message || ""))) throw new IgRateLimitError(`Meta hashtag: ${q.error.message}`, typeof q.error.code === "number" ? q.error.code : null);
   const id = q?.data?.[0]?.id; if (!id) return null;
   const fields = "id,permalink,timestamp,caption,media_type,like_count,comments_count";
   const posts: IgHashtagPost[] = []; const seen = new Set<string>();
