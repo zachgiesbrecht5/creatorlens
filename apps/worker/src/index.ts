@@ -392,6 +392,7 @@ import { refreshRoster } from "./rosterrefresh";
 import { houseIgToken } from "./neighborhood";
 import { announceSignups } from "./signups";
 import { heartbeat, alert, nightly } from "./observe";
+import { runSalesNavEnrich } from "./salesnav";
 
 let lastNightly = "";
 let lastReap = 0;
@@ -405,6 +406,8 @@ let lastOwned = 0;
 let lastRoster = 0;
 let lastClassify = 0;
 let classifyBusy = false;
+let lastSalesNav = 0;
+let salesNavBusy = false;
 async function tick() {
   try { await heartbeat(sb, { worker: WORKER_ID, inFlight, concurrency: CONCURRENCY }); } catch { /* ignore */ }
   const today = new Date().toISOString().slice(0, 10);
@@ -415,6 +418,8 @@ async function tick() {
   // old "only when idle" rule starved it once discovery kept the worker busy.
   if (!classifyBusy && Date.now() - lastClassify > 120e3) { lastClassify = Date.now(); classifyBusy = true; classifyBackfill(sb).catch((e: any) => log("classify failed", e?.message)).finally(() => { classifyBusy = false; }); }
   announceSignups(sb).catch(() => {});
+  // Sales Nav enrichment: Hunter only, no model spend, budgeted per day inside runSalesNavEnrich.
+  if (!salesNavBusy && Date.now() - lastSalesNav > 45e3) { lastSalesNav = Date.now(); salesNavBusy = true; runSalesNavEnrich(sb).catch((e: any) => log("salesnav enrich failed", e?.message)).finally(() => { salesNavBusy = false; }); }
   if (Date.now() - lastTracker > 15 * 60e3) { lastTracker = Date.now(); syncTrackers(sb).catch((e: any) => log("tracker sync failed", e?.message)); syncProjectSheets(sb).catch((e: any) => log("project sheet sync failed", e?.message)); }
   if (Date.now() - lastRoster > 3600e3 && inFlight === 0) { lastRoster = Date.now(); refreshRoster(sb).catch((e: any) => log("roster refresh failed", e?.message)); }
   if (Date.now() - lastOwned > 3600e3) { lastOwned = Date.now(); syncOwnedInsights(sb).catch((e: any) => log("owned insights failed", e?.message)); }

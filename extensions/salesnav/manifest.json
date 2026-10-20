@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Sponsorprint Sales Nav",
+  "version": "3.0.0",
+  "description": "Pulls LinkedIn Sales Navigator people and account searches into Sponsorprint's admin Sales Nav tab, at a human pace.",
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": { "default_popup": "popup.html", "default_title": "Sponsorprint Sales Nav", "default_icon": { "16": "icons/16.png", "48": "icons/48.png" } },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["storage", "alarms", "clipboardWrite"],
+  "host_permissions": ["https://sponsorprint.com/*", "https://www.sponsorprint.com/*"],
+  "content_scripts": [
+    { "matches": ["https://www.linkedin.com/sales/*"], "js": ["content.js"], "run_at": "document_idle" },
+    { "matches": ["https://sponsorprint.com/*", "https://www.sponsorprint.com/*"], "js": ["connect.js"], "run_at": "document_idle" }
+  ]
+}
