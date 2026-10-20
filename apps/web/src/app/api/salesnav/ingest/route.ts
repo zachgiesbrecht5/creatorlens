@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
         const row = { ...x, brand_id: b?.id || null, score: sc.score, score_why: sc.why };
         const prev = have.get(x.li_company_id);
         if (prev) { await admin.from("salesnav_accounts").update({ ...row, ...(!prev.domain && b?.domain ? { domain: b.domain } : {}), last_seen: now, ...(label ? { search_label: label } : {}) }).eq("id", prev.id); updated++; }
-        else inserts.push({ ...row, domain: b?.domain || null, search_label: label, scraped_by: a.profile.id });
+        else inserts.push({ ...row, domain: b?.domain || null, enrich_status: "skipped", search_label: label, scraped_by: a.profile.id });
       }
       if (inserts.length) { const { error } = await admin.from("salesnav_accounts").insert(inserts); if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 }); fresh = inserts.length; }
       // People already scraped at these companies pick up the account's brand link.
@@ -111,8 +111,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, run_id: runId, new: fresh, updated });
 }
 
-/** Where enrichment starts for a new person: only creator-facing titles spend Hunter credits automatically. */
+/** Hunter credits are spent only when an admin clicks Find email, never automatically. */
 function enrichStart(p: { name_partial: boolean; relevance: number }) {
-  if (p.name_partial) return "partial_name";
-  return p.relevance >= 2 ? "pending" : "skipped";
+  return p.name_partial ? "partial_name" : "skipped";
 }

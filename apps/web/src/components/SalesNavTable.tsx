@@ -19,7 +19,7 @@ export type SnAccount = {
 
 const ENRICH: Record<string, { t: string; c: string }> = {
   pending: { t: "finding…", c: "pill-warn" }, queued: { t: "finding…", c: "pill-warn" }, done: { t: "found", c: "pill-ok" },
-  not_found: { t: "not found", c: "pill-bad" }, no_domain: { t: "no domain", c: "pill-bad" }, partial_name: { t: "surname hidden", c: "" }, skipped: { t: "not looked up", c: "" }, failed: { t: "failed", c: "pill-bad" },
+  not_found: { t: "not found", c: "pill-bad" }, no_domain: { t: "no domain", c: "pill-bad" }, partial_name: { t: "surname hidden", c: "" }, skipped: { t: "not looked up yet", c: "" }, failed: { t: "failed", c: "pill-bad" },
 };
 
 export function SalesNavTable({ kind, people, accounts }: { kind: "people" | "accounts"; people: SnPerson[]; accounts: SnAccount[] }) {
@@ -102,6 +102,7 @@ export function SalesNavTable({ kind, people, accounts }: { kind: "people" | "ac
         <button onClick={() => act("skip")} disabled={busy || !sel.size} className="btn-ghost !py-1.5 !text-[12px]">Skip</button>
         <button onClick={() => act("new")} disabled={busy || !sel.size} className="btn-ghost !py-1.5 !text-[12px]">Reset</button>
         <button onClick={() => act("delete")} disabled={busy || !sel.size} className="btn-ghost !py-1.5 !text-[12px] text-bad">Delete</button>
+        <span className="text-[11px] text-dim">Find email uses 1 Hunter credit per person; nothing is looked up unless you click.</span>
         {note && <span className="text-[12px] text-muted">{note}</span>}
       </div>
 

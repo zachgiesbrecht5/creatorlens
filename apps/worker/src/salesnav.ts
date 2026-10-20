@@ -61,7 +61,6 @@ async function enrichAccounts(sb: SupabaseClient, b: Budget) {
     await sb.from("salesnav_accounts").update({ domain, emails, enrich_status: "done", enriched_at: new Date().toISOString() }).eq("id", a.id);
     // People at this company waiting on a domain can now be looked up.
     await sb.from("salesnav_people").update({ domain }).eq("li_company_id", a.li_company_id).is("domain", null);
-    await sb.from("salesnav_people").update({ enrich_status: "pending" }).eq("li_company_id", a.li_company_id).eq("enrich_status", "no_domain").gte("relevance", 2);
     if (a.brand_id) {
       const keep = emails.filter((e) => e.name && (e.bucket === "partnerships" || e.bucket === "marketing") && (e.confidence || 0) >= VERIFIED && !isGenericInbox(e.email) && e.email.endsWith("@" + domain));
       if (keep.length) await sb.from("contacts").upsert(keep.map((e) => ({ brand_id: a.brand_id, name: e.name, email: e.email, title: e.title, source: "hunter", verified: true, house_only: true, found_by: a.scraped_by, confidence: (e.confidence || 0) / 100, source_url: `https://www.linkedin.com/sales/company/${a.li_company_id}` })), { onConflict: "brand_id,email", ignoreDuplicates: true });
@@ -70,13 +69,23 @@ async function enrichAccounts(sb: SupabaseClient, b: Budget) {
   }
   return n;
 }
+const NO_COMPANY = /^(confidential|self[- ]?employed|stealth|freelance|freelancer|independent|consultant|various|n\/a|none|retired|student)\b/i;
+
+/** An address already on the contacts wall for this person (costs nothing). */
+async function knownEmail(sb: SupabaseClient, brandId: string | null, first: string, last: string, domain: string | null) {
+  let q = sb.from("contacts").select("id,email,confidence,name").ilike("name", `${first}%${last}`).not("email", "is", null).limit(3);
+  if (brandId) q = q.eq("brand_id", brandId); else if (domain) q = q.ilike("email", `%@${domain}`); else return null;
+  const { data } = await q;
+  const c = (data || [])[0];
+  return c ? { id: c.id as string, email: String(c.email).toLowerCase(), score: Math.round(Number(c.confidence || 0.9) * 100) } : null;
+}
+
 const rank = (bucket: string) => ({ partnerships: 0, marketing: 1, general: 2, other: 3 } as Record<string, number>)[bucket] ?? 4;
 
 async function enrichPeople(sb: SupabaseClient, b: Budget) {
   // Explicit "Find email" clicks first, then auto-queued creator-facing titles.
   const pick = async (status: string, limit: number) => (await sb.from("salesnav_people").select("id,li_lead_id,first_name,last_name,name_partial,title,company,li_company_id,domain,brand_id,scraped_by,brands(website,domain)").eq("enrich_status", status).order("relevance", { ascending: false }).order("first_seen").limit(limit)).data || [];
-  const queued = await pick("queued", 6);
-  const rows = queued.length >= 6 ? queued : [...queued, ...(await pick("pending", 6 - queued.length))];
+  const rows = await pick("queued", 6);
   let n = 0;
   const acctDomain = new Map<string, string | null>();
   for (const p of rows as any[]) {
@@ -88,6 +97,10 @@ async function enrichPeople(sb: SupabaseClient, b: Budget) {
       if (!acctDomain.has(p.li_company_id)) { const { data } = await sb.from("salesnav_accounts").select("domain").eq("li_company_id", p.li_company_id).maybeSingle(); acctDomain.set(p.li_company_id, data?.domain || null); }
       domain = acctDomain.get(p.li_company_id) || null;
     }
+    // Free checks first: a company Hunter can't resolve, or an address Sponsorprint already has.
+    if (NO_COMPANY.test(String(p.company || "")) && !domain) { await sb.from("salesnav_people").update({ enrich_status: "no_domain", enriched_at: now }).eq("id", p.id); n++; continue; }
+    const known = await knownEmail(sb, p.brand_id, p.first_name, p.last_name, domain);
+    if (known) { await sb.from("salesnav_people").update({ email: known.email, email_score: known.score, email_verified: known.score >= VERIFIED, domain: domain || known.email.split("@")[1], contact_id: known.id, enrich_status: "done", enriched_at: now }).eq("id", p.id); n++; continue; }
     if (!domain && !p.company) { await sb.from("salesnav_people").update({ enrich_status: "no_domain", enriched_at: now }).eq("id", p.id); n++; continue; }
     const data = await hunter("email-finder", { first_name: p.first_name, last_name: p.last_name, ...(domain ? { domain } : { company: p.company }) }, b);
     if (b.stopped && !data) break;

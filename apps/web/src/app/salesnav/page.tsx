@@ -74,7 +74,7 @@ export default async function SalesNav({ searchParams }: { searchParams: Promise
         <div>
           <div className="label mb-1.5">Admin · Sales Navigator</div>
           <h1 className="h2">Sales Nav leads</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted">Everything the Sales Nav extension pulls lands here. Emails are found in the background with the house Hunter key, only for creator-facing titles unless you ask. Admins only; nothing here reaches other Sponsorprint users.</p>
+          <p className="mt-1 max-w-2xl text-sm text-muted">Everything the Sales Nav extension pulls lands here. Tick the people worth pitching and press Find email: that is the only time a Hunter credit is spent (1 per person, max 150 a day). Admins only; nothing here reaches other Sponsorprint users.</p>
         </div>
         <SalesNavConnect hasKey={!!me.api_key} />
       </div>
@@ -82,7 +82,7 @@ export default async function SalesNav({ searchParams }: { searchParams: Promise
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat n={pt.count || 0} t="people today" />
         <Stat n={at.count || 0} t="accounts today" />
-        <Stat n={pend.count || 0} t="emails being found" />
+        <Stat n={pend.count || 0} t="emails queued" />
         <Stat n={`${used}/${HUNTER_DAILY}`} t="Hunter calls today" />
       </div>
 

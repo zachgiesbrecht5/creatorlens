@@ -109,18 +109,27 @@
     return (parts.join(" · ") || `${m.kind === "people" ? "People" : "Accounts"} search ${today()}`).slice(0, 140);
   }
 
-  // Bring every card into view so LinkedIn renders it, at reading speed. Sales Nav adds
-  // cards as you scroll, so keep passing until no new cards show up.
+  // Bring every card into view so LinkedIn renders it. Sales Nav only fills a card
+  // (name, links) once it has been near the viewport, so walk every list slot, not
+  // just the ones that already have content, then wait for the count to settle.
+  const slots = () => [...document.querySelectorAll("li.artdeco-list__item, table tbody tr")];
   async function hydrate(kind) {
     const nameSel = kind === "people" ? '[data-anonymize="person-name"]' : '[data-anonymize="company-name"]';
-    const done = new Set();
-    for (let pass = 0; pass < 5; pass++) {
-      const rows = resultRows(kind).filter((r) => !done.has(r));
-      if (!rows.length) break;
-      for (const r of rows) { r.scrollIntoView({ block: "center", behavior: "smooth" }); done.add(r); await sleep(jitter(180, 380)); if (state.stop) return; }
-      await sleep(700);
+    const filled = () => slots().filter((r) => r.querySelector(nameSel)).length;
+    for (let pass = 0; pass < 3; pass++) {
+      for (const r of slots()) {
+        if (r.querySelector(nameSel)) continue;
+        r.scrollIntoView({ block: "center" });
+        await sleep(jitter(260, 480));
+        if (state.stop) return;
+      }
+      let last = -1;
+      for (let i = 0; i < 8; i++) { const n = filled(); if (n === last) break; last = n; await sleep(400); }
+      if (filled() >= slots().length) break;
     }
-    for (const r of resultRows(kind).filter((r) => !$(r, nameSel))) { r.scrollIntoView({ block: "center" }); await sleep(450); }
+    // a gentle scroll back up, like someone skimming the page
+    window.scrollBy({ top: -300, behavior: "smooth" });
+    await sleep(300);
   }
 
   // Wait until the result list stops growing (or is a full page of 25).
