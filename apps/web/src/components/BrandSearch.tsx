@@ -22,7 +22,7 @@ export function BrandSearch({ placeholder = "Search brands", autoFocus = false, 
     <div className="relative">
       <input value={q} autoFocus={autoFocus} onChange={(e) => { setQ(e.target.value); setI(-1); }} onKeyDown={(e) => { if (e.key === "ArrowDown") setI((x) => Math.min(x + 1, hits.length - 1)); if (e.key === "ArrowUp") setI((x) => Math.max(x - 1, -1)); if (e.key === "Enter") go(i >= 0 ? hits[i] : undefined); if (e.key === "Escape") setHits([]); }} placeholder={placeholder} className={size === "lg" ? "w-full rounded-lg border border-line bg-surface px-4 py-3 text-[16px] outline-none focus:border-fg" : "input !w-64"} />
       {hits.length > 0 && (
-        <ul className="card absolute z-10 mt-2 w-full min-w-[22rem] overflow-hidden shadow-pop">
+        <ul className="card absolute z-10 mt-2 w-full overflow-hidden shadow-pop sm:min-w-[22rem]">
           {hits.map((h, k) => (
             <li key={h.id}>
               <button onMouseDown={() => go(h)} className={`flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-accentSoft/50 ${k === i ? "bg-accentSoft/50" : ""}`}>

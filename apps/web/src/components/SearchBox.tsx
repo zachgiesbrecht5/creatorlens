@@ -51,7 +51,7 @@ export function SearchBox({ signedIn, cta = "Scan" }: { signedIn: boolean; cta?:
 
   return (
     <div className="relative text-left">
-      <div className="flex items-center gap-2 rounded-lg border border-line2 bg-surface p-1.5 shadow-card transition focus-within:border-accent focus-within:shadow-focus">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line2 bg-surface p-1.5 shadow-card transition focus-within:border-accent focus-within:shadow-focus sm:flex-nowrap">
         <div className="flex rounded-md bg-surface2 p-0.5 font-mono text-[11px]">
           {(["youtube", "instagram"] as const).map((p) => (
             <button key={p} onClick={() => setPlatform(p)} className={`rounded px-3 py-1.5 transition ${platform === p ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"}`}>
@@ -60,7 +60,7 @@ export function SearchBox({ signedIn, cta = "Scan" }: { signedIn: boolean; cta?:
           ))}
         </div>
         <input
-          className="min-w-0 flex-1 bg-transparent px-2 text-base outline-none placeholder:text-dim"
+          className="min-w-0 flex-1 basis-[160px] bg-transparent px-2 py-1.5 text-base outline-none placeholder:text-dim"
           placeholder={platform === "youtube" ? "@handle or channel name" : "@username (Business or Creator account)"}
           value={q}
           onChange={(e) => setQ(e.target.value)}

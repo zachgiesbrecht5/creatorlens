@@ -8,12 +8,12 @@ import { FloatingPrints } from "@/components/FloatingPrints";
 import { Journey } from "@/components/Journey";
 import { HiringStrip } from "@/components/HiringStrip";
 import { SignalsStrip, type MatchRow } from "@/components/SignalsStrip";
-import { BrandSearch } from "@/components/BrandSearch";
 import { Tour } from "@/components/Tour";
 import { HOME_TOUR } from "@/components/tours";
 import { supabaseAdmin, currentAccess } from "@/lib/supabase";
 import { fmt } from "@/lib/fmt";
 import { IgConnectCard } from "@/components/IgConnectCard";
+import { Workspace } from "@/components/Workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -22,15 +22,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const sp = await searchParams;
   const { profile: user, admin: seesAll, insider } = await currentAccess();
   const admin = supabaseAdmin();
-  const [{ count: creators }, { count: brands }, { count: deals }] = await Promise.all([
-    admin.from("creators").select("*", { count: "exact", head: true }),
-    admin.from("brands").select("*", { count: "exact", head: true }),
-    admin.from("partnerships").select("*", { count: "exact", head: true }),
-  ]);
+  const { count: deals } = user ? { count: 0 } : await admin.from("partnerships").select("*", { count: "estimated", head: true });
   if (user) admin.from("profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", user.id).then(() => {});
   // Real prints for the hero: recent creators with at least four brands. Brand
   // names and post dates are public; contacts are not shown here.
-  const { data: heroCreators } = await admin.from("creators").select("id,handle,platform,followers,last_scanned_at,avatar_url,display_name").not("last_scanned_at", "is", null).order("last_scanned_at", { ascending: false }).limit(40);
+  // (signed-in people get the workspace instead of the hero, so skip the sample queries for them)
+  const { data: heroCreators } = user ? { data: [] as any[] } : await admin.from("creators").select("id,handle,platform,followers,last_scanned_at,avatar_url,display_name").not("last_scanned_at", "is", null).order("last_scanned_at", { ascending: false }).limit(40);
   const fmtK = (n: number | null) => (!n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
   const samples: { handle: string; name?: string; avatar?: string | null; platform: string; followers: string; lines: { brand: string; domain?: string | null; tag: string; when: string; deals: number; repeat?: boolean }[]; contact: string | null; href: string }[] = [];
   if (heroCreators?.length) {
@@ -86,12 +83,33 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
     if (mine?.length) recent = ((await admin.from("creators").select("platform,handle,display_name,avatar_url,followers").in("handle", mine.map((m) => m.handle)).limit(12)).data || []);
   }
 
+  // Workspace (house): who's spending now and which creators brands just rebooked.
+  let spending: any[] = [], rebooked: any[] = [];
+  if (user && insider) {
+    const [{ data: sp }, { data: rn }] = await Promise.all([
+      admin.from("brand_leaderboard_v").select("id,name,category,bookings_90d,bookings_prev_90d,paid_creators,rebook_rate").eq("is_mass_sponsor", false).gt("bookings_90d", 2).order("pace_delta", { ascending: false }).order("bookings_90d", { ascending: false }).limit(6),
+      admin.rpc("rebooking_now", { p_days: 45, p_limit: 8, p_category: null }),
+    ]);
+    spending = sp || [];
+    const rows = (rn || []) as any[];
+    if (rows.length) {
+      const [{ data: cs }, { data: bs }] = await Promise.all([
+        admin.from("creators").select("id,handle,display_name,platform,followers,avatar_url").in("id", rows.map((r) => r.creator_id)),
+        admin.from("brands").select("id,name").in("id", rows.map((r) => r.brand_id)),
+      ]);
+      rebooked = rows.map((r) => ({ ...r, creator: (cs || []).find((c: any) => c.id === r.creator_id), brand: (bs || []).find((b: any) => b.id === r.brand_id) })).filter((r) => r.creator && r.brand);
+    }
+  }
+
   return (
     <div>
-      {/* Hero: the print is the product. Headline left, the machine on the right. */}
+      {user ? (
+        <Workspace insider={!!insider} spending={spending} rebooked={rebooked} />
+      ) : (
+      /* Hero: the print is the product. Headline left, the machine on the right. */
       <section className="hero -mx-6 -mt-10 px-6 pb-16 pt-14 md:pt-20">
         <FloatingPrints samples={samples} />
-        <div className="mx-auto grid max-w-6xl items-center gap-12 md:grid-cols-12">
+        <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-12 md:grid-cols-12">
           <div className="md:col-span-6">
             <h1 className="h1 max-w-xl text-white">Pull a creator&apos;s sponsor print.</h1>
             <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/70">
@@ -107,16 +125,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
           </div>
         </div>
       </section>
+      )}
 
       {user && insider && <div className="mt-6"><IgConnectCard userId={user.id} next="/" status={sp.ig} /></div>}
       {watchNew > 0 && <Link href="/watchlist" className="mt-6 flex items-center justify-between rounded-lg border border-ok/30 bg-okSoft/60 px-4 py-3 text-[13px] hover:border-ok"><span><b>{watchNew}</b> creator{watchNew === 1 ? "" : "s"} on your watchlist picked up new brands this week</span><span className="num text-[11px] text-ok">see what's new →</span></Link>}
-      {user && (
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <div className="label">or look up a brand</div>
-          <div className="w-full max-w-md" data-tour="brand"><BrandSearch placeholder="Type a brand: Samsung, LMNT, Rocket Mortgage…" /></div>
-          <div className="num text-[11px] text-dim">who they book, how often, who to email</div>
-        </div>
-      )}
       {journey && <div className="mt-6" data-tour="journey"><Journey s={journey} compact /></div>}
       {user && <Tour id="home" steps={HOME_TOUR} />}
 
@@ -187,6 +199,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         </section>
       )}
 
+      {!user && <>
       {/* The journey is a real sequence, so a rail with three stops is honest here. */}
       <section className="mt-20">
         <h2 className="h2">From handle to pitch</h2>
@@ -223,8 +236,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
           <div className="text-lg font-semibold tracking-tight">Prints are free. Pay for the pitch.</div>
           <p className="mt-2 text-[15px] leading-relaxed text-muted">Sign in with Google and print any creator for free. Contacts, pitch drafts, research and neighborhoods come with a free taste, and Pro is $49 a month when you pitch every week. Beta users keep 30% off for as long as they stay subscribed.</p>
         </div>
-        <div className="flex gap-2">{!user && <Link href="/login" className="btn-dark">Pull your first print</Link>}<Link href="/pricing" className="btn-ghost">See plans</Link></div>
+        <div className="flex gap-2"><Link href="/login" className="btn-dark">Pull your first print</Link><Link href="/pricing" className="btn-ghost">See plans</Link></div>
       </section>
+      </>}
     </div>
   );
 }
@@ -238,3 +252,4 @@ function Stop({ title, body }: { title: string; body: string }) {
     </div>
   );
 }
+

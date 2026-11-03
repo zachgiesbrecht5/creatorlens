@@ -30,6 +30,8 @@ const jitter = (min: number, spread: number) => min + Math.random() * spread;
 /** A deferral that should not count as a failed attempt (pacing, cooldowns, app-wide limit). */
 const wait = (msg: string, minutes: number) => Object.assign(new Error(msg), { wait: minutes });
 
+// Caption parsing sometimes drags in divider lines or a stray slash ("Eufy -----------", "\\ Anthropic").
+const cleanBrandName = (name: string) => name.replace(/\s+-{3,}.*$/, "").replace(/^[\\/|\s]+/, "").trim() || name;
 const brandKey = (name: string) => name.toLowerCase().replace(/^@/, "").replace(/[^a-z0-9]/g, "");
 // Strip lone UTF-16 surrogates (an emoji cut in half by slice()) and null bytes; Postgres
 // rejects the whole batch as "invalid input syntax for type json" otherwise.
@@ -127,7 +129,7 @@ async function persist(job: any, result: ScanResult) {
   const brandIds = new Map<string, string>();
   for (const [key, r] of names) {
     if (!key) continue;
-    const { data: b } = await sb.from("brands").upsert({ key, name: r.brand, is_mass_sponsor: r.isMassSponsor }, { onConflict: "key", ignoreDuplicates: false }).select("id").single();
+    const { data: b } = await sb.from("brands").upsert({ key, name: cleanBrandName(r.brand), is_mass_sponsor: r.isMassSponsor }, { onConflict: "key", ignoreDuplicates: false }).select("id").single();
     if (b) brandIds.set(key, b.id);
   }
 
