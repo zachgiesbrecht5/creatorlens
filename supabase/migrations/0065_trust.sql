@@ -263,12 +263,26 @@ $$;
 revoke all on function brand_category_counts(uuid[]) from public, anon, authenticated;
 grant execute on function brand_category_counts(uuid[]) to service_role;
 
+-- refresh_brand_wall stays wall-only: the worker calls it after every scan through the API, which has an 8s
+-- statement timeout, and refreshing three views in one call blew through it under load (fixed 2026-11-03).
+-- The booking views refresh on their own, one call each, on a slower cadence.
 create or replace function public.refresh_brand_wall()
 returns void language plpgsql security definer set search_path = public as $$
 begin
   refresh materialized view concurrently brand_wall_mv;
+end $$;
+create or replace function public.refresh_brand_bookings()
+returns void language plpgsql security definer set search_path = public as $$
+begin
   refresh materialized view concurrently brand_bookings_mv;
+end $$;
+create or replace function public.refresh_brand_stats()
+returns void language plpgsql security definer set search_path = public as $$
+begin
   refresh materialized view concurrently brand_stats_mv;
 end $$;
+revoke execute on function public.refresh_brand_bookings() from public, anon, authenticated;
+revoke execute on function public.refresh_brand_stats() from public, anon, authenticated;
+grant execute on function public.refresh_brand_bookings(), public.refresh_brand_stats() to service_role;
 revoke execute on function refresh_brand_wall() from public, anon, authenticated;
 grant execute on function refresh_brand_wall() to service_role;
