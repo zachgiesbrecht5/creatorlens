@@ -37,6 +37,7 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
     admin.from("creator_updates").select("subject,body,month,kind,sent_at").eq("roster_creator_id", r.id).eq("status", "sent").order("sent_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const perf: any = me?.performance || null;
+  const { data: titleLab } = me?.id && platform === "youtube" ? await admin.from("title_labs").select("status,reading").eq("creator_id", me.id).maybeSingle() : { data: null };
   const lane = me?.category || null;
   // owned insights (saves, shares, reach): present when this creator's Instagram sits in the manager's business portfolio
   const { data: owned } = me ? await admin.from("owned_post_insights").select("media_id,permalink,posted_at,media_type,caption,likes,comments,saves,shares,reach,views").eq("creator_id", me.id).order("posted_at", { ascending: false }).limit(50) : { data: [] as any[] };
@@ -163,6 +164,14 @@ export default async function CreatorHome({ searchParams }: { searchParams: Prom
                 : <div className="card p-5 text-[13px] text-muted">None of your top 10 is from the last {bestDays} days. The public print keeps only the 10 best of 250; connect your Instagram and every post in the window shows here.</div>}
             </section>
           )}
+
+          {/* Title Lab (YouTube creators): their titles against their own median, with the read */}
+          {platform === "youtube" && me?.id && (() => { const tl: any = titleLab; const rules: string[] = tl?.reading?.rules || []; return (
+            <section className="card p-5" style={{ borderLeft: "4px solid #2f5bff" }}>
+              <div className="mb-2 flex flex-wrap items-end justify-between gap-3"><div><div className="label">Your titles</div><h2 className="h2">{tl?.status === "done" ? "What your best titles have in common" : "Title Lab"}</h2></div><Link href={`/c/youtube/${String(r.handle || "").replace(/^@/, "")}/titles`} className="btn-ghost !py-1.5 !text-[12px] whitespace-nowrap">{tl?.status === "done" ? "open the lab →" : "read my titles →"}</Link></div>
+              {tl?.status === "done" && tl.reading ? (<><p className="text-[13.5px] leading-relaxed">{tl.reading.summary}</p>{rules.length > 0 && <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[13px]">{rules.slice(0, 3).map((x: string, i: number) => <li key={i}>{x}</li>)}</ul>}</>)
+                : <p className="text-[13px] text-muted">Every title you&apos;ve posted, scored against your own median, the patterns that travel for you, and a place to test the next title before you publish.</p>}
+            </section>); })()}
 
           {/* lane feed */}
           <section>

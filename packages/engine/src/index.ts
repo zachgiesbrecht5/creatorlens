@@ -7,3 +7,4 @@ export * from "./youtube-client";
 export * from "./instagram-client";
 export * from "./scan";
 export * from "./salesnav";
+export * from "./titles";

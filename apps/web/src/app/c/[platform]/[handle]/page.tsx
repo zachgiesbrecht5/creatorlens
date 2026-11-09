@@ -117,6 +117,7 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
               {!viewer && <NeighborsButton creatorId={creator.id} paused={process.env.NEIGHBORHOODS_PAUSED === "1"} />}
               {unlocked && active && <span className="btn-like opacity-50" title="Re-printing; the PDF updates when the new print lands">download PDF ↓</span>}
               {unlocked && !active && <a href={`/api/print/pdf?platform=${p}&handle=${encodeURIComponent(creator.handle)}`} className="btn-like" title="PDF with recurring sponsors, every disclosed deal, and clickable links to the posts">download PDF ↓</a>}
+              {unlocked && p === "youtube" && <Link href={`/c/youtube/${encodeURIComponent(creator.handle)}/titles`} className="btn-like" title="Every title scored against the channel's own median, the patterns that travel, and a note you can send the creator">Title Lab →</Link>}
             </div>}
             {user && (missing.length > 0 || neighbors.length > 0) && <Missing missing={missing} neighbors={neighbors} lane={creator.category || "this lane"} creatorId={creator.id} platform={p} />}
           </div>

@@ -393,6 +393,7 @@ import { houseIgToken } from "./neighborhood";
 import { announceSignups } from "./signups";
 import { heartbeat, alert, nightly } from "./observe";
 import { runSalesNavEnrich } from "./salesnav";
+import { runTitleLabs } from "./titlelab";
 
 let lastNightly = "";
 let lastReap = 0;
@@ -408,6 +409,7 @@ let lastClassify = 0;
 let classifyBusy = false;
 let lastSalesNav = 0;
 let salesNavBusy = false;
+let titleLabBusy = false;
 async function tick() {
   try { await heartbeat(sb, { worker: WORKER_ID, inFlight, concurrency: CONCURRENCY }); } catch { /* ignore */ }
   const today = new Date().toISOString().slice(0, 10);
@@ -430,6 +432,8 @@ async function tick() {
   if (Date.now() - lastBrandWatch > 3600e3 && inFlight === 0) { lastBrandWatch = Date.now(); brandWatch(sb, () => houseIgToken(sb)).catch((e: any) => log("brand watch failed", e?.message)); }
   // Discovery runs hourly (budgeted per platform inside discover()).
   if (Date.now() - lastDiscover > 3600e3) { lastDiscover = Date.now(); discover(sb).catch((e: any) => log("discover failed", e?.message)); }
+  // Title Labs: someone clicked "read the titles" and is waiting; ~6 YouTube units + one Haiku call each.
+  if (!titleLabBusy) { titleLabBusy = true; runTitleLabs(sb, YT_API_KEY, ytBudgetSpend, 2).catch((e: any) => log("title lab failed", e?.message)).finally(() => { titleLabBusy = false; }); }
   // Neighborhood finds run alongside scans (they're short and users are watching).
   if (!neighborhoodBusy) { neighborhoodBusy = true; runNeighborhoods(sb, 3).then(() => runBrandScans(sb, 1)).catch(() => {}).finally(() => { neighborhoodBusy = false; }); }
 
