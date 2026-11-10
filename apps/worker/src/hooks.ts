@@ -170,9 +170,13 @@ const BACKFILL_PER_RUN = Number(process.env.HOOKS_BACKFILL_PER_RUN || 4);
 export async function hooksBackfill(sb: SupabaseClient, tokenFn: () => Promise<IgToken | null>): Promise<number> {
   if (!DEEPGRAM && !OPENAI) return 0;
   // candidates: Instagram creators printed in the last 14 days whose top-6 has a reel with no audio verdict
-  const { data: cs } = await sb.from("creators").select("id,handle,performance").eq("platform", "instagram").gte("last_scanned_at", new Date(Date.now() - 14 * 864e5).toISOString()).not("performance", "is", null).order("last_scanned_at", { ascending: false }).limit(400);
-  const needs = (cs || []).filter((c) => ((c.performance as any)?.top || []).slice(0, 6).some((t: any) => /reel|video|clip/i.test(String(t.kind || "")) && t.audio == null && !t.hooks_backfilled)).slice(0, BACKFILL_PER_RUN);
-  if (!needs.length) return 0;
+  // The filter runs in the database (hooks_backfill_candidates): this used to download every recent
+  // creator's full performance blob (~90 KB each, up to 400 of them) every five minutes.
+  const { data: ids } = await sb.rpc("hooks_backfill_candidates", { p_limit: BACKFILL_PER_RUN });
+  const idList = ((ids || []) as any[]).map((r) => (typeof r === "string" ? r : r?.hooks_backfill_candidates || r?.id)).filter(Boolean);
+  if (!idList.length) return 0;
+  const { data: needs = [] } = await sb.from("creators").select("id,handle,performance").in("id", idList) as { data: any[] | null };
+  if (!needs?.length) return 0;
   let done = 0;
   for (const c of needs) {
     const perf = c.performance as any;

@@ -402,6 +402,7 @@ let neighborhoodBusy = false;
 let lastDiscover = 0;
 let lastBrandWatch = 0;
 let lastHooksBackfill = 0;
+let hooksEvery = 5 * 60e3;   // drops to every 30 min while there is nothing to backfill
 let lastTracker = 0;
 let lastInbox = 0;
 let lastOwned = 0;
@@ -434,7 +435,7 @@ async function tick() {
   if (Date.now() - lastOwned > 3600e3) { lastOwned = Date.now(); syncOwnedInsights(sb).catch((e: any) => log("owned insights failed", e?.message)); }
   if (Date.now() - lastInbox > 3600e3) { lastInbox = Date.now(); watchInboxes(sb).catch((e: any) => log("inbox watch failed", e?.message)); }
   // Hooks backfill: prints from before the race fix show "Not checked yet"; a few creators every 5 minutes when the worker is idle
-  if (Date.now() - lastHooksBackfill > 5 * 60e3 && inFlight === 0) { lastHooksBackfill = Date.now(); hooksBackfill(sb, () => houseIgToken(sb)).catch((e: any) => log("hooks backfill failed", e?.message)); }
+  if (Date.now() - lastHooksBackfill > hooksEvery && inFlight === 0) { lastHooksBackfill = Date.now(); hooksBackfill(sb, () => houseIgToken(sb)).then((n) => { hooksEvery = n ? 5 * 60e3 : 30 * 60e3; }).catch((e: any) => log("hooks backfill failed", e?.message)); }
   // Brand watch: an hourly batch when the Instagram pool has room and no user prints are waiting
   if (Date.now() - lastBrandWatch > 3600e3 && inFlight === 0) { lastBrandWatch = Date.now(); brandWatch(sb, () => houseIgToken(sb)).catch((e: any) => log("brand watch failed", e?.message)); }
   // Discovery runs hourly (budgeted per platform inside discover()).
