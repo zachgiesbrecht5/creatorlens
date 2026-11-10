@@ -46,7 +46,10 @@ export async function syncProjectSheets(sb: SupabaseClient): Promise<number> {
       const patch: any = { user_id: r.user_id, roster_creator_id: r.id, brand, title: month ? `${month.replace(/\s+$/, "")} ${/\d{4}/.test(month) ? "" : new Date().getFullYear()}`.trim() : null, deliverables: String(row[c.deliv] || "").trim() || null, status, due_at: toDate(String(row[c.due] || "")), go_live_at: toDate(liveText) , fee: money(String(row[c.net] || "")), brand_rate: money(String(row[c.rate] || "")), notes, source: "sheet", source_ref: key, updated_at: new Date().toISOString() };
       // keep dates a manager set by hand: only fill paid/invoiced dates when status says so and they're empty
       if (status === "paid") patch.paid_at_fill = true;
-      const { data: existing } = await sb.from("projects").select("id,paid_at,invoice_sent_at,source").eq("roster_creator_id", r.id).or(`and(source.eq.sheet,source_ref.eq.${key.replace(/[,()]/g, "")}),and(brand.ilike.${brand.replace(/[,()]/g, "")},title.ilike.${(patch.title || "").replace(/[,()]/g, "")})`).limit(1).maybeSingle();
+      // exact sheet key first (plain .eq, so keys with commas, dots or parentheses still match), then a
+      // brand + title match for projects that were added by hand before the sheet listed them
+      let { data: existing } = await sb.from("projects").select("id,paid_at,invoice_sent_at,source").eq("roster_creator_id", r.id).eq("source", "sheet").eq("source_ref", key).limit(1).maybeSingle();
+      if (!existing && patch.title) ({ data: existing } = await sb.from("projects").select("id,paid_at,invoice_sent_at,source").eq("roster_creator_id", r.id).ilike("brand", brand).ilike("title", patch.title).limit(1).maybeSingle());
       delete patch.paid_at_fill;
       if (existing) {
         if (status === "paid" && !existing.paid_at) patch.paid_at = new Date().toISOString().slice(0, 10);

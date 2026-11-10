@@ -412,8 +412,13 @@ let lastSalesNav = 0;
 let salesNavBusy = false;
 let titleLabBusy = false;
 let titleSearchBusy = false;
+let lastBeat = 0, lastSide = 0, lastSignups = 0, lastIdleWork = 0, idleTicks = 0;
+const SIDE_MS = 4000;
 async function tick() {
-  try { await heartbeat(sb, { worker: WORKER_ID, inFlight, concurrency: CONCURRENCY }); } catch { /* ignore */ }
+  // Housekeeping polls are throttled: the old 1.5 s loop ran ~8 REST calls per tick (~350K requests a day) while idle.
+  const now = Date.now();
+  if (now - lastBeat > 30e3) { lastBeat = now; try { await heartbeat(sb, { worker: WORKER_ID, inFlight, concurrency: CONCURRENCY }); } catch { /* ignore */ } }
+  const sideDue = now - lastSide > SIDE_MS; if (sideDue) lastSide = now;
   const today = new Date().toISOString().slice(0, 10);
   if (lastNightly !== today && new Date().getUTCHours() >= 8) { lastNightly = today; nightly(sb).catch((e) => alert(sb, "nightly failed", { error: String(e?.message || e) })); }
   if (Date.now() - lastReap > 5 * 60000) { lastReap = Date.now(); sb.rpc("requeue_stuck_jobs").then(({ data }) => { if (data) log("requeued stuck jobs:", data); }); }
@@ -421,7 +426,7 @@ async function tick() {
   // Brand and creator classification runs every two minutes regardless of load; the
   // old "only when idle" rule starved it once discovery kept the worker busy.
   if (!classifyBusy && Date.now() - lastClassify > 120e3) { lastClassify = Date.now(); classifyBusy = true; classifyBackfill(sb).catch((e: any) => log("classify failed", e?.message)).finally(() => { classifyBusy = false; }); }
-  announceSignups(sb).catch(() => {});
+  if (now - lastSignups > 30e3) { lastSignups = now; announceSignups(sb).catch(() => {}); }
   // Sales Nav enrichment: Hunter only, no model spend, budgeted per day inside runSalesNavEnrich.
   if (!salesNavBusy && Date.now() - lastSalesNav > 45e3) { lastSalesNav = Date.now(); salesNavBusy = true; runSalesNavEnrich(sb).catch((e: any) => log("salesnav enrich failed", e?.message)).finally(() => { salesNavBusy = false; }); }
   if (Date.now() - lastTracker > 15 * 60e3) { lastTracker = Date.now(); syncTrackers(sb).catch((e: any) => log("tracker sync failed", e?.message)); syncProjectSheets(sb).catch((e: any) => log("project sheet sync failed", e?.message)); }
@@ -435,11 +440,11 @@ async function tick() {
   // Discovery runs hourly (budgeted per platform inside discover()).
   if (Date.now() - lastDiscover > 3600e3) { lastDiscover = Date.now(); discover(sb).catch((e: any) => log("discover failed", e?.message)); }
   // Title Labs: someone clicked "read the titles" and is waiting; ~6 YouTube units + one Haiku call each.
-  if (!titleLabBusy) { titleLabBusy = true; runTitleLabs(sb, YT_API_KEY, ytBudgetSpend, 2).catch((e: any) => log("title lab failed", e?.message)).finally(() => { titleLabBusy = false; }); }
+  if (sideDue && !titleLabBusy) { titleLabBusy = true; runTitleLabs(sb, YT_API_KEY, ytBudgetSpend, 2).catch((e: any) => log("title lab failed", e?.message)).finally(() => { titleLabBusy = false; }); }
   // Title Searches: a topic prompt -> ranked titles across YouTube; ~450 units each, capped per day inside.
-  if (!titleSearchBusy) { titleSearchBusy = true; runTitleSearches(sb, YT_API_KEY, ytBudgetLeft, ytBudgetSpend).catch((e: any) => log("title search failed", e?.message)).finally(() => { titleSearchBusy = false; }); }
+  if (sideDue && !titleSearchBusy) { titleSearchBusy = true; runTitleSearches(sb, YT_API_KEY, ytBudgetLeft, ytBudgetSpend).catch((e: any) => log("title search failed", e?.message)).finally(() => { titleSearchBusy = false; }); }
   // Neighborhood finds run alongside scans (they're short and users are watching).
-  if (!neighborhoodBusy) { neighborhoodBusy = true; runNeighborhoods(sb, 3).then(() => runBrandScans(sb, 1)).catch(() => {}).finally(() => { neighborhoodBusy = false; }); }
+  if (sideDue && !neighborhoodBusy) { neighborhoodBusy = true; runNeighborhoods(sb, 3).then(() => runBrandScans(sb, 1)).catch(() => {}).finally(() => { neighborhoodBusy = false; }); }
 
   // Claim up to (CONCURRENCY - inFlight) jobs atomically and run them in parallel.
   const room = CONCURRENCY - inFlight;
@@ -447,9 +452,15 @@ async function tick() {
   const { data: jobs, error: pollErr } = await sb.rpc("claim_scan_jobs", { p_limit: room, p_worker: WORKER_ID });
   if (pollErr) { log("claim failed:", pollErr.message, "(check SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)"); return; }
   if (!jobs?.length) {
-    if (inFlight === 0) { if (!(await runResearch(sb))) { if (!(await checkBrandSites())) { if (!(await insightsBackfill(sb))) await classifyBackfill(sb); } } }
+    idleTicks++;
+    // idle backlog: keep chewing while there is work, check again every 10 s once it's empty
+    if (inFlight === 0 && now - lastIdleWork > 10e3) {
+      const did = (await runResearch(sb)) || (await checkBrandSites()) || (await insightsBackfill(sb)) || (await classifyBackfill(sb));
+      if (!did) lastIdleWork = now;
+    }
     return;
   }
+  idleTicks = 0;
   for (const job of jobs) { inFlight++; runOne(job).finally(() => { inFlight--; }); }
 }
 
@@ -483,6 +494,7 @@ log("worker up; polling every", POLL_MS, "ms");
 (async function loop() {
   for (;;) {
     try { await tick(); } catch (e: any) { log("tick error", e); await alert(sb, "tick error", { error: String(e?.message || e).slice(0, 300) }).catch(() => {}); }
-    await new Promise((r) => setTimeout(r, POLL_MS));
+    // a print someone just requested is picked up within 1.5 s while the worker is busy, ~3 s when it's been idle
+    await new Promise((r) => setTimeout(r, inFlight > 0 || idleTicks < 20 ? POLL_MS : POLL_MS * 2));
   }
 })();

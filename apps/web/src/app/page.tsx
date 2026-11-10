@@ -12,6 +12,7 @@ import { BrandSearch } from "@/components/BrandSearch";
 import { Tour } from "@/components/Tour";
 import { HOME_TOUR } from "@/components/tours";
 import { supabaseAdmin, currentAccess } from "@/lib/supabase";
+import { unstable_cache } from "next/cache";
 import { fmt } from "@/lib/fmt";
 import { IgConnectCard } from "@/components/IgConnectCard";
 
@@ -22,69 +23,44 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const sp = await searchParams;
   const { profile: user, admin: seesAll, insider } = await currentAccess();
   const admin = supabaseAdmin();
-  const [{ count: creators }, { count: brands }, { count: deals }] = await Promise.all([
-    admin.from("creators").select("*", { count: "exact", head: true }),
-    admin.from("brands").select("*", { count: "exact", head: true }),
-    admin.from("partnerships").select("*", { count: "exact", head: true }),
-  ]);
   if (user) admin.from("profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", user.id).then(() => {});
-  // Real prints for the hero: recent creators with at least four brands. Brand
-  // names and post dates are public; contacts are not shown here.
-  const { data: heroCreators } = await admin.from("creators").select("id,handle,platform,followers,last_scanned_at,avatar_url,display_name").not("last_scanned_at", "is", null).order("last_scanned_at", { ascending: false }).limit(40);
-  const fmtK = (n: number | null) => (!n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
-  const samples: { handle: string; name?: string; avatar?: string | null; platform: string; followers: string; lines: { brand: string; domain?: string | null; tag: string; when: string; deals: number; repeat?: boolean }[]; contact: string | null; href: string }[] = [];
-  if (heroCreators?.length) {
-    const { data: walls } = await admin.from("brand_wall_mv").select("creator_id,brand,evidence,deals,last_seen,repeat_partner,website").in("creator_id", heroCreators.map((c) => c.id)).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).lte("deals", 40);
-    for (const c of heroCreators) {
-      const rows = (walls || []).filter((w) => w.creator_id === c.id).sort((a, b) => String(b.last_seen).localeCompare(String(a.last_seen))).slice(0, 6);
-      if (rows.length < 4) continue;
-      samples.push({ handle: c.handle, name: c.display_name || c.handle, avatar: c.avatar_url || null, platform: c.platform === "youtube" ? "YouTube" : "Instagram", followers: fmtK(c.followers), href: `/c/${c.platform}/${c.handle}`, contact: null,
-        lines: rows.map((r) => ({ brand: r.brand, domain: r.website ? String(r.website).replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "") : null, tag: String(r.evidence || "").replace(/\s+/g, " ").slice(0, 24), when: r.last_seen ? new Date(r.last_seen).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "", deals: Number(r.deals) || 1, repeat: !!r.repeat_partner })) });
-      if (samples.length >= 6) break;
-    }
-  }
+  type Card = { id: string; platform: string; handle: string; display_name: string | null; avatar_url: string | null; followers: number | null; brands: number; top: string[]; reason?: string };
+
+  // Everything below runs in parallel: the shared page parts come from a 5-minute cache, the
+  // signed-in parts are one round of small queries. (The page used to make ~20 queries one after another.)
+  const [pub, onboarding, watchNew, journey, dropCards, sig, recent] = await Promise.all([
+    homePublic(),
+    user ? admin.from("profiles").select("onboarded_at").eq("id", user.id).single().then(async ({ data: me }) => {
+      if (me?.onboarded_at) return true;
+      const { count } = await admin.from("roster_creators").select("*", { count: "exact", head: true }).eq("user_id", user.id);
+      return !!count;
+    }) : Promise.resolve(true),
+    user ? admin.from("watch_events").select("*", { count: "exact", head: true }).eq("user_id", user.id).eq("seen", false).then(({ count }) => count || 0) : Promise.resolve(0),
+    user ? journeyState(user.id) : Promise.resolve(null),
+    user ? (async () => {
+      const { data: drop } = await admin.from("drops").select("items").eq("user_id", user.id).eq("day", new Date().toISOString().slice(0, 10)).maybeSingle();
+      const items = ((drop?.items || []) as { creator_id: string; reason: string }[]);
+      if (!items.length) return [] as Card[];
+      const ids = items.map((i) => i.creator_id);
+      const [{ data: cs }, { data: ws }] = await Promise.all([
+        admin.from("creators").select("id,platform,handle,display_name,avatar_url,followers").in("id", ids),
+        admin.from("brand_wall_mv").select("creator_id,brand,deals").in("creator_id", ids).eq("is_junk", false).eq("is_self_brand", false),
+      ]);
+      return items.map((i) => { const c = (cs || []).find((x) => x.id === i.creator_id); if (!c) return null; const w = (ws || []).filter((x) => x.creator_id === c.id).sort((a, b) => Number(b.deals) - Number(a.deals)); return { ...c, reason: i.reason, brands: w.length, top: w.slice(0, 3).map((x) => x.brand) }; }).filter(Boolean) as Card[];
+    })() : Promise.resolve([] as Card[]),
+    user ? admin.from("signal_matches").select("id,reason,score,seen,roster_creators(name),signals(*)").eq("user_id", user.id).order("seen").order("score", { ascending: false }).limit(3).then(({ data }) => data || []) : Promise.resolve([] as any[]),
+    seesAll ? Promise.resolve(null) : user ? (async () => {
+      const { data: mine } = await admin.from("creator_access").select("platform,handle").eq("user_id", user.id).order("created_at", { ascending: false }).limit(24);
+      return mine?.length ? ((await admin.from("creators").select("platform,handle,display_name,avatar_url,followers").in("handle", mine.map((m) => m.handle)).limit(12)).data || []) : [];
+    })() : Promise.resolve([]),
+  ]);
   // Brand-new account with no roster: the onboarding is the first page.
-  if (user) {
-    const { data: me } = await admin.from("profiles").select("onboarded_at").eq("id", user.id).single();
-    if (!me?.onboarded_at) { const { count } = await admin.from("roster_creators").select("*", { count: "exact", head: true }).eq("user_id", user.id); if (!count) redirect("/start"); }
-  }
-  let watchNew = 0;
-  if (user) { const { count } = await admin.from("watch_events").select("*", { count: "exact", head: true }).eq("user_id", user.id).eq("seen", false); watchNew = count || 0; }
-  const journey = user ? await journeyState(user.id) : null;
-  // Fresh off the printer: creators the discover agent picked and printed, public to everyone signed in.
-  const { data: fresh } = await admin.from("creators").select("id,platform,handle,display_name,avatar_url,followers,category,discover_reason,discovered_at").eq("is_public", true).not("last_scanned_at", "is", null).order("discovered_at", { ascending: false }).limit(9);
-  const freshIds = (fresh || []).map((f) => f.id);
-  const { data: freshWalls } = freshIds.length ? await admin.from("brand_wall_mv").select("creator_id,brand,deals").in("creator_id", freshIds).eq("is_junk", false).eq("is_self_brand", false) : { data: [] };
-  const freshCards = (fresh || []).map((f) => { const w = (freshWalls || []).filter((x) => x.creator_id === f.id).sort((a, b) => Number(b.deals) - Number(a.deals)); return { ...f, brands: w.length, top: w.slice(0, 3).map((x) => x.brand) }; });
-  // today's drop
-  let dropCards: any[] = [];
-  if (user) {
-    const { data: drop } = await admin.from("drops").select("items").eq("user_id", user.id).eq("day", new Date().toISOString().slice(0, 10)).maybeSingle();
-    const items = ((drop?.items || []) as { creator_id: string; reason: string }[]);
-    if (items.length) {
-      const { data: cs } = await admin.from("creators").select("id,platform,handle,display_name,avatar_url,followers").in("id", items.map((i) => i.creator_id));
-      const { data: ws } = await admin.from("brand_wall_mv").select("creator_id,brand,deals").in("creator_id", items.map((i) => i.creator_id)).eq("is_junk", false).eq("is_self_brand", false);
-      dropCards = items.map((i) => { const c = (cs || []).find((x) => x.id === i.creator_id); if (!c) return null; const w = (ws || []).filter((x) => x.creator_id === c.id).sort((a, b) => Number(b.deals) - Number(a.deals)); return { ...c, reason: i.reason, brands: w.length, top: w.slice(0, 3).map((x) => x.brand) }; }).filter(Boolean);
-    }
-  }
-  let sigMatches: MatchRow[] = [], sigGeneral: any[] = [];
-  if (user) {
-    const [{ data: sm }, { data: sg }] = await Promise.all([
-      admin.from("signal_matches").select("id,reason,score,seen,roster_creators(name),signals(*)").eq("user_id", user.id).order("seen").order("score", { ascending: false }).limit(3),
-      admin.from("signals").select("*").order("announced_at", { ascending: false, nullsFirst: false }).limit(3),
-    ]);
-    sigMatches = (sm || []).map((m: any) => ({ id: m.id, reason: m.reason, score: m.score, seen: m.seen, creator: m.roster_creators?.name || "creator", signal: m.signals }));
-    sigGeneral = sg || [];
-  }
-  const { data: hiring } = user ? await admin.from("hiring_signals").select("id,company,brand_id,title,seniority,url,posted_at,found_at,closed_at,summary").order("found_at", { ascending: false }).limit(6) : { data: [] };
-  // Recently scanned: the whole index for the house, only your own unlocks otherwise.
-  let recent: { platform: string; handle: string; display_name: string | null; avatar_url: string | null; followers: number | null }[] = [];
-  if (seesAll) {
-    recent = (await admin.from("creators").select("platform,handle,display_name,avatar_url,followers").order("last_scanned_at", { ascending: false }).limit(12)).data || [];
-  } else if (user) {
-    const { data: mine } = await admin.from("creator_access").select("platform,handle").eq("user_id", user.id).order("created_at", { ascending: false }).limit(24);
-    if (mine?.length) recent = ((await admin.from("creators").select("platform,handle,display_name,avatar_url,followers").in("handle", mine.map((m) => m.handle)).limit(12)).data || []);
-  }
+  if (!onboarding) redirect("/start");
+  const { creators, brands, deals, samples, freshCards } = pub;
+  const sigMatches: MatchRow[] = (sig as any[]).map((m: any) => ({ id: m.id, reason: m.reason, score: m.score, seen: m.seen, creator: m.roster_creators?.name || "creator", signal: m.signals }));
+  const sigGeneral = user ? pub.signals : [];
+  const hiring = user ? pub.hiring : [];
+  const recentList: { platform: string; handle: string; display_name: string | null; avatar_url: string | null; followers: number | null }[] = (recent ?? pub.recentAll) as any;
 
   return (
     <div>
@@ -167,14 +143,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         </section>
       )}
 
-      {recent && recent.length > 0 && (
+      {recentList.length > 0 && (
         <section className="mt-10">
           <div className="mb-3 flex items-baseline justify-between">
             <div className="text-sm font-medium">{seesAll ? "Recently printed" : "Your prints"}</div>
             <div className="text-[12px] text-dim">tap one to open it</div>
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
-            {recent.map((c) => (
+            {recentList.map((c) => (
               <Link key={c.platform + c.handle} href={`/c/${c.platform}/${c.handle}`} className="card flex items-center gap-3 p-3 transition hover:border-fg">
                 {c.avatar_url ? <img src={c.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" /> : <div className="h-8 w-8 rounded-full bg-surface2" />}
                 <div className="min-w-0">
@@ -238,3 +214,37 @@ function Stop({ title, body }: { title: string; body: string }) {
     </div>
   );
 }
+
+
+// The parts of the home page that are the same for everyone: index counts, the hero prints,
+// "Fresh off the printer", signals and hiring. Cached for 5 minutes across all visitors.
+const homePublic = unstable_cache(async () => {
+  const admin = supabaseAdmin();
+  const fmtK = (n: number | null) => (!n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
+  const [{ count: creators }, { count: brands }, { count: deals }, { data: heroCreators }, { data: fresh }, { data: signals }, { data: hiring }, { data: recentAll }] = await Promise.all([
+    admin.from("creators").select("*", { count: "exact", head: true }),
+    admin.from("brands").select("*", { count: "exact", head: true }),
+    admin.from("partnerships").select("*", { count: "exact", head: true }),
+    admin.from("creators").select("id,handle,platform,followers,last_scanned_at,avatar_url,display_name").not("last_scanned_at", "is", null).order("last_scanned_at", { ascending: false }).limit(40),
+    admin.from("creators").select("id,platform,handle,display_name,avatar_url,followers,category,discover_reason,discovered_at").eq("is_public", true).not("last_scanned_at", "is", null).order("discovered_at", { ascending: false }).limit(9),
+    admin.from("signals").select("*").order("announced_at", { ascending: false, nullsFirst: false }).limit(3),
+    admin.from("hiring_signals").select("id,company,brand_id,title,seniority,url,posted_at,found_at,closed_at,summary").order("found_at", { ascending: false }).limit(6),
+    admin.from("creators").select("platform,handle,display_name,avatar_url,followers").order("last_scanned_at", { ascending: false, nullsFirst: false }).limit(12),
+  ]);
+  const heroIds = (heroCreators || []).map((c) => c.id); const freshIds = (fresh || []).map((f) => f.id);
+  const [{ data: walls }, { data: freshWalls }] = await Promise.all([
+    heroIds.length ? admin.from("brand_wall_mv").select("creator_id,brand,evidence,deals,last_seen,repeat_partner,website").in("creator_id", heroIds).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).lte("deals", 40) : Promise.resolve({ data: [] as any[] }),
+    freshIds.length ? admin.from("brand_wall_mv").select("creator_id,brand,deals").in("creator_id", freshIds).eq("is_junk", false).eq("is_self_brand", false) : Promise.resolve({ data: [] as any[] }),
+  ]);
+  // Real prints for the hero: recent creators with at least four brands. Brand names and post dates are public; contacts are not shown here.
+  const samples: { handle: string; name?: string; avatar?: string | null; platform: string; followers: string; lines: { brand: string; domain?: string | null; tag: string; when: string; deals: number; repeat?: boolean }[]; contact: string | null; href: string }[] = [];
+  for (const c of heroCreators || []) {
+    const rows = (walls || []).filter((w: any) => w.creator_id === c.id).sort((a: any, b: any) => String(b.last_seen).localeCompare(String(a.last_seen))).slice(0, 6);
+    if (rows.length < 4) continue;
+    samples.push({ handle: c.handle, name: c.display_name || c.handle, avatar: c.avatar_url || null, platform: c.platform === "youtube" ? "YouTube" : "Instagram", followers: fmtK(c.followers), href: `/c/${c.platform}/${c.handle}`, contact: null,
+      lines: rows.map((r: any) => ({ brand: r.brand, domain: r.website ? String(r.website).replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "") : null, tag: String(r.evidence || "").replace(/\s+/g, " ").slice(0, 24), when: r.last_seen ? new Date(r.last_seen).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "", deals: Number(r.deals) || 1, repeat: !!r.repeat_partner })) });
+    if (samples.length >= 6) break;
+  }
+  const freshCards = (fresh || []).map((f) => { const w = (freshWalls || []).filter((x: any) => x.creator_id === f.id).sort((a: any, b: any) => Number(b.deals) - Number(a.deals)); return { ...f, brands: w.length, top: w.slice(0, 3).map((x: any) => x.brand) }; });
+  return { creators: creators || 0, brands: brands || 0, deals: deals || 0, samples, freshCards, signals: signals || [], hiring: hiring || [], recentAll: recentAll || [] };
+}, ["home-public-v1"], { revalidate: 300 });
