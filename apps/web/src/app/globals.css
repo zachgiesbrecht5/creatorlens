@@ -37,8 +37,8 @@ body { @apply bg-bg text-fg antialiased font-sans; font-feature-settings: "cv11"
 .h2 { @apply font-sans text-2xl font-semibold tracking-[-0.02em]; }
 .num { @apply font-mono tabular-nums; }
 table.tbl { @apply w-full text-sm; }
-table.tbl thead th { @apply label whitespace-nowrap border-b border-line bg-surface2/60 px-4 py-2.5 text-left font-normal; }
-table.tbl tbody td { @apply border-t border-line px-4 py-2.5 align-middle; }
+table.tbl thead th { @apply label whitespace-nowrap border-b border-line bg-surface2/60 px-3 py-2.5 text-left font-normal sm:px-4; }
+table.tbl tbody td { @apply border-t border-line px-3 py-2.5 align-middle sm:px-4; }
 table.tbl tbody tr:first-child td { @apply border-t-0; }
 table.tbl tbody tr:hover { @apply bg-accentSoft/40; }
 

@@ -62,13 +62,14 @@ export default async function TitleSearchResult({ params }: { params: Promise<{ 
           )}
 
           <section className="mt-6">
-            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2"><div className="label text-ok">top titles</div><div className="num text-[11px] text-muted">views ÷ the channel&apos;s usual views · max 3 per channel{estN ? ` · "est" = vs the channel's lifetime average` : ""}</div></div>
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2"><div className="label text-ok">top titles</div><div className="num text-[11px] text-muted">views ÷ the channel&apos;s usual views · max 2 per channel{estN ? ` · "est" = vs the channel's lifetime average` : ""}</div></div>
             <div className="grid gap-1.5 md:grid-cols-2">{top.map((i, k) => <TopicRow key={i.id} i={i} rank={k + 1} />)}</div>
           </section>
 
           <section className="card mt-6 p-5">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><div className="label">pattern lift across channels</div><div className="text-[12px] text-muted">median multiple with the pattern ÷ without · {settled.length} settled titles</div></div>
             <PatternTable patterns={s.patterns || []} />
+            <p className="mt-3 text-[11px] text-muted">Every video here was found by searching, so even the weaker ones did reasonably well. Read lift as &ldquo;big breakouts vs ordinary results&rdquo;, with 8+ titles on each side.</p>
           </section>
 
           {climbing.length > 0 && (

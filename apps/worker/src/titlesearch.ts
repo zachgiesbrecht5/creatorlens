@@ -7,14 +7,14 @@
 // search.list is 100 units, so a search costs ~450 units; TITLE_SEARCH_DAILY_UNITS caps the day.
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { searchVideoIds, getVideos, channelStats, latestVideoIds, channelMedians, scoreTopic, capPerChannel, liftTable, type QuotaMeter, type TopicChannel, type TopicItem, type TitlePattern } from "@creatorlens/engine";
+import { searchVideoIds, getVideos, channelStats, latestVideoIds, channelMedians, scoreTopic, capPerChannel, liftTable, isEnglishTitle, kindOf, type QuotaMeter, type TopicChannel, type TopicItem, type TitlePattern } from "@creatorlens/engine";
 import { recordSpend, noteModelError, noteAnyModelError, cleanForModel } from "./spend";
 
 const MODEL = process.env.ANTHROPIC_TITLES_MODEL || "claude-haiku-4-5";
 const client = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "PASTE_ME" ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[titlesearch]", ...a);
 export const TITLE_SEARCH_DAILY_UNITS = Number(process.env.TITLE_SEARCH_DAILY_UNITS || 4000);
-const REFINE_CHANNELS = Number(process.env.TITLE_SEARCH_REFINE || 25);
+const REFINE_CHANNELS = Number(process.env.TITLE_SEARCH_REFINE || 80);   // 2 units a channel: measure nearly all of them against a real median
 const KEEP = 120;
 
 const fmtN = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
@@ -110,14 +110,14 @@ async function runOne(sb: SupabaseClient, ytKey: string, row: { id: string; prom
     const runs: { q: string; order: "relevance" | "viewCount" }[] = [{ q: row.prompt, order: "viewCount" }, { q: row.prompt, order: "relevance" }, ...queries.filter((q) => q.toLowerCase() !== row.prompt.toLowerCase()).map((q) => ({ q, order: "relevance" as const }))];
     const ids = new Set<string>();
     for (const r of runs.slice(0, 4)) {
-      const got = await searchVideoIds(ytKey, r.q, { order: r.order, publishedAfter: after, max: 50, duration, lang: "en" }, meter);
+      const got = await searchVideoIds(ytKey, r.q, { order: r.order, publishedAfter: after, max: 50, duration, lang: "en", region: "US" }, meter);
       got.forEach((id) => ids.add(id));
     }
     await upd({ queries: runs.slice(0, 4).map((r) => (r.order === "viewCount" ? `${r.q} (most viewed)` : r.q)) });
     // 2. stats
     let videos = await getVideos(ytKey, [...ids], meter);
-    if (row.format === "video") videos = videos.filter((v) => v.durationSeconds > 75);
-    if (row.format === "short") videos = videos.filter((v) => v.durationSeconds > 0 && v.durationSeconds <= 75);
+    videos = videos.filter((v) => isEnglishTitle(v.title));
+    if (row.format !== "any") videos = videos.filter((v) => kindOf(v.durationSeconds, v.title) === row.format);
     const stats = await channelStats(ytKey, videos.map((v) => v.channelId || ""), meter);
     const channels = new Map<string, TopicChannel>([...stats.values()].map((c) => [c.id, { ...c }]));
     const topicVideos = videos.filter((v) => v.channelId).map((v) => ({ id: v.id, title: v.title, publishedAt: v.publishedAt, views: v.views, durationSeconds: v.durationSeconds, channelId: v.channelId as string }));
@@ -134,8 +134,9 @@ async function runOne(sb: SupabaseClient, ytKey: string, row: { id: string; prom
     }
     await spendYt(meter.units);
     const ranked = scoreTopic(topicVideos, channels);
-    const items = capPerChannel(ranked, 3).slice(0, KEEP);
-    const patterns = liftTable(capPerChannel(ranked, 5));
+    const items = capPerChannel(ranked, 2).slice(0, KEEP);
+    // a pattern needs 8 titles on each side before a lift is shown: 4-vs-70 comparisons are noise
+    const patterns = liftTable(capPerChannel(ranked, 4), 8);
     // 4. read
     let reading: TopicReading | null = null;
     try { const r = await readTopic(sb, row.prompt, items, patterns); if (r) { reading = r.reading; cost += r.cost; } }

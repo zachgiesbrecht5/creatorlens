@@ -27,7 +27,8 @@ export interface TitleAnalysis { items: TitleItem[]; median_video: number | null
 
 export const CLIMB_DAYS = 10;
 const MIN_SIDE = 3;
-const SHORT_SECONDS = 75;
+// Shorts can run up to 3 minutes; the API has no "is a Short" flag, so: 3 minutes or under, or tagged #shorts.
+const SHORT_SECONDS = 180;
 
 const medianF = (xs: number[]): number | null => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const median = (xs: number[]): number | null => { const m = medianF(xs); return m == null ? null : Math.round(m); };
@@ -64,7 +65,7 @@ export function tagTitle(title: string): string[] { return TITLE_PATTERNS.filter
 export function analyzeTitles(videos: TitleVideo[], now = new Date()): TitleAnalysis {
   const cut = now.getTime() - CLIMB_DAYS * 864e5;
   const pre = videos.filter((v) => v.title && v.publishedAt).map((v) => {
-    const kind: "video" | "short" = v.durationSeconds > 0 && v.durationSeconds <= SHORT_SECONDS ? "short" : "video";
+    const kind = kindOf(v.durationSeconds, v.title);
     return { v, kind, climbing: new Date(v.publishedAt).getTime() > cut };
   });
   const median_video = median(pre.filter((p) => p.kind === "video" && !p.climbing).map((p) => p.v.views));
@@ -82,13 +83,13 @@ export function analyzeTitles(videos: TitleVideo[], now = new Date()): TitleAnal
 }
 
 /** Pattern lift over already-normalised items (settled ones only): median multiple with the pattern ÷ without. */
-export function liftTable(items: { tags: string[]; mult: number | null; climbing: boolean; title: string }[]): TitlePattern[] {
+export function liftTable(items: { tags: string[]; mult: number | null; climbing: boolean; title: string }[], minSide = MIN_SIDE): TitlePattern[] {
   const settled = items.filter((i) => !i.climbing && i.mult != null);
   return TITLE_PATTERNS.map((p) => {
     const w = settled.filter((i) => i.tags.includes(p.key));
     const wo = settled.filter((i) => !i.tags.includes(p.key));
     const wm = medianF(w.map((i) => i.mult as number)); const wom = medianF(wo.map((i) => i.mult as number));
-    const ok = w.length >= MIN_SIDE && wo.length >= MIN_SIDE && wm != null && wom != null && wom > 0;
+    const ok = w.length >= minSide && wo.length >= minSide && wm != null && wom != null && wom > 0;
     return {
       key: p.key, label: p.label, hint: p.hint, with_n: w.length, without_n: wo.length,
       with_mult: wm == null ? null : round1(wm), without_mult: wom == null ? null : round1(wom),
@@ -112,12 +113,12 @@ export interface TopicItem extends TitleItem {
   baseline: number | null; baseline_kind: "median" | "average" | null;
 }
 export const TOPIC_MIN_VIEWS = 3000;
-export const kindOf = (durationSeconds: number): "video" | "short" => (durationSeconds > 0 && durationSeconds <= SHORT_SECONDS ? "short" : "video");
+export const kindOf = (durationSeconds: number, title = ""): "video" | "short" => ((durationSeconds > 0 && durationSeconds <= SHORT_SECONDS) || /#shorts?\b/i.test(title) ? "short" : "video");
 /** Median views of a channel's settled uploads by kind (used for the refine pass). */
 export function channelMedians(videos: TitleVideo[], now = new Date()) {
   const cut = now.getTime() - CLIMB_DAYS * 864e5;
   const settled = videos.filter((v) => new Date(v.publishedAt).getTime() <= cut);
-  return { median_video: median(settled.filter((v) => kindOf(v.durationSeconds) === "video").map((v) => v.views)), median_short: median(settled.filter((v) => kindOf(v.durationSeconds) === "short").map((v) => v.views)) };
+  return { median_video: median(settled.filter((v) => kindOf(v.durationSeconds, v.title) === "video").map((v) => v.views)), median_short: median(settled.filter((v) => kindOf(v.durationSeconds, v.title) === "short").map((v) => v.views)) };
 }
 export function scoreTopic(videos: TopicVideo[], channels: Map<string, TopicChannel>, now = new Date(), minViews = TOPIC_MIN_VIEWS): TopicItem[] {
   const cut = now.getTime() - CLIMB_DAYS * 864e5;
@@ -126,7 +127,7 @@ export function scoreTopic(videos: TopicVideo[], channels: Map<string, TopicChan
   for (const v of videos) {
     if (!v.title || !v.publishedAt || seen.has(v.id)) continue; seen.add(v.id);
     const ch = channels.get(v.channelId); if (!ch) continue;
-    const kind = kindOf(v.durationSeconds);
+    const kind = kindOf(v.durationSeconds, v.title);
     const med = kind === "short" ? ch.median_short : ch.median_video;
     const avg = ch.videoCount > 0 ? ch.totalViews / ch.videoCount : 0;
     const baseline = med && med > 0 ? med : avg > 0 ? Math.round(avg) : null;
@@ -140,6 +141,9 @@ export function scoreTopic(videos: TopicVideo[], channels: Map<string, TopicChan
   // tiny videos make silly multiples (300 views on a 20-view channel); they stay out of the ranking
   return out.filter((i) => i.views >= minViews).sort((a, b) => (b.mult ?? -1) - (a.mult ?? -1) || b.views - a.views);
 }
+/** Titles a US/English reader can use: no non-Latin scripts, no rupee pricing. */
+export const isEnglishTitle = (t: string) => !/[\u0400-\u04FF\u0590-\u06FF\u0900-\u0DFF\u0E00-\u0E7F\u3040-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/.test(t) && !/₹|\b\d+\s?(lakh|rs)\b|\brs\.?\s?\d|\/-/i.test(t);
+
 /** Keep the ranking from being one channel's playlist: at most `perChannel` items per channel. */
 export function capPerChannel<T extends { channel_id: string }>(items: T[], perChannel = 3): T[] {
   const n = new Map<string, number>();

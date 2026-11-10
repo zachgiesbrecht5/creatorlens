@@ -30,6 +30,8 @@ const jitter = (min: number, spread: number) => min + Math.random() * spread;
 /** A deferral that should not count as a failed attempt (pacing, cooldowns, app-wide limit). */
 const wait = (msg: string, minutes: number) => Object.assign(new Error(msg), { wait: minutes });
 
+// Caption parsing sometimes drags in divider lines or a stray slash ("Eufy -----------", "\\ Anthropic").
+const cleanBrandName = (name: string) => name.replace(/\s+-{3,}.*$/, "").replace(/^[\\/|\s]+/, "").trim() || name;
 const brandKey = (name: string) => name.toLowerCase().replace(/^@/, "").replace(/[^a-z0-9]/g, "");
 // Strip lone UTF-16 surrogates (an emoji cut in half by slice()) and null bytes; Postgres
 // rejects the whole batch as "invalid input syntax for type json" otherwise.
@@ -127,7 +129,7 @@ async function persist(job: any, result: ScanResult) {
   const brandIds = new Map<string, string>();
   for (const [key, r] of names) {
     if (!key) continue;
-    const { data: b } = await sb.from("brands").upsert({ key, name: r.brand, is_mass_sponsor: r.isMassSponsor }, { onConflict: "key", ignoreDuplicates: false }).select("id").single();
+    const { data: b } = await sb.from("brands").upsert({ key, name: cleanBrandName(r.brand), is_mass_sponsor: r.isMassSponsor }, { onConflict: "key", ignoreDuplicates: false }).select("id").single();
     if (b) brandIds.set(key, b.id);
   }
 
@@ -413,6 +415,7 @@ let lastSalesNav = 0;
 let salesNavBusy = false;
 let titleLabBusy = false;
 let titleSearchBusy = false;
+let lastBrandIntel = 0;
 let lastBeat = 0, lastSide = 0, lastSignups = 0, lastIdleWork = 0, idleTicks = 0;
 const SIDE_MS = 4000;
 async function tick() {
@@ -440,6 +443,9 @@ async function tick() {
   if (Date.now() - lastBrandWatch > 3600e3 && inFlight === 0) { lastBrandWatch = Date.now(); brandWatch(sb, () => houseIgToken(sb)).catch((e: any) => log("brand watch failed", e?.message)); }
   // Discovery runs hourly (budgeted per platform inside discover()).
   if (Date.now() - lastDiscover > 3600e3) { lastDiscover = Date.now(); discover(sb).catch((e: any) => log("discover failed", e?.message)); }
+  // Brand bookings + stats (brand pages, the brand finder, "rebooking now") are rebuilt every 30 minutes,
+  // apart from the per-print wall refresh so that one stays fast.
+  if (now - lastBrandIntel > 30 * 60e3) { lastBrandIntel = now; (async () => { const a = await sb.rpc("refresh_brand_bookings"); const b = a.error ? a : await sb.rpc("refresh_brand_stats"); if (a.error || b.error) log("brand intel refresh failed", (a.error || b.error)?.message); })(); }
   // Title Labs: someone clicked "read the titles" and is waiting; ~6 YouTube units + one Haiku call each.
   if (sideDue && !titleLabBusy) { titleLabBusy = true; runTitleLabs(sb, YT_API_KEY, ytBudgetSpend, 2).catch((e: any) => log("title lab failed", e?.message)).finally(() => { titleLabBusy = false; }); }
   // Title Searches: a topic prompt -> ranked titles across YouTube; ~450 units each, capped per day inside.

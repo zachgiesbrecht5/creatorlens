@@ -159,11 +159,12 @@ export async function channelDescriptions(apiKey: string, ids: string[], meter?:
 }
 
 /** Video search for Title Search. 100 units per call, up to 50 ids. `duration`: any | short (<4 min) | medium | long. */
-export async function searchVideoIds(apiKey: string, query: string, opts: { order?: "relevance" | "viewCount"; publishedAfter?: Date; max?: number; duration?: "any" | "short" | "medium" | "long"; lang?: string } = {}, meter?: QuotaMeter): Promise<string[]> {
+export async function searchVideoIds(apiKey: string, query: string, opts: { order?: "relevance" | "viewCount"; publishedAfter?: Date; max?: number; duration?: "any" | "short" | "medium" | "long"; lang?: string; region?: string } = {}, meter?: QuotaMeter): Promise<string[]> {
   const params: Record<string, string> = { part: "id", type: "video", maxResults: String(Math.min(50, opts.max || 50)), q: query, order: opts.order || "relevance", safeSearch: "none" };
   if (opts.publishedAfter) params.publishedAfter = opts.publishedAfter.toISOString().replace(/\.\d+Z$/, "Z");
   if (opts.duration && opts.duration !== "any") params.videoDuration = opts.duration;
   if (opts.lang) params.relevanceLanguage = opts.lang;
+  if (opts.region) params.regionCode = opts.region;
   const json = await ytGet(apiKey, "search", params, meter, 100);
   return (json.items || []).map((it: any) => it.id?.videoId).filter(Boolean);
 }

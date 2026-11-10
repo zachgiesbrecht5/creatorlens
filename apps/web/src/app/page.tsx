@@ -8,13 +8,13 @@ import { FloatingPrints } from "@/components/FloatingPrints";
 import { Journey } from "@/components/Journey";
 import { HiringStrip } from "@/components/HiringStrip";
 import { SignalsStrip, type MatchRow } from "@/components/SignalsStrip";
-import { BrandSearch } from "@/components/BrandSearch";
 import { Tour } from "@/components/Tour";
 import { HOME_TOUR } from "@/components/tours";
 import { supabaseAdmin, currentAccess } from "@/lib/supabase";
 import { unstable_cache } from "next/cache";
 import { fmt } from "@/lib/fmt";
 import { IgConnectCard } from "@/components/IgConnectCard";
+import { Workspace } from "@/components/Workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -62,12 +62,33 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const hiring = user ? pub.hiring : [];
   const recentList: { platform: string; handle: string; display_name: string | null; avatar_url: string | null; followers: number | null }[] = (recent ?? pub.recentAll) as any;
 
+  // Workspace (house): recent sponsorship activity and which creators brands just rebooked.
+  let spending: any[] = [], rebooked: any[] = [];
+  if (user && insider) {
+    const [{ data: spd }, { data: rn }] = await Promise.all([
+      admin.from("brand_leaderboard_v").select("id,name,category,bookings_90d,bookings_prev_90d,paid_creators,rebook_rate").eq("is_mass_sponsor", false).gt("bookings_90d", 2).order("pace_delta", { ascending: false }).order("bookings_90d", { ascending: false }).limit(8),
+      admin.rpc("rebooking_now", { p_days: 45, p_limit: 8, p_category: null }),
+    ]);
+    spending = spd || [];
+    const rows = (rn || []) as any[];
+    if (rows.length) {
+      const [{ data: cs }, { data: bs }] = await Promise.all([
+        admin.from("creators").select("id,handle,display_name,platform,followers,avatar_url").in("id", rows.map((r) => r.creator_id)),
+        admin.from("brands").select("id,name").in("id", rows.map((r) => r.brand_id)),
+      ]);
+      rebooked = rows.map((r) => ({ ...r, creator: (cs || []).find((c: any) => c.id === r.creator_id), brand: (bs || []).find((b: any) => b.id === r.brand_id) })).filter((r) => r.creator && r.brand);
+    }
+  }
+
   return (
     <div>
-      {/* Hero: the print is the product. Headline left, the machine on the right. */}
+      {user ? (
+        <Workspace insider={!!insider} spending={spending} rebooked={rebooked} />
+      ) : (
+      /* Hero: the print is the product. Headline left, the machine on the right. */
       <section className="hero -mx-6 -mt-10 px-6 pb-16 pt-14 md:pt-20">
         <FloatingPrints samples={samples} />
-        <div className="mx-auto grid max-w-6xl items-center gap-12 md:grid-cols-12">
+        <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-12 md:grid-cols-12">
           <div className="md:col-span-6">
             <h1 className="h1 max-w-xl text-white">Pull a creator&apos;s sponsor print.</h1>
             <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/70">
@@ -83,16 +104,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
           </div>
         </div>
       </section>
+      )}
 
       {user && insider && <div className="mt-6"><IgConnectCard userId={user.id} next="/" status={sp.ig} /></div>}
       {watchNew > 0 && <Link href="/watchlist" className="mt-6 flex items-center justify-between rounded-lg border border-ok/30 bg-okSoft/60 px-4 py-3 text-[13px] hover:border-ok"><span><b>{watchNew}</b> creator{watchNew === 1 ? "" : "s"} on your watchlist picked up new brands this week</span><span className="num text-[11px] text-ok">see what's new →</span></Link>}
-      {user && (
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <div className="label">or look up a brand</div>
-          <div className="w-full max-w-md" data-tour="brand"><BrandSearch placeholder="Type a brand: Samsung, LMNT, Rocket Mortgage…" /></div>
-          <div className="num text-[11px] text-dim">who they book, how often, who to email</div>
-        </div>
-      )}
       {journey && <div className="mt-6" data-tour="journey"><Journey s={journey} compact /></div>}
       {user && <Tour id="home" steps={HOME_TOUR} />}
 
@@ -163,6 +178,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         </section>
       )}
 
+      {!user && <>
       {/* The journey is a real sequence, so a rail with three stops is honest here. */}
       <section className="mt-20">
         <h2 className="h2">From handle to pitch</h2>
@@ -199,8 +215,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
           <div className="text-lg font-semibold tracking-tight">Prints are free. Pay for the pitch.</div>
           <p className="mt-2 text-[15px] leading-relaxed text-muted">Sign in with Google and print any creator for free. Contacts, pitch drafts, research and neighborhoods come with a free taste, and Pro is $49 a month when you pitch every week. Beta users keep 30% off for as long as they stay subscribed.</p>
         </div>
-        <div className="flex gap-2">{!user && <Link href="/login" className="btn-dark">Pull your first print</Link>}<Link href="/pricing" className="btn-ghost">See plans</Link></div>
+        <div className="flex gap-2"><Link href="/login" className="btn-dark">Pull your first print</Link><Link href="/pricing" className="btn-ghost">See plans</Link></div>
       </section>
+      </>}
     </div>
   );
 }
@@ -245,6 +262,6 @@ const homePublic = unstable_cache(async () => {
       lines: rows.map((r: any) => ({ brand: r.brand, domain: r.website ? String(r.website).replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "") : null, tag: String(r.evidence || "").replace(/\s+/g, " ").slice(0, 24), when: r.last_seen ? new Date(r.last_seen).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "", deals: Number(r.deals) || 1, repeat: !!r.repeat_partner })) });
     if (samples.length >= 6) break;
   }
-  const freshCards = (fresh || []).map((f) => { const w = (freshWalls || []).filter((x: any) => x.creator_id === f.id).sort((a: any, b: any) => Number(b.deals) - Number(a.deals)); return { ...f, brands: w.length, top: w.slice(0, 3).map((x: any) => x.brand) }; });
+  const freshCards = (fresh || []).map((f) => { const w = (freshWalls || []).filter((x: any) => x.creator_id === f.id).sort((a: any, b: any) => Number(b.deals) - Number(a.deals)); return { ...f, brands: w.length, top: w.filter((x: any) => !/\(\?\)\s*$/.test(String(x.brand))).slice(0, 3).map((x: any) => x.brand) }; }).filter((f) => f.brands > 0);
   return { creators: creators || 0, brands: brands || 0, deals: deals || 0, samples, freshCards, signals: signals || [], hiring: hiring || [], recentAll: recentAll || [] };
-}, ["home-public-v1"], { revalidate: 300 });
+}, ["home-public-v2"], { revalidate: 300 });
