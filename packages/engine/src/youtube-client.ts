@@ -24,6 +24,8 @@ export interface YtVideo {
   views: number;
   thumbnail: string;
   durationSeconds: number;
+  channelId?: string;
+  channelTitle?: string;
 }
 
 export interface QuotaMeter { units: number }
@@ -120,6 +122,8 @@ export async function getVideos(apiKey: string, ids: string[], meter?: QuotaMete
         views: Number((v.statistics || {}).viewCount || 0),
         thumbnail: sn.thumbnails?.medium?.url || "",
         durationSeconds: isoDurationToSeconds(v.contentDetails?.duration),
+        channelId: sn.channelId || "",
+        channelTitle: sn.channelTitle || "",
       });
     }
   }
@@ -152,4 +156,35 @@ export async function channelDescriptions(apiKey: string, ids: string[], meter?:
     for (const it of json.items || []) out.set(it.id, String(it.snippet?.description || ""));
   }
   return out;
+}
+
+/** Video search for Title Search. 100 units per call, up to 50 ids. `duration`: any | short (<4 min) | medium | long. */
+export async function searchVideoIds(apiKey: string, query: string, opts: { order?: "relevance" | "viewCount"; publishedAfter?: Date; max?: number; duration?: "any" | "short" | "medium" | "long"; lang?: string } = {}, meter?: QuotaMeter): Promise<string[]> {
+  const params: Record<string, string> = { part: "id", type: "video", maxResults: String(Math.min(50, opts.max || 50)), q: query, order: opts.order || "relevance", safeSearch: "none" };
+  if (opts.publishedAfter) params.publishedAfter = opts.publishedAfter.toISOString().replace(/\.\d+Z$/, "Z");
+  if (opts.duration && opts.duration !== "any") params.videoDuration = opts.duration;
+  if (opts.lang) params.relevanceLanguage = opts.lang;
+  const json = await ytGet(apiKey, "search", params, meter, 100);
+  return (json.items || []).map((it: any) => it.id?.videoId).filter(Boolean);
+}
+
+export interface YtChannelStats { id: string; title: string; handle: string; subs: number; totalViews: number; videoCount: number; uploadsPlaylist: string; thumbnail: string }
+/** Channel statistics for up to 50 ids per call (1 unit each call). */
+export async function channelStats(apiKey: string, ids: string[], meter?: QuotaMeter): Promise<Map<string, YtChannelStats>> {
+  const out = new Map<string, YtChannelStats>();
+  const uniq = [...new Set(ids.filter(Boolean))];
+  for (let i = 0; i < uniq.length; i += 50) {
+    const json = await ytGet(apiKey, "channels", { part: "snippet,statistics,contentDetails", id: uniq.slice(i, i + 50).join(","), maxResults: "50" }, meter);
+    for (const ch of json.items || []) {
+      const p = parseChannel(ch); const st = ch.statistics || {};
+      out.set(p.id, { id: p.id, title: p.title, handle: p.handle, subs: p.subs, totalViews: Number(st.viewCount || 0), videoCount: Number(st.videoCount || 0), uploadsPlaylist: p.uploadsPlaylist, thumbnail: p.thumbnail });
+    }
+  }
+  return out;
+}
+
+/** The channel's latest uploads (up to 50 ids) in one call: 1 unit. */
+export async function latestVideoIds(apiKey: string, uploadsPlaylist: string, n = 50, meter?: QuotaMeter): Promise<string[]> {
+  const json = await ytGet(apiKey, "playlistItems", { part: "contentDetails", playlistId: uploadsPlaylist, maxResults: String(Math.min(50, n)) }, meter);
+  return (json.items || []).map((it: any) => it.contentDetails?.videoId).filter(Boolean);
 }

@@ -48,3 +48,36 @@ describe("analyzeTitles", () => {
     expect(s.bottom[0].mult).toBeLessThanOrEqual(s.top[s.top.length - 1].mult!);
   });
 });
+
+import { scoreTopic, capPerChannel, channelMedians, liftTable } from "./titles";
+describe("scoreTopic", () => {
+  const ch = new Map([
+    ["big", { id: "big", title: "Big", handle: "@big", subs: 5e6, totalViews: 2e9, videoCount: 1000, median_video: 1_000_000 }],
+    ["small", { id: "small", title: "Small", handle: "@small", subs: 20e3, totalViews: 4e6, videoCount: 200 }],
+  ]);
+  const tv = (id: string, channelId: string, title: string, views: number, dur = 600) => ({ ...vid(id, title, views, 30, dur), channelId });
+  it("ranks a small channel's breakout above a big channel's normal upload", () => {
+    const items = scoreTopic([tv("1", "big", "Normal big video", 1_200_000), tv("2", "small", "I Built a PC for $300", 400_000)], ch);
+    expect(items[0].id).toBe("2");
+    expect(items[0].mult).toBe(20);           // 400K vs a 20K lifetime average
+    expect(items[0].baseline_kind).toBe("average");
+    expect(items[1].baseline_kind).toBe("median");
+    expect(items[1].mult).toBe(1.2);
+  });
+  it("drops tiny videos and duplicates, and judges Shorts by the Shorts baseline", () => {
+    const items = scoreTopic([tv("1", "small", "tiny", 500), tv("2", "small", "ok", 40_000), tv("2", "small", "ok", 40_000), tv("3", "small", "a short", 60_000, 40)], ch);
+    expect(items.map((i) => i.id).sort()).toEqual(["2", "3"]);
+    expect(items.find((i) => i.id === "3")!.url).toContain("/shorts/");
+  });
+  it("caps items per channel and builds a lift table over many channels", () => {
+    const many = Array.from({ length: 6 }, (_, k) => tv(String(k), "small", k % 2 ? `How I fixed ${k}` : `plain title ${k}`, 20_000 * (k + 1)));
+    const items = scoreTopic(many, ch);
+    expect(capPerChannel(items, 2)).toHaveLength(2);
+    expect(liftTable(items).length).toBeGreaterThan(0);
+  });
+  it("computes channel medians by kind, skipping climbing uploads", () => {
+    const m = channelMedians([vid("a", "x", 100), vid("b", "y", 300), vid("c", "z", 9999, 2), vid("d", "s", 50, 30, 30)]);
+    expect(m.median_video).toBe(200);
+    expect(m.median_short).toBe(50);
+  });
+});

@@ -46,7 +46,7 @@ export default async function TitleLabPage({ params }: { params: Promise<{ platf
 
   return (
     <div className="mx-auto max-w-5xl">
-      <Link href={back} className="num text-[11px] text-dim hover:text-accent">← back to the print</Link>
+      <div className="flex items-baseline justify-between gap-3"><Link href={back} className="num text-[11px] text-dim hover:text-accent">← back to the print</Link><Link href="/titles" className="num text-[11px] text-dim hover:text-accent">search titles across YouTube →</Link></div>
       <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           {creator.avatar_url ? <img src={creator.avatar_url} alt="" className="h-12 w-12 rounded-full" /> : <div className="h-12 w-12 rounded-full bg-surface2" />}

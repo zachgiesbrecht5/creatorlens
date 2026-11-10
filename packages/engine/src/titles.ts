@@ -77,9 +77,14 @@ export function analyzeTitles(videos: TitleVideo[], now = new Date()): TitleAnal
     };
   }).sort((a, b) => (b.mult ?? -1) - (a.mult ?? -1) || b.views - a.views);
 
-  // Lift is computed on settled long-form + Shorts together, each already normalised to its own median.
+  const patterns = liftTable(items);
+  return { items, median_video, median_short, patterns };
+}
+
+/** Pattern lift over already-normalised items (settled ones only): median multiple with the pattern ÷ without. */
+export function liftTable(items: { tags: string[]; mult: number | null; climbing: boolean; title: string }[]): TitlePattern[] {
   const settled = items.filter((i) => !i.climbing && i.mult != null);
-  const patterns: TitlePattern[] = TITLE_PATTERNS.map((p) => {
+  return TITLE_PATTERNS.map((p) => {
     const w = settled.filter((i) => i.tags.includes(p.key));
     const wo = settled.filter((i) => !i.tags.includes(p.key));
     const wm = medianF(w.map((i) => i.mult as number)); const wom = medianF(wo.map((i) => i.mult as number));
@@ -91,7 +96,54 @@ export function analyzeTitles(videos: TitleVideo[], now = new Date()): TitleAnal
       examples: w.slice(0, 3).map((i) => i.title),
     };
   }).filter((p) => p.with_n > 0).sort((a, b) => (b.lift ?? -1) - (a.lift ?? -1));
-  return { items, median_video, median_short, patterns };
+}
+
+// ── Title Search (topic) ─────────────────────────────────────────
+// Videos from many channels, each scored against ITS OWN channel: the median of the channel's
+// latest uploads of the same kind when we fetched them, otherwise the channel's lifetime average
+// views per video (total views ÷ video count), which is rougher, so it is marked "est".
+export interface TopicVideo extends TitleVideo { channelId: string }
+export interface TopicChannel { id: string; title: string; handle: string; subs: number; totalViews: number; videoCount: number; thumbnail?: string;
+  /** medians of the channel's recent settled uploads, when fetched */
+  median_video?: number | null; median_short?: number | null }
+export interface TopicItem extends TitleItem {
+  channel_id: string; channel_title: string; channel_handle: string; subs: number;
+  /** the views figure the multiple is measured against */
+  baseline: number | null; baseline_kind: "median" | "average" | null;
+}
+export const TOPIC_MIN_VIEWS = 3000;
+export const kindOf = (durationSeconds: number): "video" | "short" => (durationSeconds > 0 && durationSeconds <= SHORT_SECONDS ? "short" : "video");
+/** Median views of a channel's settled uploads by kind (used for the refine pass). */
+export function channelMedians(videos: TitleVideo[], now = new Date()) {
+  const cut = now.getTime() - CLIMB_DAYS * 864e5;
+  const settled = videos.filter((v) => new Date(v.publishedAt).getTime() <= cut);
+  return { median_video: median(settled.filter((v) => kindOf(v.durationSeconds) === "video").map((v) => v.views)), median_short: median(settled.filter((v) => kindOf(v.durationSeconds) === "short").map((v) => v.views)) };
+}
+export function scoreTopic(videos: TopicVideo[], channels: Map<string, TopicChannel>, now = new Date(), minViews = TOPIC_MIN_VIEWS): TopicItem[] {
+  const cut = now.getTime() - CLIMB_DAYS * 864e5;
+  const seen = new Set<string>();
+  const out: TopicItem[] = [];
+  for (const v of videos) {
+    if (!v.title || !v.publishedAt || seen.has(v.id)) continue; seen.add(v.id);
+    const ch = channels.get(v.channelId); if (!ch) continue;
+    const kind = kindOf(v.durationSeconds);
+    const med = kind === "short" ? ch.median_short : ch.median_video;
+    const avg = ch.videoCount > 0 ? ch.totalViews / ch.videoCount : 0;
+    const baseline = med && med > 0 ? med : avg > 0 ? Math.round(avg) : null;
+    const baseline_kind: TopicItem["baseline_kind"] = med && med > 0 ? "median" : avg > 0 ? "average" : null;
+    out.push({
+      id: v.id, title: v.title, url: kind === "short" ? `https://www.youtube.com/shorts/${v.id}` : `https://www.youtube.com/watch?v=${v.id}`, published_at: v.publishedAt, views: v.views, kind,
+      sponsored: !!v.sponsored, mult: baseline ? round1(v.views / baseline) : null, climbing: new Date(v.publishedAt).getTime() > cut, words: words(v.title), tags: tagTitle(v.title),
+      channel_id: ch.id, channel_title: ch.title, channel_handle: ch.handle, subs: ch.subs, baseline, baseline_kind,
+    });
+  }
+  // tiny videos make silly multiples (300 views on a 20-view channel); they stay out of the ranking
+  return out.filter((i) => i.views >= minViews).sort((a, b) => (b.mult ?? -1) - (a.mult ?? -1) || b.views - a.views);
+}
+/** Keep the ranking from being one channel's playlist: at most `perChannel` items per channel. */
+export function capPerChannel<T extends { channel_id: string }>(items: T[], perChannel = 3): T[] {
+  const n = new Map<string, number>();
+  return items.filter((i) => { const c = (n.get(i.channel_id) || 0) + 1; n.set(i.channel_id, c); return c <= perChannel; });
 }
 
 /** The strongest and weakest fifths of the settled titles, for the model read and the UI. */
