@@ -59,7 +59,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
 
   let { data: contacts } = await admin.from("contacts").select("id,name,email,title,source,verified,last_replied_at,house_only,found_by,source_url,confidence").eq("brand_id", brandId)
     .order("verified", { ascending: false }).order("last_replied_at", { ascending: false, nullsFirst: false });
-  const auto = (c: { source: string }) => c.source === "hunter" || c.source === "apollo";
+  const auto = (c: { source: string }) => c.source === "hunter" || c.source === "apollo";   // "apollo" = contacts found before Apollo was dropped (Nov 2026)
   // Provenance wall. Outsiders only ever see third-party lookups (never Rootfor's
   // own tracker/relationship contacts) plus emails they pasted themselves.
   const visible = (c: { source: string; house_only: boolean; found_by: string | null }) =>
@@ -77,12 +77,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ bra
       const all = (await hunter(brand.name, parent)).people;
       people = all.filter((p) => relevant(p.title) && (String(p.title || "").toLowerCase().includes(key) || /influencer|creator|partnership/i.test(String(p.title || ""))));
       if (people.length) people = people.map((p) => ({ ...p, title: `${p.title} · ${parent}` }));
-    }
-    // Apollo (LinkedIn-derived people search by title) when Hunter didn't surface anyone who actually books creators
-    const bestScore = Math.max(0, ...people.map((p) => titleScore(p.title || "")));
-    if (bestScore < 2 && process.env.APOLLO_API_KEY && siteDomain) {
-      const ap = (await apollo(siteDomain)).filter((p) => acceptable(p.email) && relevant(p.title));
-      people = [...ap, ...people];
     }
     if (people.length) {
       await admin.from("contacts").upsert(people.map((p: any) => ({ brand_id: brandId, name: p.name, email: p.email, title: p.title, source: p.source || "hunter", verified: p.confidence >= 90, source_url: p.source_url || null })), { onConflict: "brand_id,email" });
@@ -144,42 +138,6 @@ function rootOf(host: string) {
   const parts = host.toLowerCase().split(".").filter(Boolean);
   const tld2 = /^(co|com|org|net|ac|gov)$/.test(parts[parts.length - 2] || "") && parts.length >= 3;
   return parts[parts.length - (tld2 ? 3 : 2)] || parts[0] || "";
-}
-
-// Apollo.io (optional, APOLLO_API_KEY): search people at the brand's domain
-// with partnership / influencer titles, then reveal the top match's email.
-async function apollo(domain: string) {
-  const key = process.env.APOLLO_API_KEY!;
-  // Apollo's current people search is api_search with q_organization_domains_list (the old
-  // mixed_people/search + q_organization_domains silently returns nothing on new plans).
-  const search = await fetch("https://api.apollo.io/api/v1/mixed_people/api_search", {
-    method: "POST", headers: { "content-type": "application/json", "x-api-key": key, "Cache-Control": "no-cache" },
-    body: JSON.stringify({ q_organization_domains_list: [domain], person_titles: ["influencer marketing", "influencer", "creator partnerships", "creator marketing", "partnerships", "brand partnerships", "social media", "community", "brand marketing", "marketing manager", "marketing director", "head of marketing", "communications", "public relations"], person_seniorities: ["manager", "director", "head", "vp", "senior", "entry", "owner", "founder", "c_suite"], page: 1, per_page: 10 }),
-  }).catch((e) => ({ ok: false, status: 0, text: async () => String(e?.message || e) } as any));
-  if (!search || !search.ok) {
-    const body = await search?.text?.().catch(() => "");
-    console.error("apollo search failed", search?.status, String(body).slice(0, 300));
-    await alertApollo(`search ${search?.status}: ${String(body).slice(0, 200)}`, domain);
-    return [] as any[];
-  }
-  const j: any = await search.json();
-  const out: any[] = [];
-  const ranked = (j.people || []).sort((a: any, b: any) => titleScore(b.title || "") - titleScore(a.title || "")).slice(0, 3);
-  if (!ranked.length) console.log("apollo: no people at", domain);
-  for (const p of ranked) {
-    const m = await fetch("https://api.apollo.io/api/v1/people/match", {
-      method: "POST", headers: { "content-type": "application/json", "x-api-key": key },
-      body: JSON.stringify({ id: p.id, reveal_personal_emails: false }),
-    }).catch(() => null);
-    if (m && !m.ok) { const b = await m.text().catch(() => ""); console.error("apollo match failed", m.status, b.slice(0, 200)); await alertApollo(`match ${m.status}: ${b.slice(0, 200)}`, domain); continue; }
-    const mj: any = m && m.ok ? await m.json() : null;
-    const email = mj?.person?.email;
-    if (email) out.push({ name: p.name, email, title: p.title, confidence: mj.person.email_status === "verified" ? 95 : 70, source: "apollo", source_url: p.linkedin_url || null });
-  }
-  return out;
-}
-async function alertApollo(detail: string, domain: string) {
-  try { await supabaseAdmin().from("alerts").insert({ source: "apollo", message: "Apollo call failed", detail: { domain, detail } }); } catch { /* best effort */ }
 }
 
 // House brands of the big groups: staff email lives at the parent. Cheap first
