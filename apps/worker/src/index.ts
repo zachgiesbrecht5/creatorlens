@@ -62,10 +62,13 @@ async function refreshBrandWall(): Promise<void> {
 async function pickIgToken() {
   const { data } = await sb.from("ig_connections").select("*")
     .eq("healthy", true).eq("api_host", "facebook").or(`cooldown_until.is.null,cooldown_until.lt.${new Date().toISOString()}`)
-    .order("calls_this_hour", { ascending: true }).limit(1);
-  const t = data?.[0];
-  if (!t) return null;
+    .limit(50);
   const bucket = new Date(); bucket.setMinutes(0, 0, 0);
+  // Least-used connection THIS hour. A count left over from an earlier hour is zero: sorting on the raw
+  // column kept picking one connection forever while another sat on a stale "30 calls" from days ago.
+  const used = (c: any) => (c.hour_bucket && new Date(c.hour_bucket).getTime() === bucket.getTime() ? c.calls_this_hour || 0 : 0);
+  const t = (data || []).sort((a: any, b: any) => used(a) - used(b))[0];
+  if (!t) return null;
   const sameHour = t.hour_bucket && new Date(t.hour_bucket).getTime() === bucket.getTime();
   await sb.from("ig_connections").update({ hour_bucket: bucket.toISOString(), calls_this_hour: (sameHour ? t.calls_this_hour : 0) + 2 }).eq("id", t.id);
   return { id: t.id as string, igUserId: t.ig_user_id as string, accessToken: t.access_token as string };
@@ -236,6 +239,14 @@ async function runJob(job: any) {
         if (e.appWide) { await coolDownAllTokens(e.message); throw wait("Meta app limit reached; all Instagram scans paused for an hour", jitter(60, 45)); }
         await coolDownToken(tok.id, e.message);
         throw wait(`Token @${tok.igUserId} rate limited; retrying on another`, jitter(5, 15));
+      }
+      // The connection itself is dead (Meta no longer recognises its account id, or the token was revoked):
+      // bench it for a day, tell the admin, and retry this print on another connection right away.
+      const msg = String(e?.message || "");
+      if (msg.includes(tok.igUserId) || /code=190\b/.test(msg)) {
+        await coolDownToken(tok.id, "Meta rejected this Instagram connection (reconnect it in Settings): " + msg.slice(0, 160), 24 * 60);
+        await alert(sb, "Instagram connection benched for 24h; needs reconnecting", { ig_user_id: tok.igUserId, error: msg.slice(0, 200) });
+        throw wait("That Instagram connection was rejected by Meta; retrying on another", 0.2);
       }
       throw e;
     }
