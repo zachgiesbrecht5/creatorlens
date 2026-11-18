@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body{margin:0;width:320px;font:13px/1.45 Inter,-apple-system,system-ui,sans-serif;color:#0b0d12;background:#fff}
+  .h{display:flex;align-items:center;gap:8px;padding:12px 14px;background:#0b0d12;color:#fff}
+  .h b{font-weight:600}.h span{margin-left:auto;font:10px 'JetBrains Mono',ui-monospace,monospace;color:#8b93a1}
+  .b{padding:14px;display:flex;flex-direction:column;gap:12px}
+  .card{border:1px solid #e4e6ea;border-radius:10px;padding:10px 12px}
+  .k{font-size:11px;color:#5b6472;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+  .ok{color:#12854f;font-weight:600}.bad{color:#c8362e;font-weight:600}
+  input{box-sizing:border-box;width:100%;border:1px solid #e4e6ea;border-radius:8px;padding:6px 8px;font:12.5px Inter,system-ui,sans-serif;outline:none}
+  input:focus{border-color:#2f5bff}
+  button{cursor:pointer;border:0;border-radius:8px;padding:8px 10px;font:600 12.5px Inter,system-ui,sans-serif}
+  .go{background:#2f5bff;color:#fff;width:100%}.gh{background:#fff;border:1px solid #e4e6ea;color:#0b0d12}
+  .row{display:flex;gap:8px}.row>*{flex:1}
+  .note{font-size:11.5px;color:#5b6472}
+  #msg{font-size:12px;min-height:16px}
+</style>
+</head>
+<body>
+  <div class="h"><b>Sponsorprint for YouTube</b><span id="ver"></span></div>
+  <div class="b">
+    <div class="card">
+      <div class="k">Sponsorprint</div>
+      <div id="conn">checking…</div>
+      <div id="connectBox" style="display:none;margin-top:8px">
+        <button class="go" id="openConnect">Connect with one click</button>
+        <div class="note" style="margin:8px 0 4px">Opens sponsorprint.com/extension. Press <b>Connect extension</b> there. Or paste your sp_ key:</div>
+        <div class="row"><input id="key" placeholder="sp_…"><button class="gh" id="saveKey" style="flex:0 0 auto">Save</button></div>
+      </div>
+      <div id="connectedBox" style="display:none;margin-top:8px" class="row">
+        <button class="gh" id="disconnect">Disconnect</button>
+      </div>
+    </div>
+    <div class="card" id="sheetBox" style="display:none">
+      <div class="k">Google Sheet</div>
+      <div class="note" style="margin-bottom:8px">Paste the formula into cell A1 of an empty tab. Every creator you pull lands there, one row per brand. Google refreshes it about once an hour.</div>
+      <button class="go" id="copyFormula">Copy sheet formula</button>
+    </div>
+    <div class="card">
+      <div class="k">How it works</div>
+      <div class="note">Open any YouTube channel or video. The Sponsorprint button in the bottom right shows whether a print exists. Nothing is scanned until you click it.</div>
+    </div>
+    <div id="msg"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

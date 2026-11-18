@@ -54,6 +54,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     { href: "/pipeline", label: "Pipeline" },
                     { href: "/start", label: "Start: roster and neighborhood" },
                     { href: "/batch", label: "Batch prints" },
+                    { href: "/extension", label: "YouTube extension" },
                     { href: "/signals", label: "Signals" },
                     { href: "/inbox", label: "Inbox: confirmations to review" },
                     { href: "/updates", label: "Creator updates and weekly pulse" },

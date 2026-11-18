@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Sponsorprint for YouTube",
+  "version": "1.0.0",
+  "description": "See which brands pay a YouTube creator. One click on any channel or video pulls their Sponsorprint and sends it to your Google Sheet.",
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": { "default_popup": "popup.html", "default_title": "Sponsorprint for YouTube", "default_icon": { "16": "icons/16.png", "48": "icons/48.png" } },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["storage"],
+  "host_permissions": ["https://sponsorprint.com/*", "https://www.sponsorprint.com/*"],
+  "content_scripts": [
+    { "matches": ["https://www.youtube.com/*"], "js": ["content.js"], "run_at": "document_idle" },
+    { "matches": ["https://sponsorprint.com/*", "https://www.sponsorprint.com/*"], "js": ["connect.js"], "run_at": "document_idle" }
+  ]
+}
