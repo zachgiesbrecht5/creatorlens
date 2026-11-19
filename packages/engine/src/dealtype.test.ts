@@ -46,3 +46,38 @@ describe("trackerBrand", () => {
     expect(trackerBrand("thingiverse.com/thing")).toBe(null);
   });
 });
+
+// Real rows from a third channel (smart home, many sponsors) pulled the same day.
+describe("dealType: thank-you sponsors, signal tags, negation", () => {
+  const h = "ericwelander";
+  it("thank-you sponsorships are sponsored even when the stored evidence is cut short", () => {
+    expect(dealType("Thank You Sponsorship, Affiliate", "Thanks to ECOVACS for supporting", h)).toBe("Sponsored");
+    expect(dealType("Thank You Sponsorship, Affiliate", "Thanks to eufy for", h)).toBe("Sponsored");
+    expect(dealType("Thank You Sponsorship, Discount Code, Affiliate", "Thanks to Dreame for", h)).toBe("Sponsored");
+    expect(dealType("Discount Code, Affiliate", "Check out the Avia Smart Deadbolt+ https://timf.io/41ID5zU from our video sponsor", h)).toBe("Sponsored");
+    expect(dealType("Link only", "Thanks to TRMNL for sponsoring this video! Use this link and get $10 off https://usetrmnl.com/go/ericwelander10", h)).toBe("Sponsored");
+  });
+  it("gifted beats a generic signal tag", () => {
+    expect(dealType("", "Thanks to Hisense for sending", h)).toBe("Gifted");
+    expect(dealType("", "Thanks to Ubiquiti for sending", h)).toBe("Gifted");
+  });
+  it("the scanner's affiliate tag counts", () => {
+    expect(dealType("Affiliate", "#EcoFlow (hashtag in description)", h)).toBe("Affiliate");
+    expect(dealType("Affiliate", "https://beatbot.com/pages", h)).toBe("Affiliate");
+    expect(dealType("Link only", "UNAS Pro https://store.ui.com/us/en/products/unas-pro?a_aid=EricWelander", h)).toBe("Affiliate");
+    expect(dealType("Link only", "Keychron K3 HE https://www.keychron.com/pages/k3he-k3-ultra-prelaunch?ref=ERICWELANDER (Affiliate link)", h)).toBe("Affiliate");
+    expect(dealType("Link only", "Use code NUKI15ERICW to get 15% off this Nuki lock bundled with keypad https://geni.us/xtbydI", h)).toBe("Affiliate");
+  });
+  it("a stated non-affiliate link is a mention", () => {
+    expect(dealType("Link only", "LaFaer Wireless Human Presence Sensor LWR01 https://lafaer.co/products/human-presence-sensor-lwr01 (Not an affiliate lin", h)).toBe("Mention");
+    expect(dealType("Link only", "LaFaer sensor https://lafaer.co/products/x (Not an affiliate link)", h)).toBe("Mention");
+  });
+  it("news and product links stay mentions", () => {
+    expect(dealType("Link only", "The US government just banned Roombas | The Verge — https://www.theverge.com/policy/972312/us-robot-ban", h)).toBe("Mention");
+    expect(dealType("Link only", "Sonos Beam Ultra: The TV Soundbar with Dolby Atmos — https://www.sonos.com/en-us/shop/beam-ultra", h)).toBe("Mention");
+    expect(dealType("Hashtag only", "#Aqara (hashtag in description)", h)).toBe("Mention");
+  });
+  it("impact-network links name the brand", () => {
+    expect(trackerBrand("Check out CleanMyMac and get 10% off https://macpaw.audw.net/c/2744270/3874567/1733")).toBe("macpaw");
+  });
+});

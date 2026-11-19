@@ -11,7 +11,7 @@ const GIFT_RE = /\bprovided by\b|\bsupplied by\b|\bgifted\b|\bfor sending\b|\bse
 const AFFIL_TEXT_RE = /\baffiliate\b|\breferral\b|\brefer(?:-| )a(?:-| )friend\b|\bcommission\b|\b(?:use|with) (?:my |our |the )?(?:code|link)\b|\bpromo ?code\b|\bcoupon\b|\d{1,2}\s?% (?:off|discount)\b|\bdiscount\b|\bfree trial\b/i;
 
 // Networks that sit between the creator and the brand: the brand is the subdomain, not the domain.
-const TRACKER_HOSTS = ["pxf.io", "sjv.io", "go2cloud.org", "evyy.net", "pntra.com", "pntrs.com", "pntrac.com", "gqco.net", "ojrq.net", "dpbolvw.net", "jdoqocy.com", "tkqlhce.com", "anrdoezrs.net", "kqzyfj.com", "shareasale.com", "linksynergy.com", "awin1.com", "avantlink.com", "impact.com", "partnerstack.com", "grsm.io", "rfer.us", "tapfiliate.com", "firstpromoter.com", "rewardful.com", "lvnta.com", "uppromote.com", "refersion.com", "idevaffiliate.com", "hasoffers.com", "tune.com", "mavely.app", "howl.me", "geni.us", "amzn.to", "bit.ly"];
+const TRACKER_HOSTS = ["pxf.io", "sjv.io", "go2cloud.org", "audw.net", "7eer.net", "qvig.net", "uikc.net", "i3zp.net", "evyy.net", "pntra.com", "pntrs.com", "pntrac.com", "gqco.net", "ojrq.net", "dpbolvw.net", "jdoqocy.com", "tkqlhce.com", "anrdoezrs.net", "kqzyfj.com", "shareasale.com", "linksynergy.com", "awin1.com", "avantlink.com", "impact.com", "partnerstack.com", "grsm.io", "rfer.us", "tapfiliate.com", "firstpromoter.com", "rewardful.com", "lvnta.com", "uppromote.com", "refersion.com", "idevaffiliate.com", "hasoffers.com", "tune.com", "mavely.app", "howl.me", "geni.us", "amzn.to", "bit.ly"];
 const TRACKER_CUT_RE = new RegExp(`([a-z0-9-]{3,})\\.(?:${TRACKER_HOSTS.map((t) => t.split(".")[0]).filter((l) => l.length >= 5).join("|")})\\.?(?:$|[^a-z0-9-])`);
 const AFFIL_SUBDOMAINS = new Set(["try", "go", "get", "join", "partner", "partners", "affiliate", "affiliates", "refer", "referral", "ref", "track", "link", "links", "click", "shop"]);
 const AFFIL_PARAMS = new Set(["ref", "referral", "referrer", "refer", "friend", "fpr", "bta", "aff", "affid", "aff_id", "afp", "affiliate", "affiliate_id", "via", "irclickid", "irgwc", "coupon", "promo", "invite", "rfsn", "sca_ref", "lmref", "pscd", "ps_partner_key", "gr_pk", "tap_a", "a_aid", "offer_id"]);
@@ -57,13 +57,25 @@ function looksAffiliateUrl(u: URL, creatorHandle?: string | null): boolean {
   return false;
 }
 
-/** Classify one stored deal row. */
+const NOT_AFFIL_RE = /\b(?:not|isn'?t|non)[ -](?:an? )?affiliate(?: link)?\b/gi;
+
+/** Classify one stored deal row. What the description says wins over the scanner's own signal tags. */
 export function dealType(signalType: string | null | undefined, evidence: string | null | undefined, creatorHandle?: string | null): DealType {
   const sig = String(signalType || ""); const ev = String(evidence || "");
-  if (/Sponsorship Mention/i.test(sig) || SPONSOR_RE.test(ev)) return "Sponsored";
-  if (/Product Seeding/i.test(sig) || GIFT_RE.test(ev)) return "Gifted";
-  if (/Discount Code/i.test(sig) || AFFIL_TEXT_RE.test(ev)) return "Affiliate";
+  if (SPONSOR_RE.test(ev)) return "Sponsored";
+  if (GIFT_RE.test(ev)) return "Gifted";
+  if (/Sponsorship/i.test(sig)) return "Sponsored";          // "Sponsorship Mention", "Thank You Sponsorship"
+  if (/Product Seeding/i.test(sig)) return "Gifted";
+  if (/Discount Code|Affiliate/i.test(sig)) return "Affiliate";
+  const said = ev.replace(NOT_AFFIL_RE, " ");                  // "(Not an affiliate link)" is not an affiliate link
+  if (AFFIL_TEXT_RE.test(said)) return "Affiliate";
   const u = firstUrl(ev);
-  if (u && looksAffiliateUrl(u, creatorHandle)) return "Affiliate";
+  if (u && said === ev && looksAffiliateUrl(u, creatorHandle)) return "Affiliate";
   return "Mention";
 }
+
+/** Names the scanner files under a store or referral domain, mapped to the brand people know. */
+export const BRAND_DISPLAY_ALIAS: Record<string, string> = {
+  ui: "Ubiquiti", referyourchasecard: "Chase", americanexpress: "American Express", tailorbrands: "Tailor Brands",
+  macpaw: "MacPaw", casetawireless: "Lutron Caseta", usetrmnl: "Trmnl", nolahmattress: "Nolah", "3reality": "ThirdReality",
+};

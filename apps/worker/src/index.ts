@@ -220,7 +220,7 @@ async function runJob(job: any) {
   let result: ScanResult;
   if (job.platform === "youtube") {
     if ((await ytBudgetLeft()) < 200) throw Object.assign(new Error("House YouTube quota nearly exhausted for today"), { retry: 60 });
-    const quick = job.source === "neighborhood" || job.source === "discover";
+    const quick = job.source === "neighborhood" || job.source === "discover" || job.source === "scout";
     result = await scanYouTube(YT_API_KEY, job.handle, quick ? { lookbackDays: 365, maxVideos: 150 } : {});
     await ytBudgetSpend(result.quotaUnits);
   } else if (job.platform === "instagram") {
@@ -393,6 +393,7 @@ import { explainCreatorDeals, insightsBackfill } from "./insights";
 import { runNeighborhoods } from "./neighborhood";
 import { runBrandScans } from "./brandscan";
 import { discover } from "./discover";
+import { runScout } from "./scout";
 import { readCovers } from "./covers";
 import { readHooks, hooksBackfill } from "./hooks";
 import { noteModelError } from "./spend";
@@ -413,6 +414,7 @@ let lastNightly = "";
 let lastReap = 0;
 let neighborhoodBusy = false;
 let lastDiscover = 0;
+let lastScout = 0, scoutBusy = false;
 let lastBrandWatch = 0;
 let lastHooksBackfill = 0;
 let hooksEvery = 5 * 60e3;   // drops to every 30 min while there is nothing to backfill
@@ -454,6 +456,8 @@ async function tick() {
   if (Date.now() - lastBrandWatch > 3600e3 && inFlight === 0) { lastBrandWatch = Date.now(); brandWatch(sb, () => houseIgToken(sb)).catch((e: any) => log("brand watch failed", e?.message)); }
   // Discovery runs hourly (budgeted per platform inside discover()).
   if (Date.now() - lastDiscover > 3600e3) { lastDiscover = Date.now(); discover(sb).catch((e: any) => log("discover failed", e?.message)); }
+  // Scout: one lane search every 20 minutes (YouTube quota only, capped per day inside), plus sponsor counts for landed prints.
+  if (!scoutBusy && Date.now() - lastScout > 20 * 60e3) { lastScout = Date.now(); scoutBusy = true; runScout(sb, YT_API_KEY, ytBudgetLeft, ytBudgetSpend).catch((e: any) => log("scout failed", e?.message)).finally(() => { scoutBusy = false; }); }
   // Brand bookings + stats (brand pages, the brand finder, "rebooking now") are rebuilt every 30 minutes,
   // apart from the per-print wall refresh so that one stays fast.
   if (now - lastBrandIntel > 30 * 60e3) { lastBrandIntel = now; (async () => { const a = await sb.rpc("refresh_brand_bookings"); const b = a.error ? a : await sb.rpc("refresh_brand_stats"); if (a.error || b.error) log("brand intel refresh failed", (a.error || b.error)?.message); })(); }

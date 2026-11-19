@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase";
-import { dealType, trackerBrand, DEAL_TYPE_RANK, type DealType } from "@creatorlens/engine";
+import type { DealType } from "@creatorlens/engine";
+import { aggregateDeals, type ExtBrand } from "@/lib/ext-agg";
+export type { ExtBrand } from "@/lib/ext-agg";
 
 // Shared helpers for the Sponsorprint for YouTube extension: creator lookup that
 // costs no YouTube quota, the brand rows a print shows, and the sheet feed token.
@@ -30,58 +32,21 @@ export async function findCreator(platform: "youtube" | "instagram", ref: string
   return (data?.[0] as ExtCreator) || null;
 }
 
-export type ExtBrand = { brand: string; type: DealType; category: string | null; deals: number; confidence: string | null; first_seen: string | null; last_seen: string | null; repeat_partner: boolean; mass_sponsor: boolean; evidence_title: string | null; evidence_url: string | null; evidence: string | null; website: string | null };
-
-const LABEL_RANK: Record<string, number> = { High: 3, Medium: 2, Low: 1 };
-const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-/**
- * The brands on one or more creators' prints, read from the deal rows and typed:
- * Sponsored (paid language), Gifted (product sent), Affiliate (referral, code or tracked link),
- * Mention (a bare link or hashtag). Mentions are not deals and are left out unless includeMentions.
- * Junk and self-brands are always left out. Sorted Sponsored first, then newest.
- */
+/** The brands on one or more creators' prints, typed. Junk and self-brands are always left out. See aggregateDeals. */
 export async function brandRows(creators: { id: string; handle: string }[], includeMentions = false): Promise<Map<string, ExtBrand[]>> {
-  const out = new Map<string, ExtBrand[]>();
-  const handleOf = new Map(creators.map((c) => [c.id, c.handle]));
   const ids = creators.map((c) => c.id);
-  type Agg = ExtBrand & { _score: number; _days: number[] };
-  const groups = new Map<string, Agg>();
+  const rows: any[] = [];
   for (let i = 0; i < ids.length; i += 50) {
     for (let from = 0; from < 20000; from += 1000) {
       const { data } = await supabaseAdmin().from("partnerships")
         .select("creator_id,brand_id,confidence_label,confidence_score,signal_type,evidence,content_url,content_title,published_at,brands!inner(name,category,website,is_junk,is_self_brand,is_mass_sponsor)")
         .in("creator_id", ids.slice(i, i + 50)).neq("status", "rejected").eq("brands.is_junk", false).eq("brands.is_self_brand", false)
         .order("id").range(from, from + 999);
-      for (const p of (data || []) as any[]) {
-        const type = dealType(p.signal_type, p.evidence, handleOf.get(p.creator_id));
-        // a link through an affiliate network is filed under the network's domain: show the brand behind it
-        const via = trackerBrand(p.evidence || "");
-        const name = via ? titleCase(via) : p.brands.name;
-        const key = `${p.creator_id}|${via ? `via:${via}` : p.brand_id}`;
-        const score = DEAL_TYPE_RANK[type] * 100 + Number(p.confidence_score || 0);
-        const day = p.published_at ? new Date(p.published_at).getTime() / 86400000 : NaN;
-        let g = groups.get(key);
-        if (!g) { g = { brand: name, type, category: via ? null : p.brands.category, deals: 0, confidence: null, first_seen: null, last_seen: null, repeat_partner: false, mass_sponsor: !!p.brands.is_mass_sponsor, evidence_title: null, evidence_url: null, evidence: null, website: via ? null : p.brands.website || null, _score: -1, _days: [] }; groups.set(key, g); }
-        if (DEAL_TYPE_RANK[type] > DEAL_TYPE_RANK[g.type]) g.type = type;
-        if ((LABEL_RANK[p.confidence_label] || 0) > (LABEL_RANK[g.confidence || ""] || 0)) g.confidence = p.confidence_label;
-        if (p.published_at) { if (!g.first_seen || p.published_at < g.first_seen) g.first_seen = p.published_at; if (!g.last_seen || p.published_at > g.last_seen) g.last_seen = p.published_at; }
-        if (type !== "Mention") { g.deals++; if (isFinite(day)) g._days.push(day); }
-        if (score > g._score) { g._score = score; g.evidence_title = p.content_title; g.evidence_url = p.content_url; g.evidence = p.evidence ? String(p.evidence).replace(/\s+/g, " ").trim().slice(0, 160) : null; }
-      }
+      rows.push(...(data || []));
       if (!data || data.length < 1000) break;
     }
   }
-  for (const [key, g] of groups) {
-    if (g.type === "Mention" && !includeMentions) continue;
-    if (g.type === "Mention") g.deals = 0;
-    g.repeat_partner = g._days.length >= 2 && Math.max(...g._days) - Math.min(...g._days) >= 30;
-    const { _score, _days, ...row } = g;
-    const cid = key.split("|")[0];
-    (out.get(cid) || out.set(cid, []).get(cid)!).push(row);
-  }
-  for (const list of out.values()) list.sort((a, b) => DEAL_TYPE_RANK[b.type] - DEAL_TYPE_RANK[a.type] || String(b.last_seen || "").localeCompare(String(a.last_seen || "")));
-  return out;
+  return aggregateDeals(rows, creators, includeMentions);
 }
 
 export const TYPE_LABEL: Record<DealType, string> = { Sponsored: "Sponsored", Gifted: "Gifted", Affiliate: "Affiliate or code", Mention: "Mention only" };

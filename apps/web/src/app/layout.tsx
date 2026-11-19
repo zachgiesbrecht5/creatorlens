@@ -60,7 +60,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     { href: "/updates", label: "Creator updates and weekly pulse" },
                     { href: "/scans", label: "My prints" },
                     { href: "/settings", label: "Settings" },
-                    ...(profile.plan === "admin" ? [{ href: "/salesnav", label: "Sales Nav leads" }, { href: "/queue", label: "Queue and health" }] : []),
+                    ...(profile.plan === "admin" ? [{ href: "/scout", label: "Scout: channels to rep" }, { href: "/salesnav", label: "Sales Nav leads" }, { href: "/queue", label: "Queue and health" }] : []),
                   ]} />
                   <Link href="/pricing" className="pill ml-3 hover:border-fg" title={profile.plan === "trial" ? "Free plan. Click to see plans." : "Your plan"}>
                     {profile.plan === "trial" ? `free · ${profile.draft_credits} drafts · ${profile.reveal_credits} reveals` : profile.plan}
