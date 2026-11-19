@@ -43,13 +43,16 @@ export async function GET(req: NextRequest) {
   if (!creator?.last_scanned_at) return NextResponse.json({ ok: true, printed: false, scanning, failed });
 
   const canSee = await canSeeCreator(profile.id, profile.plan === "admin", creator);
-  const brands = (await brandRows([creator.id])).get(creator.id) || [];
+  // Only real deal evidence (High / Medium). Bare links and hashtags stay on the full print, marked Low.
+  const all = (await brandRows([creator.id], true)).get(creator.id) || [];
+  const brands = all.filter((x) => x.confidence === "High" || x.confidence === "Medium");
   return NextResponse.json({
     ok: true, printed: true, scanning, failed,
     fresh: Date.now() - new Date(creator.last_scanned_at).getTime() < FRESH_MS,
     locked: !canSee,
     creator: { handle: creator.handle, name: creator.display_name || creator.handle, followers: creator.followers, category: creator.category, last_scanned_at: creator.last_scanned_at },
     brand_count: brands.length,
+    low_count: all.length - brands.length,
     // Not yet opened by this user: the count shows on the badge, the list arrives after one click (free for cached prints).
     brands: canSee ? brands : [],
     print_url: printUrl(creator),

@@ -7,6 +7,7 @@ import { profileFromFeedToken, brandRows, findCreator, printUrl, type ExtCreator
 // Built for Google Sheets: =IMPORTDATA("https://sponsorprint.com/api/ext/feed?t=…")
 // keeps a tab in step with the extension (Sheets re-reads the link about once an hour).
 // all=1 lists every print this user has opened, not only the ones pulled from YouTube.
+// low=1 also lists Low confidence rows (a bare link or hashtag, no sponsor language); off by default.
 
 export const dynamic = "force-dynamic";
 const MAX_ROWS = 5000;
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
 
   const when = (c: ExtCreator) => pulled.get(c.handle.toLowerCase()) || pulled.get(String(c.external_id || "").toLowerCase()) || c.last_scanned_at || "";
   creators = creators.filter((c) => c.last_scanned_at).sort((a, b) => String(when(b)).localeCompare(String(when(a))));
-  const walls = await brandRows(creators.map((c) => c.id));
+  const walls = await brandRows(creators.map((c) => c.id), q.get("low") === "1");
   const rows: unknown[][] = [HEAD];
   for (const c of creators) {
     const base = [c.display_name || c.handle, `@${c.handle}`, c.platform === "youtube" ? "YouTube" : "Instagram", c.followers ?? "", c.category || ""];

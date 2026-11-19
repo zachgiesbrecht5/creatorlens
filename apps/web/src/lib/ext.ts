@@ -31,8 +31,12 @@ export async function findCreator(platform: "youtube" | "instagram", ref: string
 
 export type ExtBrand = { brand: string; category: string | null; deals: number; confidence: string | null; first_seen: string | null; last_seen: string | null; repeat_partner: boolean; mass_sponsor: boolean; evidence_title: string | null; evidence_url: string | null; website: string | null };
 
-/** The brands on one or more creators' prints, newest deal first. Junk and self-brands are left out. */
-export async function brandRows(creatorIds: string[]): Promise<Map<string, ExtBrand[]>> {
+/**
+ * The brands on one or more creators' prints, newest deal first. Junk and self-brands are left out.
+ * Low confidence rows (a bare link or hashtag in a description, with no sponsor language) are not
+ * deals, so they are left out too unless includeLow is set.
+ */
+export async function brandRows(creatorIds: string[], includeLow = false): Promise<Map<string, ExtBrand[]>> {
   const out = new Map<string, ExtBrand[]>();
   for (let i = 0; i < creatorIds.length; i += 100) {
     const { data } = await supabaseAdmin().from("brand_wall_mv")
@@ -40,6 +44,7 @@ export async function brandRows(creatorIds: string[]): Promise<Map<string, ExtBr
       .in("creator_id", creatorIds.slice(i, i + 100)).eq("is_junk", false).eq("is_self_brand", false)
       .order("last_seen", { ascending: false }).limit(5000);
     for (const w of (data || []) as any[]) {
+      if (!includeLow && w.best_label !== "High" && w.best_label !== "Medium") continue;
       const list = out.get(w.creator_id) || out.set(w.creator_id, []).get(w.creator_id)!;
       list.push({ brand: w.brand, category: w.category, deals: Number(w.deals || 0), confidence: w.best_label, first_seen: w.first_seen, last_seen: w.last_seen, repeat_partner: !!w.repeat_partner, mass_sponsor: !!w.is_mass_sponsor, evidence_title: w.content_title, evidence_url: w.content_url, website: w.website || null });
     }
