@@ -185,7 +185,8 @@
         const tags = el("div", "tags");
         if (b.category && b.category !== "Other") tags.append(el("span", "tag", b.category));
         tags.append(el("span", "tag", `${b.deals} deal${b.deals === 1 ? "" : "s"}`));
-        if (b.confidence) tags.append(el("span", b.confidence === "High" ? "tag hi" : "tag", b.confidence));
+        if (b.type_label) tags.append(el("span", b.type === "Sponsored" ? "tag hi" : "tag", b.type_label));
+        else if (b.confidence) tags.append(el("span", b.confidence === "High" ? "tag hi" : "tag", b.confidence));
         if (b.repeat_partner) tags.append(el("span", "tag rep", "repeat partner"));
         const ev = b.evidence_url ? safeUrl(b.evidence_url) : null;
         if (ev) { const a = link("ev", "see the video", ev); if (b.evidence_title) a.title = b.evidence_title; tags.append(a); }
@@ -201,8 +202,8 @@
     const c = data?.creator || {};
     const t = (v) => String(v ?? "").replace(/[\t\r\n]+/g, " ");
     const day = (iso) => (iso ? String(iso).slice(0, 10) : "");
-    const head = ["Creator", "Handle", "Subscribers", "Brand", "Brand category", "Deals", "Confidence", "First deal", "Last deal", "Repeat partner", "Evidence video", "Evidence link", "Brand website", "Print"];
-    const rows = (data?.brands || []).map((b) => [c.name, `@${c.handle}`, c.followers ?? "", b.brand, b.category || "", b.deals, b.confidence || "", day(b.first_seen), day(b.last_seen), b.repeat_partner ? "Yes" : "", b.evidence_title || "", b.evidence_url || "", b.website || "", data.print_url || ""]);
+    const head = ["Creator", "Handle", "Subscribers", "Brand", "Type", "Brand category", "Deals", "Confidence", "First deal", "Last deal", "Repeat partner", "Evidence video", "Evidence link", "Brand website", "Print"];
+    const rows = (data?.brands || []).map((b) => [c.name, `@${c.handle}`, c.followers ?? "", b.brand, b.type_label || "", b.category || "", b.deals, b.confidence || "", day(b.first_seen), day(b.last_seen), b.repeat_partner ? "Yes" : "", b.evidence_title || "", b.evidence_url || "", b.website || "", data.print_url || ""]);
     return [head, ...rows].map((r) => r.map(t).join("\t")).join("\n");
   }
 

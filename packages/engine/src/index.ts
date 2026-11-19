@@ -8,3 +8,4 @@ export * from "./instagram-client";
 export * from "./scan";
 export * from "./salesnav";
 export * from "./titles";
+export * from "./dealtype";

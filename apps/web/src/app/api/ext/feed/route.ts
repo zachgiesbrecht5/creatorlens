@@ -1,18 +1,19 @@
 import { type NextRequest } from "next/server";
 import { supabaseAdmin, unlockedCreatorIds } from "@/lib/supabase";
-import { profileFromFeedToken, brandRows, findCreator, printUrl, type ExtCreator } from "@/lib/ext";
+import { profileFromFeedToken, brandRows, findCreator, printUrl, TYPE_LABEL, type ExtCreator } from "@/lib/ext";
 
 // GET /api/ext/feed?t=<feed token>[&all=1]
 // CSV of every creator pulled with the YouTube extension, one row per creator x brand.
 // Built for Google Sheets: =IMPORTDATA("https://sponsorprint.com/api/ext/feed?t=…")
 // keeps a tab in step with the extension (Sheets re-reads the link about once an hour).
 // all=1 lists every print this user has opened, not only the ones pulled from YouTube.
-// low=1 also lists Low confidence rows (a bare link or hashtag, no sponsor language); off by default.
+// Each row carries a Type: Sponsored, Gifted, or Affiliate or code. low=1 also lists "Mention only"
+// rows (a bare link or hashtag, no deal language); off by default.
 
 export const dynamic = "force-dynamic";
 const MAX_ROWS = 5000;
 const COLS = "id,platform,handle,external_id,display_name,followers,avatar_url,category,last_scanned_at";
-const HEAD = ["Creator", "Handle", "Platform", "Subscribers", "Lane", "Brand", "Brand category", "Deals", "Confidence", "First deal", "Last deal", "Repeat partner", "Evidence video", "Evidence link", "Brand website", "Print", "Pulled", "Last printed"];
+const HEAD = ["Creator", "Handle", "Platform", "Subscribers", "Lane", "Brand", "Type", "Brand category", "Deals", "Confidence", "First deal", "Last deal", "Repeat partner", "Evidence video", "Evidence link", "Brand website", "Print", "Pulled", "Last printed"];
 
 // A cell that starts like a formula would run inside the sheet: neutralise it.
 const cell = (v: unknown) => { let s = v == null ? "" : String(v).replace(/[\r\n\t]+/g, " ").trim(); if (/^[=+\-@]/.test(s)) s = `'${s}`; return /[",]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -54,15 +55,15 @@ export async function GET(req: NextRequest) {
 
   const when = (c: ExtCreator) => pulled.get(c.handle.toLowerCase()) || pulled.get(String(c.external_id || "").toLowerCase()) || c.last_scanned_at || "";
   creators = creators.filter((c) => c.last_scanned_at).sort((a, b) => String(when(b)).localeCompare(String(when(a))));
-  const walls = await brandRows(creators.map((c) => c.id), q.get("low") === "1");
+  const walls = await brandRows(creators, q.get("low") === "1");
   const rows: unknown[][] = [HEAD];
   for (const c of creators) {
     const base = [c.display_name || c.handle, `@${c.handle}`, c.platform === "youtube" ? "YouTube" : "Instagram", c.followers ?? "", c.category || ""];
     const tail = [printUrl(c), day(when(c)), day(c.last_scanned_at)];
     const brands = walls.get(c.id) || [];
-    if (!brands.length) rows.push([...base, "(no deals found)", "", "", "", "", "", "", "", "", "", ...tail]);
+    if (!brands.length) rows.push([...base, "(no deals found)", "", "", "", "", "", "", "", "", "", "", ...tail]);
     for (const b of brands) {
-      rows.push([...base, b.brand, b.category || "", b.deals, b.confidence || "", day(b.first_seen), day(b.last_seen), b.repeat_partner ? "Yes" : "", b.evidence_title || "", b.evidence_url || "", b.website || "", ...tail]);
+      rows.push([...base, b.brand, TYPE_LABEL[b.type], b.category || "", b.deals, b.confidence || "", day(b.first_seen), day(b.last_seen), b.repeat_partner ? "Yes" : "", b.evidence_title || "", b.evidence_url || "", b.website || "", ...tail]);
       if (rows.length > MAX_ROWS) break;
     }
     if (rows.length > MAX_ROWS) break;

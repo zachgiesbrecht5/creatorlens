@@ -3,7 +3,7 @@ import { profileFromKey } from "@/lib/api-key";
 import { supabaseAdmin, canSeeCreator } from "@/lib/supabase";
 import { startScan } from "@/lib/scan-start";
 import { track } from "@/lib/track";
-import { cleanRef, findCreator, brandRows, printUrl, feedUrl } from "@/lib/ext";
+import { cleanRef, findCreator, brandRows, printUrl, feedUrl, TYPE_LABEL } from "@/lib/ext";
 
 // Sponsorprint for YouTube (Chrome extension).
 //   GET  (no handle)            -> connection check { ok, email, feed_url }
@@ -43,9 +43,9 @@ export async function GET(req: NextRequest) {
   if (!creator?.last_scanned_at) return NextResponse.json({ ok: true, printed: false, scanning, failed });
 
   const canSee = await canSeeCreator(profile.id, profile.plan === "admin", creator);
-  // Only real deal evidence (High / Medium). Bare links and hashtags stay on the full print, marked Low.
-  const all = (await brandRows([creator.id], true)).get(creator.id) || [];
-  const brands = all.filter((x) => x.confidence === "High" || x.confidence === "Medium");
+  // Sponsored, gifted and affiliate rows. Bare links and hashtags (mentions) stay on the full print only.
+  const all = (await brandRows([creator], true)).get(creator.id) || [];
+  const brands = all.filter((x) => x.type !== "Mention").map((x) => ({ ...x, type_label: TYPE_LABEL[x.type] }));
   return NextResponse.json({
     ok: true, printed: true, scanning, failed,
     fresh: Date.now() - new Date(creator.last_scanned_at).getTime() < FRESH_MS,
