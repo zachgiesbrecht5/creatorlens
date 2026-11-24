@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   // lane-wide shares go to everyone; per-brand creator counts stay with the house.
   let lane = null;
   if (c.category) {
-    const { data: laneRows } = await admin.from("brand_wall_mv").select("brand_id,brand,category,creator_id,deals,last_seen,creators!inner(category)").eq("creators.category", c.category).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").limit(6000);
+    const { data: laneRows } = await admin.from("brand_wall_mv").select("brand_id,brand,category,creator_id,deals,last_seen,creators!partnerships_creator_id_fkey!inner(category)").eq("creators.category", c.category).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").limit(6000);
     const mineRows = (wall || []).filter((w) => w.best_label !== "Low");
     const since = new Date(Date.now() - 365 * 864e5).toISOString();
     const read = laneRead(laneRows || [], c.id, new Set((wall || []).map((w) => w.brand_id)), new Set(mineRows.map((w) => w.category).filter(Boolean)), since);

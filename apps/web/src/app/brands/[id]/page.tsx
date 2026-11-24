@@ -23,7 +23,7 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
   if (profile) track(profile.id, "brand_view", { brand_id: brand.id, brand: brand.name });
 
   const NONE = ["00000000-0000-0000-0000-000000000000"];
-  let rowsQ = admin.from("brand_wall_mv").select("creator_id,deals,first_seen,last_seen,repeat_partner,evidence,content_url,best_label,creators(handle,display_name,platform,followers,avatar_url,category)").eq("brand_id", id).order("last_seen", { ascending: false });
+  let rowsQ = admin.from("brand_wall_mv").select("creator_id,deals,first_seen,last_seen,repeat_partner,evidence,content_url,best_label,creators!partnerships_creator_id_fkey(handle,display_name,platform,followers,avatar_url,category)").eq("brand_id", id).order("last_seen", { ascending: false });
   if (scope) rowsQ = rowsQ.in("creator_id", scope.length ? scope : NONE);
   let dealsQ = admin.from("partnerships").select("published_at,platform,confidence_label,content_url,creator_id,creators(id,handle,display_name,followers,category,avatar_url)").eq("brand_id", id).neq("status", "rejected").not("published_at", "is", null).order("published_at", { ascending: true }).limit(500);
   if (scope) dealsQ = dealsQ.in("creator_id", scope.length ? scope : NONE);

@@ -50,7 +50,7 @@ export default async function RosterCreatorPage({ params }: { params: Promise<{ 
   const mine = new Set(myBrands.map((b) => b.id));
   let laneBrands: LaneBrand[] = [];
   if (lane) {
-    const { data: rows } = await admin.from("brand_wall_mv").select("brand_id,brand,category,website,deals,last_seen,creator_id,creators!inner(id,handle,platform,display_name,avatar_url,followers,category)").eq("creators.category", lane).neq("creator_id", me?.id || "00000000-0000-0000-0000-000000000000").eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").limit(4000);
+    const { data: rows } = await admin.from("brand_wall_mv").select("brand_id,brand,category,website,deals,last_seen,creator_id,creators!partnerships_creator_id_fkey!inner(id,handle,platform,display_name,avatar_url,followers,category)").eq("creators.category", lane).neq("creator_id", me?.id || "00000000-0000-0000-0000-000000000000").eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").limit(4000);
     const agg = new Map<string, any>();
     for (const x of (rows || []) as any[]) {
       if (mine.has(x.brand_id)) continue;

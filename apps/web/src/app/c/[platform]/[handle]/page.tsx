@@ -69,7 +69,7 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
   const myBrandIds = new Set(cards.map((c) => c.brand_id));
   let missing: { brand_id: string; brand: string; website: string | null; creators: number; sample: string[] }[] = [];
   if (creator.category) {
-    const { data: laneRows } = await admin.from("brand_wall_mv").select("brand_id,brand,website,creator_id,is_junk,is_self_brand,is_mass_sponsor,creators!inner(category,display_name,handle)").eq("creators.category", creator.category).neq("creator_id", creator.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).limit(3000);
+    const { data: laneRows } = await admin.from("brand_wall_mv").select("brand_id,brand,website,creator_id,is_junk,is_self_brand,is_mass_sponsor,creators!partnerships_creator_id_fkey!inner(category,display_name,handle)").eq("creators.category", creator.category).neq("creator_id", creator.id).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).limit(3000);
     const agg = new Map<string, { brand_id: string; brand: string; website: string | null; creators: Set<string>; sample: string[] }>();
     for (const r of (laneRows || []) as any[]) {
       if (myBrandIds.has(r.brand_id)) continue;
