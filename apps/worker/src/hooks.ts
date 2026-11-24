@@ -19,13 +19,13 @@ const OPENAI = process.env.OPENAI_API_KEY || "";
 const SECONDS = Number(process.env.HOOK_SECONDS || 6);
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[hooks]", ...a);
 // ffmpeg: the bundled static binary (installs with npm, no build-system dependency), falling back to a system one
-const FFMPEG = (ffmpegStatic as unknown as string) || "ffmpeg";
+export const FFMPEG = (ffmpegStatic as unknown as string) || "ffmpeg";
 const run = (_cmd: string, args: string[]) => new Promise<void>((res, rej) => execFile(FFMPEG, args, { timeout: 60000 }, (e) => (e ? rej(e) : res())));
 
 type Heard = { text: string; conf: number | null } | null;
-async function transcribeFull(wav: Buffer): Promise<Heard> {
+export async function transcribeFull(wav: Buffer): Promise<Heard> {
   if (DEEPGRAM) {
-    const r = await fetch("https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&punctuate=true", { method: "POST", headers: { Authorization: `Token ${DEEPGRAM}`, "content-type": "audio/wav" }, body: new Uint8Array(wav) });
+    const r = await fetch("https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&punctuate=true", { method: "POST", headers: { Authorization: `Token ${DEEPGRAM}`, "content-type": "audio/wav" }, body: new Uint8Array(wav), signal: AbortSignal.timeout(180000) });
     if (!r.ok) { log("deepgram", r.status, (await r.text()).slice(0, 120)); return null; }
     const j: any = await r.json();
     const alt = j?.results?.channels?.[0]?.alternatives?.[0];
@@ -45,16 +45,16 @@ async function transcribeFull(wav: Buffer): Promise<Heard> {
 }
 
 /** Mean loudness of a wav in dB (ffmpeg volumedetect); -91 = digital silence. */
-function meanVolume(wavPath: string): Promise<number | null> {
+export function meanVolume(wavPath: string): Promise<number | null> {
   return new Promise((res) => execFile(FFMPEG, ["-hide_banner", "-i", wavPath, "-af", "volumedetect", "-f", "null", "-"], { timeout: 30000 }, (_e, _o, err) => {
     const m = String(err || "").match(/mean_volume:\s*(-?[\d.]+) dB/); res(m ? Number(m[1]) : null);
   }));
 }
 
-const VOICE_CONF = Number(process.env.HOOK_VOICE_CONFIDENCE || 0.55);
+export const VOICE_CONF = Number(process.env.HOOK_VOICE_CONFIDENCE || 0.55);
 /** What a viewer hears in the opening: talking, a song (lyrics are not a hook), or nothing. */
 // "Bob. Bob. Bob." / "yeah yeah yeah yeah": a vocal chop on a beat, not a sentence
-function looksLikeMusic(t: string): boolean {
+export function looksLikeMusic(t: string): boolean {
   const words = String(t || "").toLowerCase().replace(/[^a-z' ]/g, " ").split(/\s+/).filter(Boolean);
   if (words.length < 3) return false;
   const uniq = new Set(words).size;

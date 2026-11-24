@@ -409,6 +409,7 @@ import { heartbeat, alert, nightly } from "./observe";
 import { runSalesNavEnrich } from "./salesnav";
 import { runTitleLabs } from "./titlelab";
 import { runTitleSearches } from "./titlesearch";
+import { runTranscripts } from "./transcripts";
 
 let lastNightly = "";
 let lastReap = 0;
@@ -428,6 +429,7 @@ let lastSalesNav = 0;
 let salesNavBusy = false;
 let titleLabBusy = false;
 let titleSearchBusy = false;
+let transcriptsBusy = false, lastTranscripts = 0;
 let lastBrandIntel = 0;
 let lastBeat = 0, lastSide = 0, lastSignups = 0, lastIdleWork = 0, idleTicks = 0;
 const SIDE_MS = 4000;
@@ -465,6 +467,8 @@ async function tick() {
   if (sideDue && !titleLabBusy) { titleLabBusy = true; runTitleLabs(sb, YT_API_KEY, ytBudgetSpend, 2).catch((e: any) => log("title lab failed", e?.message)).finally(() => { titleLabBusy = false; }); }
   // Title Searches: a topic prompt -> ranked titles across YouTube; ~450 units each, capped per day inside.
   if (sideDue && !titleSearchBusy) { titleSearchBusy = true; runTitleSearches(sb, YT_API_KEY, ytBudgetLeft, ytBudgetSpend).catch((e: any) => log("title search failed", e?.message)).finally(() => { titleSearchBusy = false; }); }
+  // Full transcripts: every reel of a requested creator, whole audio. Speech-to-text only, no model spend; one job at a time.
+  if (!transcriptsBusy && Date.now() - lastTranscripts > 20e3) { lastTranscripts = Date.now(); transcriptsBusy = true; runTranscripts(sb, () => houseIgToken(sb)).catch((e: any) => log("transcripts failed", e?.message)).finally(() => { transcriptsBusy = false; }); }
   // Neighborhood finds run alongside scans (they're short and users are watching).
   if (sideDue && !neighborhoodBusy) { neighborhoodBusy = true; runNeighborhoods(sb, 3).then(() => runBrandScans(sb, 1)).catch(() => {}).finally(() => { neighborhoodBusy = false; }); }
 
