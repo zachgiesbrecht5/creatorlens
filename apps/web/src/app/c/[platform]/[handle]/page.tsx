@@ -116,7 +116,8 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
                 : <WatchButton platform={p} handle={creator.handle} initial={watching} roster={(roster || []).map((r) => ({ id: r.id, name: r.name }))} initialFor={watchFor} />}
               {!viewer && <NeighborsButton creatorId={creator.id} paused={process.env.NEIGHBORHOODS_PAUSED === "1"} />}
               {unlocked && active && <span className="btn-like opacity-50" title="Re-printing; the PDF updates when the new print lands">download PDF ↓</span>}
-              {unlocked && !active && <a href={`/api/print/pdf?platform=${p}&handle=${encodeURIComponent(creator.handle)}`} className="btn-like" title="PDF with recurring sponsors, every disclosed deal, and clickable links to the posts">download PDF ↓</a>}
+              {unlocked && !active && <a href={`/api/print/pdf?platform=${p}&handle=${encodeURIComponent(creator.handle)}`} className="btn-like" title="Two pages written to the creator: their top posts, every brand they've worked with, and the brands we'd pitch them to. Made to attach to a first email.">download PDF ↓</a>}
+              {unlocked && !active && <a href={`/api/print/pdf?platform=${p}&handle=${encodeURIComponent(creator.handle)}&full=1`} className="btn-like" title="The same two pages plus the detail: what we noticed, the 24-month map, top posts, and every disclosed deal with links">full PDF ↓</a>}
               {unlocked && p === "youtube" && <Link href={`/c/youtube/${encodeURIComponent(creator.handle)}/titles`} className="btn-like" title="Every title scored against the channel's own median, the patterns that travel, and a note you can send the creator">Title Lab →</Link>}
             </div>}
             {user && (missing.length > 0 || neighbors.length > 0) && <Missing missing={missing} neighbors={neighbors} lane={creator.category || "this lane"} creatorId={creator.id} platform={p} />}

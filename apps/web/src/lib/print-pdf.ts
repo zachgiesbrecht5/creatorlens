@@ -5,11 +5,12 @@ import { FONTS } from "@/lib/print-fonts";
 
 // The print as a document a manager sends to the creator it is about, to show
 // "we looked at your partnerships properly". Everything is written to them (you / your).
-// Page 1 is a cover that can stand alone: one big number, deals by quarter, three
-// things we noticed, and their 24-month map. Page 2 is the evidence: their top
-// posts (giveaways named kindly), format and opener averages, and every partnership
-// with a live link. The last page is the pitch: three moves we'd make first. Letter size, Inter + JetBrains Mono embedded
-// (the same faces as the site), real link annotations.
+// Two pages by default, both ink, built to be skimmed from an email:
+//   1. the cover: their own top posts as a photo strip, one hero number, deals by
+//      quarter, and every brand they've worked with as a wall of names;
+//   2. the pitch: brands we'd pitch them to, gaps in their lane, first moves, sign-off.
+// With full=true the evidence follows on paper pages: what we noticed, the 24-month
+// map, top posts with hooks, format and opener averages, and every partnership linked.
 
 const W = 612, H = 792, M = 40, FOOT = 62;
 const hex = (h: string) => rgb(parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255);
@@ -18,6 +19,8 @@ const LINE = hex("#DDE1E8"), LINE2 = hex("#ECEEF2"), ACCENT = hex("#2F5BFF"), GR
 const BLUE_ON_INK = hex("#8FA8FF"), ON_INK = hex("#B4BBC8"), ON_INK_DIM = hex("#7C8494"), INK_RULE = hex("#252A35");
 const CAT: Record<string, string> = { Tech: "#2F5BFF", Food: "#E07A2E", Fashion: "#B0368A", Home: "#0E7A4E", Beauty: "#D64578", Business: "#5C6373", Travel: "#1F9ECF", Entertainment: "#7D3BED", Wellness: "#2BB573", Fitness: "#F04545", Sports: "#F59E0A", Finance: "#3D4656", Auto: "#384052", Baby: "#F573B5", Health: "#0FBA82", Lifestyle: "#8C5CF5", Pets: "#A16108", Education: "#0DA6E8", Outdoors: "#4D7D0F", Gaming: "#6366F2", Coffee: "#78360F", DIY: "#B5540A", Parenting: "#F573B5", Dad: "#F573B5" };
 const NO_CAT = hex("#9AA1AE");
+/** A category colour lifted toward white so it stays readable on the ink pages. */
+const onInk = (c: RGB) => rgb(c.red + (1 - c.red) * 0.42, c.green + (1 - c.green) * 0.42, c.blue + (1 - c.blue) * 0.42);
 const catColor = (c: string | null | undefined) => (c && CAT[c] ? hex(CAT[c]) : NO_CAT);
 
 /** Text the embedded fonts can draw: Latin with accents and real punctuation. Emoji and other scripts are dropped. */
@@ -61,7 +64,7 @@ export function laneRead(lane: any[], creatorId: string, mine: Set<string>, myCa
 
 type Opt = { f?: PDFFont; size?: number; color?: RGB; track?: number; align?: "left" | "right" | "center" };
 
-export async function renderPrint({ c, platform, wall, months, by, lane }: { c: any; platform: string; wall: any[]; recent?: any[]; months: any[]; by?: { name?: string | null; org?: string | null; signoff?: string | null }; lane?: (LaneRead & { counts?: boolean }) | null }): Promise<Uint8Array> {
+export async function renderPrint({ c, platform, wall, months, by, lane, full }: { c: any; platform: string; wall: any[]; recent?: any[]; months: any[]; by?: { name?: string | null; org?: string | null; signoff?: string | null }; lane?: (LaneRead & { counts?: boolean }) | null; full?: boolean }): Promise<Uint8Array> {
   const rows = (wall || []).filter((w) => w.best_label !== "Low");
   const repeats = rows.filter((w) => w.repeat_partner);
   const name = sane(c.display_name || `@${c.handle}`) || `@${monoSafe(c.handle)}`;
@@ -172,13 +175,13 @@ export async function renderPrint({ c, platform, wall, months, by, lane }: { c: 
   const giveaways = top6.filter(isGiveaway).length;
   const metricLabel = String(perf?.metric_label || (platform === "youtube" ? "views" : "engagement"));
 
-  // ── masthead ──────────────────────────────────────────────────────────
-  newPage(true);
-  const mastH = 296, mastY = H - mastH;
-  page.drawRectangle({ x: 0, y: mastY, width: W, height: mastH, color: INK });
-  // a receipt's torn edge: paper bites along the bottom of the ink
-  for (let x = 5; x < W; x += 10) page.drawCircle({ x, y: mastY, size: 2.6, color: PAPER });
-  label("S p o n s o r p r i n t".replace(/ /g, ""), M, H - 34, ON_INK, { size: 7.5, track: 3.2 });
+  // ── cover: one ink page ────────────────────────────────────────────────
+  const inkPages = new Set<PDFPage>();
+  const TILE = hex("#141924");
+  const thumbs = await Promise.all(top6.map((t: any) => jpg(t.thumb)));
+  newPage(true); inkPages.add(page);
+  page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: INK });
+  label("Sponsorprint", M, H - 34, ON_INK, { size: 7.5, track: 3.2 });
   const printedOn = c.last_scanned_at ? new Date(c.last_scanned_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
   const printNo = `Print #${String(Math.abs(hash(String(c.id)))).slice(0, 5)}${printedOn ? `  ·  ${printedOn}` : ""}`;
   const byLine = [sane(by?.name || ""), sane(by?.org || "")].filter(Boolean).join(", ");
@@ -192,57 +195,175 @@ export async function renderPrint({ c, platform, wall, months, by, lane }: { c: 
   text(clipTo(name, display, nameSize, textW), textX, H - 76, { f: display, size: nameSize, color: WHITE });
   const metaBits = [platformLabel, `@${c.handle}`, `${fmtK(c.followers)} ${platform === "youtube" ? "subscribers" : "followers"}`, c.category].filter(Boolean) as string[];
   text(clipTo(metaBits.join("  ·  "), mono, 7.8, textW), textX, H - 91, { f: mono, size: 7.8, color: ON_INK });
-  const bioLine = sane(String(c.bio || "").split(/\S+@\S+\.\S+|https?:\S+/)[0]);
-  if (bioLine) text(clipTo(bioLine, font, 8.2, Math.min(textW, 320)), textX, H - 104, { size: 8.2, color: ON_INK_DIM });
+  y = H - 126;
 
-  // hero: one number, then the three facts that qualify it
-  const baseY = H - 226;
-  const big = String(rows.length);
-  let bigSize = 124; while (bigSize > 60 && display.widthOfTextAtSize(big, bigSize) > 170) bigSize -= 4;
-  page.pushOperators(setCharacterSpacing(-bigSize * 0.035));
-  page.drawText(big, { x: M - bigSize * 0.045, y: baseY, size: bigSize, font: display, color: WHITE });
-  page.pushOperators(setCharacterSpacing(0));
-  const bigW = display.widthOfTextAtSize(big, bigSize) - bigSize * 0.035 * big.length;
-  const chartW = 196, chartX = W - M - chartW;
-  const stX = M + bigW + 16, stW = chartX - 18 - stX;
-  const heroLines = wrap(rows.length === 1 ? "brand has partnered with you" : "brands have partnered with you", semi, 14.5, stW, 2);
-  heroLines.forEach((ln, i) => text(ln, stX, baseY + 74 - i * 17.5, { f: semi, size: 14.5, color: WHITE }));
-  const facts = [
-    totalDeals ? `across ${totalDeals} sponsored post${totalDeals === 1 ? "" : "s"}` : "",
-    repeats.length ? `${repeats.length} came back for more` : "",
-    rows[0]?.last_seen ? `Latest: ${sane(rows[0].brand)}, ${mon(rows[0].last_seen)}` : "",
-  ].filter(Boolean);
-  facts.forEach((s, i) => text(clipTo(s, font, 10, stW), stX, baseY + 74 - heroLines.length * 17.5 - 3 - i * 15, { size: 10, color: /came back/.test(s) ? hex("#6EE7A8") : ON_INK }));
-
-  // deals by quarter, last eight quarters
-  if (dated.length) {
-    const maxQ = Math.max(...quarters.map((q) => q.n), 1), bh = 64, by = baseY + 13, gap = 6, bw = (chartW - gap * 7) / 8;
-    label("Your brand deals by quarter", chartX, by + bh + 22, ON_INK_DIM);
-    quarters.forEach((q, i) => {
-      const x = chartX + i * (bw + gap), h = q.n ? Math.max(3, (q.n / maxQ) * bh) : 1.2;
-      page.drawRectangle({ x, y: by, width: bw, height: h, color: q.n ? (q.current ? ACCENT : hex("#E6E9EF")) : INK_RULE });
-      if (q.n) text(String(q.n), x + bw / 2, by + h + 4, { f: semi, size: 8, color: q.current ? BLUE_ON_INK : WHITE, align: "center" });
-      text(q.q, x + bw / 2, by - 10, { f: mono, size: 6, color: q.current ? WHITE : ON_INK_DIM, align: "center" });
-      if (q.q === "Q1" || i === 0) text(`'${q.yr}`, x + bw / 2, by - 18, { f: mono, size: 6, color: ON_INK_DIM, align: "center" });
+  // their own best posts, as big as the page allows: the first thing they recognise
+  const strip = top6.map((t: any, i: number) => ({ t, img: thumbs[i] })).filter((s) => s.img).slice(0, 4);
+  if (strip.length >= 3) {
+    const g = 8, pw = (W - 2 * M - g * (strip.length - 1)) / strip.length, ph = Math.min(168, pw * 1.22);
+    label(`Your biggest posts · ${metricLabel}`, M, y, ON_INK_DIM); y -= 10;
+    strip.forEach((sp, i) => {
+      const x = M + i * (pw + g);
+      drawCoverImage(sp.img!, x, y - ph, pw, ph, 6);
+      if (sp.t.url) links.push({ page, x, y: y - ph, w: pw, h: ph, url: sp.t.url });
+      const mw = text(fmtK(sp.t.metric), x, y - ph - 15, { f: semi, size: 10.5, color: WHITE });
+      if (perf.median >= 100) text(clipTo(`${(sp.t.metric / perf.median).toFixed(1)}x your usual`, font, 7.8, pw - mw - 6), x + mw + 5, y - ph - 15, { size: 7.8, color: ON_INK_DIM });
     });
+    y -= ph + 15 + 26;
   }
 
-  // category strip
-  if (totalDeals > 0) {
-    const sy = mastY + 34; let bx = M; const full = W - 2 * M;
-    for (const [ct, n] of catList) { const w = (n / totalDeals) * full; page.drawRectangle({ x: bx, y: sy, width: Math.max(w - 1.2, 0.6), height: 3.5, color: ct === "Other" ? hex("#4A5160") : catColor(ct) }); bx += w; }
-    let lx = M;
-    for (const [ct, n] of catList.slice(0, 7)) {
-      const s = `${ct === "Other" ? "Uncategorised" : ct} ${n}`; const w = tw(s.toUpperCase(), monoMed, 6.2, 0.8);
-      if (lx + w + 10 > W - M) break;
-      page.drawRectangle({ x: lx, y: sy - 14.2, width: 4.5, height: 4.5, color: ct === "Other" ? hex("#4A5160") : catColor(ct) });
-      label(s, lx + 8, sy - 14, ON_INK, { size: 6.2, track: 0.8 }); lx += w + 22;
+  if (!rows.length) {
+    y -= 40;
+    for (const ln of wrap("We didn't find a disclosed partnership in your public posts yet.", display, 28, W - 2 * M, 3)) { text(ln, M, y, { f: display, size: 28, color: WHITE }); y -= 34; }
+    y -= 6;
+    for (const ln of wrap("That is a clean slate, not a problem. The first brand deal is the one we'd help you land.", font, 12, 420, 3)) { text(ln, M, y, { size: 12, color: ON_INK }); y -= 17; }
+  } else {
+    // hero: one number, then the facts that qualify it
+    const baseY = y - 96;
+    const big = String(rows.length);
+    let bigSize = 124; while (bigSize > 60 && display.widthOfTextAtSize(big, bigSize) > 170) bigSize -= 4;
+    page.pushOperators(setCharacterSpacing(-bigSize * 0.035));
+    page.drawText(big, { x: M - bigSize * 0.045, y: baseY, size: bigSize, font: display, color: WHITE });
+    page.pushOperators(setCharacterSpacing(0));
+    const bigW = display.widthOfTextAtSize(big, bigSize) - bigSize * 0.035 * big.length;
+    const chartW = 196, chartX = W - M - chartW;
+    const stX = M + bigW + 16, stW = chartX - 18 - stX;
+    const heroLines = wrap(rows.length === 1 ? "brand has partnered with you" : "brands have partnered with you", semi, 14.5, stW, 2);
+    heroLines.forEach((ln, i) => text(ln, stX, baseY + 74 - i * 17.5, { f: semi, size: 14.5, color: WHITE }));
+    const facts = [
+      totalDeals ? `across ${totalDeals} sponsored post${totalDeals === 1 ? "" : "s"}` : "",
+      repeats.length ? `${repeats.length} came back for more` : "",
+      rows[0]?.last_seen ? `Latest: ${sane(rows[0].brand)}, ${mon(rows[0].last_seen)}` : "",
+    ].filter(Boolean);
+    facts.forEach((s, i) => text(clipTo(s, font, 10, stW), stX, baseY + 74 - heroLines.length * 17.5 - 3 - i * 15, { size: 10, color: /came back/.test(s) ? hex("#6EE7A8") : ON_INK }));
+
+    // deals by quarter, last eight quarters
+    if (dated.length) {
+      const maxQ = Math.max(...quarters.map((q) => q.n), 1), bh = 60, by = baseY + 13, gap = 6, bw = (chartW - gap * 7) / 8;
+      label("Your brand deals by quarter", chartX, by + bh + 20, ON_INK_DIM);
+      quarters.forEach((q, i) => {
+        const x = chartX + i * (bw + gap), h = q.n ? Math.max(3, (q.n / maxQ) * bh) : 1.2;
+        page.drawRectangle({ x, y: by, width: bw, height: h, color: q.n ? (q.current ? ACCENT : hex("#E6E9EF")) : INK_RULE });
+        if (q.n) text(String(q.n), x + bw / 2, by + h + 4, { f: semi, size: 8, color: q.current ? BLUE_ON_INK : WHITE, align: "center" });
+        text(q.q, x + bw / 2, by - 10, { f: mono, size: 6, color: q.current ? WHITE : ON_INK_DIM, align: "center" });
+        if (q.q === "Q1" || i === 0) text(`'${q.yr}`, x + bw / 2, by - 18, { f: mono, size: 6, color: ON_INK_DIM, align: "center" });
+      });
     }
+    y = baseY - 46;
+
+    // every brand they've worked with, as a wall of names: the ones that came back are bright and counted
+    rule(M, W - M, y + 18, INK_RULE, 0.8);
+    const lw0 = label("Who you've worked with", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 });
+    if (repeats.length) text("bright names came back for more", M + lw0 + 12, y, { size: 8, color: ON_INK_DIM });
+    y -= 14;
+    const ordered = [...[...repeats].sort((a, b) => Number(b.deals) - Number(a.deals)), ...rows.filter((r) => !r.repeat_partner)];
+    const avail = y - 62, fullW = W - 2 * M;
+    const flow = (sz: number, items: any[]) => {
+      const lines: { r: any; x: number; nw: number }[][] = [[]]; let x = 0;
+      for (const r of items) {
+        const nw = display.widthOfTextAtSize(sane(r.brand), sz), cw = r.repeat_partner ? semi.widthOfTextAtSize(` ×${r.deals}`, sz * 0.6) : 0, w = sz * 0.75 + nw + cw;
+        if (x + w > fullW && lines[lines.length - 1].length) { lines.push([]); x = 0; }
+        lines[lines.length - 1].push({ r, x, nw }); x += w + sz * 1.05;
+      }
+      return lines;
+    };
+    let sz = 23, shown = ordered, lines = flow(sz, shown);
+    while (sz > 9.5 && lines.length * sz * 1.62 > avail) { sz -= 0.5; lines = flow(sz, shown); }
+    while (lines.length * sz * 1.62 > avail && shown.length > 4) { shown = shown.slice(0, -1); lines = flow(sz, shown); }
+    lines.forEach((ln, i) => {
+      const yy = y - sz * 1.05 - i * sz * 1.62;
+      for (const it of ln) {
+        const x = M + it.x;
+        page.drawCircle({ x: x + sz * 0.2, y: yy + sz * 0.34, size: sz * 0.16, color: catColor(it.r.category) });
+        text(sane(it.r.brand), x + sz * 0.75, yy, { f: display, size: sz, color: it.r.repeat_partner ? WHITE : hex("#8E96A6") });
+        if (it.r.repeat_partner) text(` ×${it.r.deals}`, x + sz * 0.75 + it.nw, yy + sz * 0.3, { f: semi, size: sz * 0.6, color: BLUE_ON_INK });
+      }
+    });
+    if (shown.length < ordered.length) text(`and ${ordered.length - shown.length} more`, W - M, 56, { size: 8, color: ON_INK_DIM, align: "right" });
   }
-  y = mastY - 32;
+
+  // ── the pitch: where we'd take them next, on its own ink page ──────────
+  if (rows.length) {
+    const yearAgo = `${cols[12]}-01`;
+    const recentOnce = rows.filter((r) => !r.repeat_partner && String(r.last_seen || "") >= yearAgo).slice(0, 4);
+    const quiet = [...rows].filter((r) => r.last_seen && String(r.last_seen) < yearAgo).sort((a, b) => Number(b.deals) - Number(a.deals)).slice(0, 3);
+    const names = (rs: any[]) => listAnd(rs.map((r) => sane(r.brand)));
+    const moves: [string, string][] = [];
+    if (repeats.length) { const rs = [...repeats].sort((a, b) => Number(b.deals) - Number(a.deals)).slice(0, 3); moves.push(["Turn your repeats into longer deals", `${names(rs)} already ${rs.length === 1 ? "rebooks" : "rebook"} you. That is the case for a multi-month or ambassador deal instead of one post at a time.`]); }
+    if (recentOnce.length) moves.push(["Go back for the second deal", `${names(recentOnce)} ${recentOnce.length === 1 ? "has" : "have"} worked with you in the last year${recentOnce.some((r) => Number(r.deals) > 1) ? "" : ", once each"}. They already said yes, so a follow-up is the easiest deal to win.`]);
+    if (quiet.length) moves.push(["Reopen the quiet ones", `It has been over a year since ${names(quiet)}. We'd go back with your current numbers and a fresh idea.`]);
+    if (topCat && moves.length < 3) moves.push([`Go deeper in ${topCat[0].toLowerCase()}`, `${topCat[1]} of your ${totalDeals} deals are in ${topCat[0].toLowerCase()}. Brands next door to the ones on your list can already see you fit.`]);
+    const laneName = String(c.category || "").toLowerCase();
+    const leads = (lane?.leads || []).slice(0, 6), gaps = (lane?.gaps || []).slice(0, 3), pitchLed = leads.length >= 2;
+    page = pdf.addPage([W, H]); inkPages.add(page);
+    page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: INK });
+    label("Sponsorprint", M, H - 34, ON_INK, { size: 7.5, track: 3.2 });
+    text(name, W - M, H - 34.5, { f: semi, size: 8, color: ON_INK, align: "right" });
+    y = H - 90;
+    label("Where we'd take you next", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 }); y -= 40;
+    const headline = pitchLed ? `${["Two", "Three", "Four", "Five", "Six"][leads.length - 2]} brands we'd pitch you to first.` : moves.length === 1 ? "The first move we'd make with you." : `${["Two", "Three"][Math.min(moves.length, 3) - 2]} moves we'd make with you first.`;
+    for (const ln of wrap(headline, display, 30, W - 2 * M, 2)) { page.pushOperators(setCharacterSpacing(-0.6)); page.drawText(ln, { x: M, y, size: 30, font: display, color: WHITE }); page.pushOperators(setCharacterSpacing(0)); y -= 35; }
+
+    if (pitchLed) {
+      y += 13;
+      text(`They're booking ${laneName} creators like you right now, and they aren't on your list yet.`, M, y, { size: 10.5, color: ON_INK }); y -= 22;
+      const g = 10, cw3 = (W - 2 * M - 2 * g) / 3, th = lane?.counts ? 68 : 56;
+      leads.forEach((b, i) => {
+        const x = M + (i % 3) * (cw3 + g), top = y - Math.floor(i / 3) * (th + g), nm = sane(b.brand);
+        rrect(x, top, cw3, th, 7, { color: TILE, borderColor: INK_RULE, borderWidth: 0.8 });
+        page.drawRectangle({ x: x + 14, y: top - 19.6, width: 4.5, height: 4.5, color: catColor(b.category) });
+        label(sane(b.category || "Brand"), x + 23, top - 19.5, ON_INK_DIM, { size: 6.2, track: 0.9 });
+        let ns = 19; while (ns > 11 && display.widthOfTextAtSize(nm, ns) > cw3 - 28) ns -= 0.5;
+        text(clipTo(nm, display, ns, cw3 - 28), x + 14, top - 42, { f: display, size: ns, color: WHITE });
+        if (lane?.counts) text(`${b.n} ${laneName} creators this year`, x + 14, top - 56, { size: 7.8, color: ON_INK_DIM });
+      });
+      y -= Math.ceil(leads.length / 3) * (th + g) + 26;
+    } else y -= 10;
+
+    // categories the lane has partners in and they don't
+    if (gaps.length) {
+      rule(M, W - M, y + 20, INK_RULE, 0.8);
+      const lw = label("Gaps we'd fill", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 });
+      text("categories your lane gets paid in that aren't on your list yet", M + lw + 12, y, { size: 8, color: ON_INK_DIM });
+      y -= 30;
+      const g = 20, cw3 = (W - 2 * M - 2 * g) / 3; let maxL = 0;
+      gaps.forEach((gp, i) => {
+        const x = M + i * (cw3 + g), ct = sane(gp.category), pct = `${Math.round(gp.share * 100)}%`;
+        const pw = text(pct, x, y - 6, { f: display, size: 24, color: onInk(catColor(gp.category)) });
+        text(ct, x + pw + 8, y - 6, { f: display, size: 13.5, color: WHITE });
+        const body = `of ${laneName} creators we track have ${/^[aeiou]/i.test(ct) ? "an" : "a"} ${ct.toLowerCase()} partner.${gp.examples.length ? ` Think ${listAnd(gp.examples.map(sane))}.` : ""}`;
+        const ls = wrap(body, font, 8.6, cw3, 3); maxL = Math.max(maxL, ls.length);
+        ls.forEach((ln, j) => text(ln, x, y - 22 - j * 12, { size: 8.6, color: ON_INK }));
+      });
+      y -= 22 + maxL * 12 + 22;
+    }
+
+    // first moves: roomy when they lead the page, compact under the pitch
+    const big = !pitchLed && !gaps.length, mv = moves.slice(0, 3);
+    if (pitchLed || gaps.length) { rule(M, W - M, y + 20, INK_RULE, 0.8); label(mv.length === 1 ? "The first move we'd make" : "The first moves we'd make", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 }); y -= 26; }
+    else y -= 8;
+    const hs = big ? 14.5 : 12, bs = big ? 9.8 : 9, lh = bs * 1.4, floor = 138;
+    for (let i = 0; i < mv.length; i++) {
+      const [h, b] = mv[i], ls = wrap(b, font, bs, 470, big ? 3 : 2), need = hs + 5 + ls.length * lh;
+      if (y - need < floor) break;
+      if (big) rule(M, W - M, y + 22, INK_RULE, 0.8);
+      text(`0${i + 1}`, M, y, { f: monoMed, size: 8.5, color: BLUE_ON_INK });
+      text(clipTo(h, display, hs, W - 2 * M - 40), M + 40, y - 1, { f: display, size: hs, color: WHITE });
+      ls.forEach((ln, j) => text(ln, M + 40, y - hs - 5 - j * lh, { size: bs, color: ON_INK }));
+      y -= need + (big ? 30 : 13);
+    }
+    const signoff = sane(by?.signoff || "").replace(/[,.\s]+$/, "");
+    rule(M, W - M, 136, INK_RULE, 0.8);
+    if (signoff && signoff.length <= 40) text(signoff.charAt(0).toUpperCase() + signoff.slice(1) + ",", M, 108, { f: display, size: 20, color: WHITE });
+    if (byLine) text(byLine, signoff ? M : M, signoff ? 90 : 104, { f: semi, size: 10, color: ON_INK });
+    text(`Prepared for ${name}${printedOn ? ` on ${printedOn}` : ""}`, M, byLine ? (signoff ? 76 : 90) : 104, { size: 9, color: ON_INK_DIM });
+  }
+
+  // ── the evidence, on paper, only in the full print ────────────────────
+  if (full) newPage();
 
   // ── the read: a headline and three short notes ────────────────────────
-  {
+  if (full) {
     label("What we noticed", M, y, ACCENT, { size: 7.5, track: 1.4 }); y -= 25;
     const lead = !rows.length ? "We didn't find a disclosed partnership in your public posts yet."
       : (repeats.length ? `${repeats.length} of your ${rows.length} brand partners came back for more.` : rows.length === 1 ? "One brand has partnered with you so far." : `${rows.length} brands have partnered with you, each of them once so far.`)
@@ -284,7 +405,7 @@ export async function renderPrint({ c, platform, wall, months, by, lane }: { c: 
   const monthsBy = new Map<string, Map<string, number>>();
   for (const d of dated) { const e = monthsBy.get(d.brand_id) || monthsBy.set(d.brand_id, new Map()).get(d.brand_id)!; e.set(d.ym, (e.get(d.ym) || 0) + 1); }
   const mapAll = rows.filter((r) => [...(monthsBy.get(r.brand_id)?.keys() || [])].some((kk) => cols.includes(kk)));
-  if (mapAll.length) {
+  if (full && mapAll.length) {
     const rh = 14.2, overhead = 26 + 16 + 22;
     let fit = Math.floor((y - FOOT - overhead) / rh);
     if (fit < Math.min(6, mapAll.length)) { newPage(); fit = Math.floor((y - FOOT - overhead) / rh); }
@@ -319,13 +440,12 @@ export async function renderPrint({ c, platform, wall, months, by, lane }: { c: 
   // Cards read top to bottom: how big, what kind of post, the line a viewer got
   // first (and which channel carried it), then one supporting line if another
   // channel had text. Empty channels are left out rather than labelled.
-  if (n6) {
+  if (full && n6) {
     const gapX = 12, cardW = (W - 2 * M - gapX) / 2, gapY = 8;
     const reads: HookRead[] = top6.map((t: any) => readHook(t, platform));
     // a second channel with its own words (say, on-screen text under a spoken hook) earns one extra line on every card
     const others = reads.map((h) => (h.source === "caption" ? undefined : h.channels.find((ch) => ch.text && ch.text !== h.lead && ch.key !== (h.source === "said" ? "voice" : "screen"))));
     const cardH = others.some(Boolean) ? 102 : 90;
-    const thumbs = await Promise.all(top6.map((t: any) => jpg(t.thumb)));
     const flagGiveaways = giveaways * 2 >= n6 && giveaways >= 2;
     if (y - (26 + (flagGiveaways ? 30 : 4) + cardH) < FOOT) newPage();
     section("Your top posts", `best ${n6} of your last ${perf.items} · your typical post gets ${fmtK(perf.median)} ${metricLabel}`, cardH);
@@ -396,7 +516,7 @@ export async function renderPrint({ c, platform, wall, months, by, lane }: { c: 
   }
 
   // ── all disclosed sponsors ────────────────────────────────────────────
-  if (rows.length) {
+  if (full && rows.length) {
     let rh = 15.4; const two = rows.length > 8, gap = 24, cw = two ? (W - 2 * M - gap) / 2 : W - 2 * M;
     section("Every partnership we found", `${rows.length} brand${rows.length === 1 ? "" : "s"} · ${totalDeals} deal${totalDeals === 1 ? "" : "s"} · newest first${repeats.length ? " · blue count = came back" : ""}${rows.some((r) => /\(\?\)/.test(r.brand)) ? " · (?) = brand guessed from the post, verify" : ""}`, 14 + rh * Math.min(4, rows.length));
     const xs = (x: number) => ({ brand: x + 11, cat: x + cw - 136, deals: x + cw - 64, last: x + cw - 58, post: x + cw });
@@ -423,69 +543,6 @@ export async function renderPrint({ c, platform, wall, months, by, lane }: { c: 
     }
   }
 
-
-  // ── where we'd start: the pitch, on its own ink page ───────────────────
-  const inkPages = new Set<PDFPage>();
-  if (rows.length) {
-    const yearAgo = `${cols[12]}-01`;
-    const recentOnce = rows.filter((r) => !r.repeat_partner && String(r.last_seen || "") >= yearAgo).slice(0, 4);
-    const quiet = [...rows].filter((r) => r.last_seen && String(r.last_seen) < yearAgo).sort((a, b) => Number(b.deals) - Number(a.deals)).slice(0, 3);
-    const names = (rs: any[]) => listAnd(rs.map((r) => sane(r.brand)));
-    const moves: [string, string][] = [];
-    if (repeats.length) { const rs = [...repeats].sort((a, b) => Number(b.deals) - Number(a.deals)).slice(0, 3); moves.push(["Turn your repeats into longer deals", `${names(rs)} already ${rs.length === 1 ? "rebooks" : "rebook"} you. That is the case for a multi-month or ambassador deal instead of one post at a time.`]); }
-    if (recentOnce.length) moves.push(["Go back for the second deal", `${names(recentOnce)} ${recentOnce.length === 1 ? "has" : "have"} worked with you in the last year${recentOnce.some((r) => Number(r.deals) > 1) ? "" : ", once each"}. They already said yes, so a follow-up is the easiest deal to win.`]);
-    if (quiet.length) moves.push(["Reopen the quiet ones", `It has been over a year since ${names(quiet)}. We'd go back with your current numbers and a fresh idea.`]);
-    if (topCat && moves.length < 3) moves.push([`Go deeper in ${topCat[0].toLowerCase()}`, `${topCat[1]} of your ${totalDeals} deals are in ${topCat[0].toLowerCase()}. Brands next door to the ones on your list can already see you fit.`]);
-    page = pdf.addPage([W, H]); inkPages.add(page);
-    page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: INK });
-    label("Sponsorprint", M, H - 34, ON_INK, { size: 7.5, track: 3.2 });
-    text(name, W - M, H - 34.5, { f: semi, size: 8, color: ON_INK, align: "right" });
-    y = H - 96;
-    label("Where we'd start", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 }); y -= 38;
-    for (const ln of wrap(moves.length === 1 ? "The first move we'd make with you." : `${["Two", "Three"][Math.min(moves.length, 3) - 2]} moves we'd make with you first.`, display, 28, W - 2 * M, 2)) { page.pushOperators(setCharacterSpacing(-0.5)); page.drawText(ln, { x: M, y, size: 28, font: display, color: WHITE }); page.pushOperators(setCharacterSpacing(0)); y -= 33; }
-    y -= 22;
-    moves.slice(0, 3).forEach(([h, b], i) => {
-      rule(M, W - M, y + 22, INK_RULE, 0.8);
-      text(`0${i + 1}`, M, y, { f: monoMed, size: 8.5, color: BLUE_ON_INK });
-      text(clipTo(h, display, 14.5, W - 2 * M - 40), M + 40, y - 1, { f: display, size: 14.5, color: WHITE });
-      const ls = wrap(b, font, 9.8, 440, 3);
-      ls.forEach((ln, j) => text(ln, M + 40, y - 19 - j * 13.6, { size: 9.8, color: ON_INK }));
-      y -= 19 + ls.length * 13.6 + 30;
-    });
-    const laneName = String(c.category || "").toLowerCase(), floor = 150;
-    // brands booking creators like them that have never booked them
-    if (lane?.leads?.length && y - (40 + Math.ceil(Math.min(lane.leads.length, 6) / 3) * 34) > floor) {
-      rule(M, W - M, y + 22, INK_RULE, 0.8);
-      const lw = label("Brands we'd pitch you to", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 });
-      text(`booking ${laneName} creators like you right now, and not on your list yet`, M + lw + 12, y, { size: 8, color: ON_INK_DIM });
-      y -= 26;
-      const cw3 = (W - 2 * M - 2 * 20) / 3, ls = lane.leads.slice(0, 6);
-      ls.forEach((b, i) => { const x = M + (i % 3) * (cw3 + 20), yy = y - Math.floor(i / 3) * 34; text(clipTo(sane(b.brand), display, 13.5, cw3), x, yy, { f: display, size: 13.5, color: WHITE }); text(lane.counts ? `${b.n} ${laneName} creators this year` : sane(b.category || ""), x, yy - 12.5, { size: 7.8, color: ON_INK_DIM }); });
-      y -= Math.ceil(ls.length / 3) * 34 + 20;
-    }
-    // categories the lane has partners in and they don't
-    const gaps = (lane?.gaps || []).slice(0, 3);
-    if (gaps.length && y - 96 > floor) {
-      rule(M, W - M, y + 22, INK_RULE, 0.8);
-      const lw = label("Gaps we'd fill", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 });
-      text("categories your lane gets paid in that aren't on your list yet", M + lw + 12, y, { size: 8, color: ON_INK_DIM });
-      y -= 26;
-      const cw3 = (W - 2 * M - 2 * 20) / 3; let maxL = 0;
-      gaps.forEach((g, i) => {
-        const x = M + i * (cw3 + 20), ct = sane(g.category);
-        text(ct, x, y, { f: display, size: 13.5, color: WHITE });
-        const body = `${Math.round(g.share * 100)}% of ${laneName} creators we track have ${/^[aeiou]/i.test(ct) ? "an" : "a"} ${ct.toLowerCase()} partner.${g.examples.length ? ` Think ${listAnd(g.examples.map(sane))}.` : ""}`;
-        const ls = wrap(body, font, 8.6, cw3, 4); maxL = Math.max(maxL, ls.length);
-        ls.forEach((ln, j) => text(ln, x, y - 14 - j * 12, { size: 8.6, color: ON_INK }));
-      });
-      y -= 14 + maxL * 12 + 20;
-    }
-    rule(M, W - M, y + 22, INK_RULE, 0.8);
-    const signoff = sane(by?.signoff || "").replace(/[,.\s]+$/, "");
-    if (signoff && signoff.length <= 40) text(signoff.charAt(0).toUpperCase() + signoff.slice(1) + ",", M, 124, { f: display, size: 22, color: WHITE });
-    if (byLine) text(byLine, M, signoff ? 104 : 112, { f: semi, size: 10, color: ON_INK });
-    text(`Prepared for ${name}${printedOn ? ` on ${printedOn}` : ""}`, M, byLine ? (signoff ? 89 : 97) : 112, { size: 9, color: ON_INK_DIM });
-  }
 
   // ── footers ───────────────────────────────────────────────────────────
   const pages = pdf.getPages();

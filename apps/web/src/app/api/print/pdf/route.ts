@@ -30,7 +30,9 @@ export async function GET(req: NextRequest) {
     const read = laneRead(laneRows || [], c.id, new Set((wall || []).map((w) => w.brand_id)), new Set(mineRows.map((w) => w.category).filter(Boolean)), since);
     lane = read ? { ...read, counts: insider || seesAll } : null;
   }
-  const bytes = await renderPrint({ c, platform, wall: wall || [], months: months || [], by, lane });
+  // default is the two-page version built for a first email; ?full=1 adds the evidence pages
+  const full = req.nextUrl.searchParams.get("full") === "1";
+  const bytes = await renderPrint({ c, platform, wall: wall || [], months: months || [], by, lane, full });
   const name = sane(c.display_name || `@${c.handle}`);
   return new NextResponse(Buffer.from(bytes), { headers: { "content-type": "application/pdf", "content-disposition": `attachment; filename="${name.replace(/[^A-Za-z0-9]+/g, "-") || "print"}-sponsorprint.pdf"` } });
 }
