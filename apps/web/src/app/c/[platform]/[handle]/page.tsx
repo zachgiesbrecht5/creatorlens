@@ -1,3 +1,5 @@
+import { EmailNotes } from "@/components/EmailNotes";
+import { emailNotes } from "@/lib/email-notes";
 import Link from "next/link";
 import { supabaseAdmin, currentUser, currentAccess, canSeeCreator } from "@/lib/supabase";
 import { UnlockCreator } from "@/components/UnlockCreator";
@@ -65,6 +67,10 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
   const whyBy = new Map((insights || []).map((i) => [i.brand_id, i]));
   const monthsBy = new Map<string, Set<string>>();
   for (const d of dealMonths || []) { const m = String(d.published_at).slice(0, 7); (monthsBy.get(d.brand_id) || monthsBy.set(d.brand_id, new Set()).get(d.brand_id)!).add(m); }
+  // Email notes: lines this creator said out loud (not ones shared with other creators, which are trending sounds)
+  let heardLines: { url: string; text: string }[] = [];
+  { const { data: hl } = await admin.from("heard_lines").select("key,url,text").eq("creator_id", creator.id).order("created_at", { ascending: false }).limit(12);
+    if (hl?.length) { const { data: shared } = await admin.from("heard_lines").select("key").in("key", hl.map((h) => h.key)).neq("creator_id", creator.id).limit(200); const sounds = new Set((shared || []).map((x) => x.key)); heardLines = hl.filter((h) => !sounds.has(h.key)).map((h) => ({ url: h.url, text: h.text })); } }
   // Missing opportunities: brands paying other creators in this lane, not (yet) this one.
   const myBrandIds = new Set(cards.map((c) => c.brand_id));
   let missing: { brand_id: string; brand: string; website: string | null; creators: number; sample: string[] }[] = [];
@@ -120,6 +126,7 @@ export default async function CreatorPage({ params, searchParams }: { params: Pr
               {unlocked && !active && <a href={`/api/print/pdf?platform=${p}&handle=${encodeURIComponent(creator.handle)}&full=1`} className="btn-like" title="The same two pages plus the detail: what we noticed, the 24-month map, top posts, and every disclosed deal with links">full PDF ↓</a>}
               {unlocked && p === "youtube" && <Link href={`/c/youtube/${encodeURIComponent(creator.handle)}/titles`} className="btn-like" title="Every title scored against the channel's own median, the patterns that travel, and a note you can send the creator">Title Lab →</Link>}
             </div>}
+            {unlocked && !viewer && (creator as any).performance && <div className="ms"><EmailNotes notes={emailNotes((creator as any).performance, heardLines)} firstName={String(creator.display_name || creator.handle).split(" ")[0]} stale={!Array.isArray((creator as any).performance.recent)} /></div>}
             {user && (missing.length > 0 || neighbors.length > 0) && <Missing missing={missing} neighbors={neighbors} lane={creator.category || "this lane"} creatorId={creator.id} platform={p} />}
           </div>
         </div>
