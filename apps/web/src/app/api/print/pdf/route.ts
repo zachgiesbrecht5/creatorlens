@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { currentAccess, supabaseAdmin, canSeeCreator } from "@/lib/supabase";
 import { renderPrint, laneRead, sane } from "@/lib/print-pdf";
 
+// Lanes that share brands. Used only to widen a lane that is too small to produce a pitch list.
+const LANE_GROUPS: string[][] = [["Health", "Wellness", "Fitness", "Food"], ["Fashion", "Beauty", "Lifestyle"], ["Tech", "Gaming"], ["Home", "DIY", "Design"], ["Parenting", "Dad", "Baby"], ["Outdoors", "Travel", "Sports"], ["Business", "Finance", "Legal", "Education"], ["Art", "Photography", "Books", "Entertainment"]];
+
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
@@ -24,10 +27,18 @@ export async function GET(req: NextRequest) {
   // lane-wide shares go to everyone; per-brand creator counts stay with the house.
   let lane = null;
   if (c.category) {
-    const { data: laneRows } = await admin.from("brand_wall_mv").select("brand_id,brand,category,creator_id,deals,last_seen,creators!partnerships_creator_id_fkey!inner(category)").eq("creators.category", c.category).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").limit(6000);
     const mineRows = (wall || []).filter((w) => w.best_label !== "Low");
+    const mine = new Set((wall || []).map((w) => w.brand_id)), myCats = new Set(mineRows.map((w) => w.category).filter(Boolean));
     const since = new Date(Date.now() - 365 * 864e5).toISOString();
-    const read = laneRead(laneRows || [], c.id, new Set((wall || []).map((w) => w.brand_id)), new Set(mineRows.map((w) => w.category).filter(Boolean)), since);
+    const laneFor = async (cats: string[]) => (await admin.from("brand_wall_mv").select("brand_id,brand,category,creator_id,deals,last_seen,creators!partnerships_creator_id_fkey!inner(category)").in("creators.category", cats).eq("is_junk", false).eq("is_self_brand", false).eq("is_mass_sponsor", false).neq("best_label", "Low").limit(8000)).data || [];
+    let read = laneRead(await laneFor([c.category]), c.id, mine, myCats, since);
+    // A small lane (Health has a dozen creators) finds no brand that books two of them. Widen to the
+    // neighbouring lanes and let brands from those categories through, so the pitch list isn't empty.
+    const group = LANE_GROUPS.find((g) => g.includes(c.category));
+    if ((read?.leads.length || 0) < 4 && group) {
+      const wide = laneRead(await laneFor(group), c.id, mine, myCats, since, new Set([...myCats, ...group]));
+      if (wide && wide.leads.length > (read?.leads.length || 0)) read = { ...wide, wide: true };
+    }
     lane = read ? { ...read, counts: insider || seesAll } : null;
   }
   // default is the two-page version built for a first email; ?full=1 adds the evidence pages

@@ -33,14 +33,14 @@ const listAnd = (a: string[]) => (a.length <= 1 ? a.join("") : `${a.slice(0, -1)
 const isGiveaway = (t: any) => /give\s?-?away/i.test(`${t?.hook || ""} ${t?.title || ""} ${t?.label || ""} ${t?.key || ""}`);
 const stripGiveawayClosed = (s: string) => s.replace(/^\s*\(*\s*giveaway\s+closed\s*\)*[\s:!-]*/i, "");
 
-export type LaneRead = { peers: number; leads: { brand: string; category: string | null; n: number }[]; gaps: { category: string; share: number; examples: string[] }[] };
+export type LaneRead = { /** true when the lane was widened to neighbouring categories because the creator's own was too small */ wide?: boolean; peers: number; leads: { brand: string; category: string | null; n: number }[]; gaps: { category: string; share: number; examples: string[] }[] };
 
 /**
  * What the creator's lane is doing that they are not: brands booking several creators in the same lane
  * (in categories this creator already works in) that have never booked them, and brand categories a
  * good share of the lane has a partner in while this creator has none. Pure, so the route just feeds it rows.
  */
-export function laneRead(lane: any[], creatorId: string, mine: Set<string>, myCats: Set<string>, sinceIso: string): LaneRead | null {
+export function laneRead(lane: any[], creatorId: string, mine: Set<string>, myCats: Set<string>, sinceIso: string, leadCats: Set<string> = myCats): LaneRead | null {
   const rows = (lane || []).filter((w) => w.creator_id !== creatorId);
   const peers = new Set(rows.map((w) => w.creator_id)).size;
   if (peers < 8) return null;
@@ -56,7 +56,7 @@ export function laneRead(lane: any[], creatorId: string, mine: Set<string>, myCa
   const active = [...brands.values()].filter((b) => b.last >= sinceIso && b.creators.size >= 2 && sane(b.brand)).sort((a, b) => b.creators.size - a.creators.size || b.deals - a.deals);
   const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
   const pick = (list: typeof active, n: number) => { const out: typeof active = []; for (const b of list) { const k = norm(b.brand); if (out.some((o) => norm(o.brand).startsWith(k) || k.startsWith(norm(o.brand)))) continue; out.push(b); if (out.length === n) break; } return out; };
-  const leads = pick(active.filter((b) => b.category && myCats.has(b.category)), 6).map((b) => ({ brand: b.brand, category: b.category, n: b.creators.size }));
+  const leads = pick(active.filter((b) => b.category && leadCats.has(b.category) && !/\(\?\)/.test(b.brand)), 6).map((b) => ({ brand: b.brand, category: b.category, n: b.creators.size }));
   const gaps = [...catCreators.entries()].filter(([ct, set]) => !myCats.has(ct) && set.size / peers >= 0.15).sort((a, b) => b[1].size - a[1].size).slice(0, 3)
     .map(([ct, set]) => ({ category: ct, share: set.size / peers, examples: pick(active.filter((b) => b.category === ct), 3).map((b) => b.brand) }));
   return leads.length || gaps.length ? { peers, leads, gaps } : null;
@@ -65,7 +65,7 @@ export function laneRead(lane: any[], creatorId: string, mine: Set<string>, myCa
 type Opt = { f?: PDFFont; size?: number; color?: RGB; track?: number; align?: "left" | "right" | "center" };
 
 export async function renderPrint({ c, platform, wall, months, by, lane, full }: { c: any; platform: string; wall: any[]; recent?: any[]; months: any[]; by?: { name?: string | null; org?: string | null; signoff?: string | null }; lane?: (LaneRead & { counts?: boolean }) | null; full?: boolean }): Promise<Uint8Array> {
-  const rows = (wall || []).filter((w) => w.best_label !== "Low");
+  const rows = (wall || []).filter((w) => w.best_label !== "Low" && !/\(\?\)/.test(String(w.brand || ""))); // guessed brand names never go to the creator
   const repeats = rows.filter((w) => w.repeat_partner);
   const name = sane(c.display_name || `@${c.handle}`) || `@${monoSafe(c.handle)}`;
   const platformLabel = platform === "youtube" ? "YouTube" : "Instagram";
@@ -209,7 +209,7 @@ export async function renderPrint({ c, platform, wall, months, by, lane, full }:
       drawCoverImage(sp.img!, x, y - ph, pw, ph, 6);
       if (sp.t.url) links.push({ page, x, y: y - ph, w: pw, h: ph, url: sp.t.url });
       const mw = text(fmtK(sp.t.metric), x, y - ph - 15, { f: semi, size: 10.5, color: WHITE });
-      if (perf.median >= 100) text(clipTo(`${(sp.t.metric / perf.median).toFixed(1)}x your usual`, font, 7.8, pw - mw - 6), x + mw + 5, y - ph - 15, { size: 7.8, color: ON_INK_DIM });
+      if (perf.median >= 100 && sp.t.metric / perf.median <= 25) text(clipTo(`${(sp.t.metric / perf.median).toFixed(1)}x your usual`, font, 7.8, pw - mw - 6), x + mw + 5, y - ph - 15, { size: 7.8, color: ON_INK_DIM });
     });
     y -= ph + 15 + 26;
   }
@@ -295,7 +295,7 @@ export async function renderPrint({ c, platform, wall, months, by, lane, full }:
     if (recentOnce.length) moves.push(["Go back for the second deal", `${names(recentOnce)} ${recentOnce.length === 1 ? "has" : "have"} worked with you in the last year${recentOnce.some((r) => Number(r.deals) > 1) ? "" : ", once each"}. They already said yes, so a follow-up is the easiest deal to win.`]);
     if (quiet.length) moves.push(["Reopen the quiet ones", `It has been over a year since ${names(quiet)}. We'd go back with your current numbers and a fresh idea.`]);
     if (topCat && moves.length < 3) moves.push([`Go deeper in ${topCat[0].toLowerCase()}`, `${topCat[1]} of your ${totalDeals} deals are in ${topCat[0].toLowerCase()}. Brands next door to the ones on your list can already see you fit.`]);
-    const laneName = String(c.category || "").toLowerCase();
+    const laneName = String(c.category || "").toLowerCase(), likeYou = lane?.wide || !laneName ? "creators like you" : `${laneName} creators like you`;
     const leads = (lane?.leads || []).slice(0, 6), gaps = (lane?.gaps || []).slice(0, 3), pitchLed = leads.length >= 2;
     page = pdf.addPage([W, H]); inkPages.add(page);
     page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: INK });
@@ -303,12 +303,12 @@ export async function renderPrint({ c, platform, wall, months, by, lane, full }:
     text(name, W - M, H - 34.5, { f: semi, size: 8, color: ON_INK, align: "right" });
     y = H - 90;
     label("Where we'd take you next", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 }); y -= 40;
-    const headline = pitchLed ? `${["Two", "Three", "Four", "Five", "Six"][leads.length - 2]} brands we'd pitch you to first.` : moves.length === 1 ? "The first move we'd make with you." : `${["Two", "Three"][Math.min(moves.length, 3) - 2]} moves we'd make with you first.`;
+    const headline = pitchLed ? `${["Two", "Three", "Four", "Five", "Six"][leads.length - 2]} brands we'd pitch you to first.` : gaps.length && !full ? "Where we see room to grow with you." : moves.length === 1 ? "The first move we'd make with you." : `${["Two", "Three"][Math.min(moves.length, 3) - 2]} moves we'd make with you first.`;
     for (const ln of wrap(headline, display, 30, W - 2 * M, 2)) { page.pushOperators(setCharacterSpacing(-0.6)); page.drawText(ln, { x: M, y, size: 30, font: display, color: WHITE }); page.pushOperators(setCharacterSpacing(0)); y -= 35; }
 
     if (pitchLed) {
       y += 13;
-      text(`They're booking ${laneName} creators like you right now, and they aren't on your list yet.`, M, y, { size: 10.5, color: ON_INK }); y -= 22;
+      text(`They're booking ${likeYou} right now, and they aren't on your list yet.`, M, y, { size: 10.5, color: ON_INK }); y -= 22;
       const roomy = !full, g = 10, cw3 = (W - 2 * M - 2 * g) / 3, th = (lane?.counts ? 68 : 56) + (roomy ? 22 : 0), pad = roomy ? 11 : 0;
       leads.forEach((b, i) => {
         const x = M + (i % 3) * (cw3 + g), top = y - Math.floor(i / 3) * (th + g), nm = sane(b.brand);
@@ -317,7 +317,7 @@ export async function renderPrint({ c, platform, wall, months, by, lane, full }:
         label(sane(b.category || "Brand"), x + 23, top - 19.5 - pad * 0.6, ON_INK_DIM, { size: 6.2, track: 0.9 });
         let ns = roomy ? 22 : 19; while (ns > 11 && display.widthOfTextAtSize(nm, ns) > cw3 - 28) ns -= 0.5;
         text(clipTo(nm, display, ns, cw3 - 28), x + 14, top - 42 - pad * 1.5, { f: display, size: ns, color: WHITE });
-        if (lane?.counts) text(`${b.n} ${laneName} creators this year`, x + 14, top - 56 - pad * 1.7, { size: 7.8, color: ON_INK_DIM });
+        if (lane?.counts) text(lane.wide ? `${b.n} creators like you this year` : `${b.n} ${laneName} creators this year`, x + 14, top - 56 - pad * 1.7, { size: 7.8, color: ON_INK_DIM });
       });
       y -= Math.ceil(leads.length / 3) * (th + g) + (roomy ? 40 : 26);
     } else y -= 10;
@@ -326,14 +326,14 @@ export async function renderPrint({ c, platform, wall, months, by, lane, full }:
     if (gaps.length) {
       rule(M, W - M, y + 20, INK_RULE, 0.8);
       const lw = label("Gaps we'd fill", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 });
-      text("categories your lane gets paid in that aren't on your list yet", M + lw + 12, y, { size: 8, color: ON_INK_DIM });
+      text("categories creators like you get paid in that aren't on your list yet", M + lw + 12, y, { size: 8, color: ON_INK_DIM });
       y -= 30;
       const g = 20, cw3 = (W - 2 * M - 2 * g) / 3; let maxL = 0;
       gaps.forEach((gp, i) => {
         const x = M + i * (cw3 + g), ct = sane(gp.category), pct = `${Math.round(gp.share * 100)}%`;
         const pw = text(pct, x, y - 6, { f: display, size: 24, color: onInk(catColor(gp.category)) });
         text(ct, x + pw + 8, y - 6, { f: display, size: 13.5, color: WHITE });
-        const body = `of ${laneName} creators we track have ${/^[aeiou]/i.test(ct) ? "an" : "a"} ${ct.toLowerCase()} partner.${gp.examples.length ? ` Think ${listAnd(gp.examples.map(sane))}.` : ""}`;
+        const body = `of ${lane?.wide ? "creators like you that" : `${laneName} creators`} we track have ${/^[aeiou]/i.test(ct) ? "an" : "a"} ${ct.toLowerCase()} partner.${gp.examples.length ? ` Think ${listAnd(gp.examples.map(sane))}.` : ""}`;
         const ls = wrap(body, font, 8.6, cw3, 3); maxL = Math.max(maxL, ls.length);
         ls.forEach((ln, j) => text(ln, x, y - 22 - j * 12, { size: 8.6, color: ON_INK }));
       });
