@@ -76,7 +76,9 @@ export async function renderPrint({ c, platform, wall, months, by, lane, full }:
   // ── document scaffolding ──────────────────────────────────────────────
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
-  pdf.setTitle(`${name} · Sponsorprint`); pdf.setAuthor("Sponsorprint");
+  // The print carries the name of whoever made it (their org), not the tool's. Only a user with no org falls back to Sponsorprint.
+  const ownBrand = sane(by?.org || ""), brandName = ownBrand || "Sponsorprint";
+  pdf.setTitle(`${name} · ${brandName}`); pdf.setAuthor(brandName);
   const emb = (k: keyof typeof FONTS) => pdf.embedFont(Buffer.from(FONTS[k], "base64"), { subset: true });
   const [font, semi, bold, display, mono, monoMed] = await Promise.all([emb("regular"), emb("semi"), emb("bold"), emb("display"), emb("mono"), emb("monoMed")]);
   const isMono = (f: PDFFont) => f === mono || f === monoMed;
@@ -128,7 +130,7 @@ export async function renderPrint({ c, platform, wall, months, by, lane, full }:
     page = pdf.addPage([W, H]);
     page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: PAPER });
     if (!first) {
-      label("Sponsorprint", M, H - 32, DIM);
+      label(brandName, M, H - 32, DIM);
       text(name, W - M, H - 32.5, { f: semi, size: 8, color: BODY, align: "right" });
       rule(M, W - M, H - 42);
       y = H - 66;
@@ -181,11 +183,11 @@ export async function renderPrint({ c, platform, wall, months, by, lane, full }:
   const thumbs = await Promise.all(top6.map((t: any) => jpg(t.thumb)));
   newPage(true); inkPages.add(page);
   page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: INK });
-  label("Sponsorprint", M, H - 34, ON_INK, { size: 7.5, track: 3.2 });
+  label(brandName, M, H - 34, ON_INK, { size: 7.5, track: 3.2 });
   const printedOn = c.last_scanned_at ? new Date(c.last_scanned_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
-  const printNo = `Print #${String(Math.abs(hash(String(c.id)))).slice(0, 5)}${printedOn ? `  ·  ${printedOn}` : ""}`;
   const byLine = [sane(by?.name || ""), sane(by?.org || "")].filter(Boolean).join(", ");
-  label(byLine ? `Prepared for you by ${byLine}` : "Prepared for you", W - M, H - 34, ON_INK_DIM, { align: "right" });
+  const byName = sane(by?.name || "");
+  label(byName ? `Prepared for you by ${byName}` : byLine ? `Prepared for you by ${byLine}` : "Prepared for you", W - M, H - 34, ON_INK_DIM, { align: "right" });
 
   const avatar = await jpg((c as any).avatar_thumb);
   const avR = 21, avCy = H - 78;
@@ -297,7 +299,7 @@ export async function renderPrint({ c, platform, wall, months, by, lane, full }:
     const leads = (lane?.leads || []).slice(0, 6), gaps = (lane?.gaps || []).slice(0, 3), pitchLed = leads.length >= 2;
     page = pdf.addPage([W, H]); inkPages.add(page);
     page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: INK });
-    label("Sponsorprint", M, H - 34, ON_INK, { size: 7.5, track: 3.2 });
+    label(brandName, M, H - 34, ON_INK, { size: 7.5, track: 3.2 });
     text(name, W - M, H - 34.5, { f: semi, size: 8, color: ON_INK, align: "right" });
     y = H - 90;
     label("Where we'd take you next", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 }); y -= 40;
@@ -555,9 +557,10 @@ export async function renderPrint({ c, platform, wall, months, by, lane, full }:
   pages.forEach((pg, i) => {
     page = pg; const dark = inkPages.has(pg);
     rule(M, W - M, 46, dark ? INK_RULE : LINE);
-    text("Built from your public posts through the official YouTube and Instagram APIs. It only counts partnerships you disclosed (#ad, #partner, paid partnership), so your real list is likely longer.", M, 34, { size: 6.1, color: dark ? ON_INK_DIM : DIM });
-    link("sponsorprint.com", M, 22, "https://sponsorprint.com", { f: monoMed, size: 7, color: dark ? WHITE : INK });
-    text(printNo, W / 2, 22, { f: mono, size: 6.5, color: dark ? ON_INK_DIM : DIM, align: "center" });
+    text("Based on the partnerships disclosed in your public posts (#ad, #partner, paid partnership), so your real list is likely longer.", M, 34, { size: 6.1, color: dark ? ON_INK_DIM : DIM });
+    if (ownBrand) label(ownBrand, M, 22, dark ? WHITE : INK, { size: 6.8, track: 1.6 });
+    else link("sponsorprint.com", M, 22, "https://sponsorprint.com", { f: monoMed, size: 7, color: dark ? WHITE : INK });
+    if (printedOn) text(printedOn, W / 2, 22, { f: mono, size: 6.5, color: dark ? ON_INK_DIM : DIM, align: "center" });
     text(`${i + 1} / ${pages.length}`, W - M, 22, { f: mono, size: 7, color: dark ? ON_INK_DIM : DIM, align: "right" });
   });
   for (const l of links) {

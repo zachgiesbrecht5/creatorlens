@@ -34,6 +34,6 @@ export async function GET(req: NextRequest) {
   const full = req.nextUrl.searchParams.get("full") === "1";
   const bytes = await renderPrint({ c, platform, wall: wall || [], months: months || [], by, lane, full });
   const name = sane(c.display_name || `@${c.handle}`);
-  return new NextResponse(Buffer.from(bytes), { headers: { "content-type": "application/pdf", "content-disposition": `attachment; filename="${name.replace(/[^A-Za-z0-9]+/g, "-") || "print"}-sponsorprint.pdf"` } });
+  return new NextResponse(Buffer.from(bytes), { headers: { "content-type": "application/pdf", "content-disposition": `attachment; filename="${name.replace(/[^A-Za-z0-9]+/g, "-") || "print"}-${String(org?.name || "sponsorprint").replace(/[^A-Za-z0-9]+/g, "-")}.pdf"` } });
 }
 
