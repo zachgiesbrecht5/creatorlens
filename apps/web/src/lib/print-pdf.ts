@@ -1,255 +1,501 @@
-import { PDFDocument, StandardFonts, rgb, PDFName, PDFString, pushGraphicsState, popGraphicsState, moveTo, lineTo, appendBezierCurve, closePath, clip, endPath, type PDFPage, type PDFFont, type RGB, type PDFImage } from "pdf-lib";
-import { readHook, hookMix, decodeEntities, type HookRead } from "@/lib/hook-read";
+import { PDFDocument, rgb, PDFName, PDFString, pushGraphicsState, popGraphicsState, moveTo, lineTo, appendBezierCurve, closePath, clip, endPath, setCharacterSpacing, type PDFPage, type PDFFont, type RGB, type PDFImage } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { readHook, decodeEntities, type HookRead } from "@/lib/hook-read";
+import { FONTS } from "@/lib/print-fonts";
 
+// The print as a document a manager sends to the creator it is about, to show
+// "we looked at your partnerships properly". Everything is written to them (you / your).
+// Page 1 is a cover that can stand alone: one big number, deals by quarter, three
+// things we noticed, and their 24-month map. Page 2 is the evidence: their top
+// posts (giveaways named kindly), format and opener averages, and every partnership
+// with a live link. The last page is the pitch: three moves we'd make first. Letter size, Inter + JetBrains Mono embedded
+// (the same faces as the site), real link annotations.
 
-// The print as a document a manager sends to a brand or a creator: dark masthead,
-// stat tiles, the 24-month sponsor map, what's performing (hook first), recurring
-// sponsors, every disclosed deal with a live link. Letter size, Helvetica/Courier
-// (standard fonts, no embedding), real link annotations.
+const W = 612, H = 792, M = 40, FOOT = 62;
+const hex = (h: string) => rgb(parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255);
+const INK = hex("#0B0D12"), PAPER = hex("#FBFBFA"), WHITE = rgb(1, 1, 1), BODY = hex("#3A4150"), MUTED = hex("#667085"), DIM = hex("#8B93A1");
+const LINE = hex("#DDE1E8"), LINE2 = hex("#ECEEF2"), ACCENT = hex("#2F5BFF"), GREEN = hex("#0E7A4E"), AMBER = hex("#9A5B00"), AMBER_BG = hex("#FFF6E5");
+const BLUE_ON_INK = hex("#8FA8FF"), ON_INK = hex("#B4BBC8"), ON_INK_DIM = hex("#7C8494"), INK_RULE = hex("#252A35");
+const CAT: Record<string, string> = { Tech: "#2F5BFF", Food: "#E07A2E", Fashion: "#B0368A", Home: "#0E7A4E", Beauty: "#D64578", Business: "#5C6373", Travel: "#1F9ECF", Entertainment: "#7D3BED", Wellness: "#2BB573", Fitness: "#F04545", Sports: "#F59E0A", Finance: "#3D4656", Auto: "#384052", Baby: "#F573B5", Health: "#0FBA82", Lifestyle: "#8C5CF5", Pets: "#A16108", Education: "#0DA6E8", Outdoors: "#4D7D0F", Gaming: "#6366F2", Coffee: "#78360F", DIY: "#B5540A", Parenting: "#F573B5", Dad: "#F573B5" };
+const NO_CAT = hex("#9AA1AE");
+const catColor = (c: string | null | undefined) => (c && CAT[c] ? hex(CAT[c]) : NO_CAT);
 
-const W = 612, H = 792, M = 44;
-const INK = rgb(0.043, 0.051, 0.07), PAPER = rgb(0.984, 0.984, 0.98), MUTED = rgb(0.357, 0.392, 0.447), DIM = rgb(0.42, 0.45, 0.5);
-const LINE = rgb(0.86, 0.875, 0.9), LINE2 = rgb(0.93, 0.94, 0.955), ACCENT = rgb(0.184, 0.357, 1), GREEN = rgb(0.055, 0.42, 0.27), PANEL = rgb(0.965, 0.968, 0.975), PURPLE = rgb(0.42, 0.22, 0.78), AMBER = rgb(0.72, 0.42, 0.02), AMBER_TXT = rgb(0.55, 0.32, 0.0);
-const CAT: Record<string, [number, number, number]> = { Tech: [0.18, 0.36, 1], Food: [0.88, 0.48, 0.18], Fashion: [0.69, 0.21, 0.54], Home: [0.05, 0.42, 0.27], Beauty: [0.84, 0.27, 0.47], Business: [0.36, 0.39, 0.45], Travel: [0.12, 0.62, 0.81], Entertainment: [0.49, 0.23, 0.93], Wellness: [0.17, 0.71, 0.45], Fitness: [0.94, 0.27, 0.27], Sports: [0.96, 0.62, 0.04], Finance: [0.04, 0.05, 0.07], Auto: [0.22, 0.25, 0.32], Baby: [0.96, 0.45, 0.71], Health: [0.06, 0.73, 0.51], Lifestyle: [0.55, 0.36, 0.96], Pets: [0.63, 0.38, 0.03], Education: [0.05, 0.65, 0.91], Outdoors: [0.3, 0.49, 0.06], Gaming: [0.39, 0.4, 0.95], Coffee: [0.47, 0.21, 0.06], DIY: [0.71, 0.33, 0.04], Parenting: [0.96, 0.45, 0.71], Dad: [0.96, 0.45, 0.71] };
-const catColor = (c: string | null) => { const v = c && CAT[c]; return v ? rgb(v[0], v[1], v[2]) : rgb(0.55, 0.58, 0.63); };
-
-export const sane = (s: string) => decodeEntities(String(s || "")).replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'").replace(/[\u2013\u2014]/g, "-").replace(/\s+/g, " ").replace(/[^\x20-\x7E\xB7]/g, "").trim();
-const fmtK = (n: number | null | undefined) => (!n ? "0" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
+/** Text the embedded fonts can draw: Latin with accents and real punctuation. Emoji and other scripts are dropped. */
+export const sane = (s: string) => decodeEntities(String(s || "")).replace(/[^\x20-\x7E -ſ–—‘’“”•…↗]/g, " ").replace(/\s+/g, " ").replace(/\s+([!?.,;:])/g, "$1").trim();
+const monoSafe = (s: string) => sane(s).replace(/[^\x20-\x7E -ÿ]/g, "");
+const fmtK = (n: number | null | undefined) => { const v = Number(n || 0); return v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e4 ? `${Math.round(v / 1e3)}K` : v >= 1e3 ? `${(v / 1e3).toFixed(1).replace(/\.0$/, "")}K` : String(Math.round(v)); };
 const plural = (k: string) => { const s = String(k || "post"); return s.charAt(0).toUpperCase() + s.slice(1) + (s.endsWith("s") ? "" : "s"); };
-const mon = (d: string | null) => (d ? new Date(d).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "");
+const mon = (d: string | null) => (d ? new Date(d).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }) : "");
+const listAnd = (a: string[]) => (a.length <= 1 ? a.join("") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`);
+const isGiveaway = (t: any) => /give\s?-?away/i.test(`${t?.hook || ""} ${t?.title || ""} ${t?.label || ""} ${t?.key || ""}`);
+const stripGiveawayClosed = (s: string) => s.replace(/^\s*\(*\s*giveaway\s+closed\s*\)*[\s:!-]*/i, "");
 
-export async function renderPrint({ c, platform, wall, recent, months }: { c: any; platform: string; wall: any[]; recent: any[]; months: any[] }): Promise<Uint8Array> {
+export type LaneRead = { peers: number; leads: { brand: string; category: string | null; n: number }[]; gaps: { category: string; share: number; examples: string[] }[] };
+
+/**
+ * What the creator's lane is doing that they are not: brands booking several creators in the same lane
+ * (in categories this creator already works in) that have never booked them, and brand categories a
+ * good share of the lane has a partner in while this creator has none. Pure, so the route just feeds it rows.
+ */
+export function laneRead(lane: any[], creatorId: string, mine: Set<string>, myCats: Set<string>, sinceIso: string): LaneRead | null {
+  const rows = (lane || []).filter((w) => w.creator_id !== creatorId);
+  const peers = new Set(rows.map((w) => w.creator_id)).size;
+  if (peers < 8) return null;
+  const brands = new Map<string, { brand: string; category: string | null; creators: Set<string>; deals: number; last: string }>();
+  const catCreators = new Map<string, Set<string>>();
+  for (const w of rows) {
+    if (w.category) (catCreators.get(w.category) || catCreators.set(w.category, new Set()).get(w.category)!).add(w.creator_id);
+    if (mine.has(w.brand_id)) continue;
+    const e = brands.get(w.brand_id) || brands.set(w.brand_id, { brand: String(w.brand || ""), category: w.category || null, creators: new Set(), deals: 0, last: "" }).get(w.brand_id)!;
+    if (String(w.last_seen || "") < sinceIso) continue; // only bookings inside the window count, so "this year" is true
+    e.creators.add(w.creator_id); e.deals += Number(w.deals || 0); if (String(w.last_seen || "") > e.last) e.last = String(w.last_seen || "");
+  }
+  const active = [...brands.values()].filter((b) => b.last >= sinceIso && b.creators.size >= 2 && sane(b.brand)).sort((a, b) => b.creators.size - a.creators.size || b.deals - a.deals);
+  const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const pick = (list: typeof active, n: number) => { const out: typeof active = []; for (const b of list) { const k = norm(b.brand); if (out.some((o) => norm(o.brand).startsWith(k) || k.startsWith(norm(o.brand)))) continue; out.push(b); if (out.length === n) break; } return out; };
+  const leads = pick(active.filter((b) => b.category && myCats.has(b.category)), 6).map((b) => ({ brand: b.brand, category: b.category, n: b.creators.size }));
+  const gaps = [...catCreators.entries()].filter(([ct, set]) => !myCats.has(ct) && set.size / peers >= 0.15).sort((a, b) => b[1].size - a[1].size).slice(0, 3)
+    .map(([ct, set]) => ({ category: ct, share: set.size / peers, examples: pick(active.filter((b) => b.category === ct), 3).map((b) => b.brand) }));
+  return leads.length || gaps.length ? { peers, leads, gaps } : null;
+}
+
+type Opt = { f?: PDFFont; size?: number; color?: RGB; track?: number; align?: "left" | "right" | "center" };
+
+export async function renderPrint({ c, platform, wall, months, by, lane }: { c: any; platform: string; wall: any[]; recent?: any[]; months: any[]; by?: { name?: string | null; org?: string | null; signoff?: string | null }; lane?: (LaneRead & { counts?: boolean }) | null }): Promise<Uint8Array> {
   const rows = (wall || []).filter((w) => w.best_label !== "Low");
   const repeats = rows.filter((w) => w.repeat_partner);
-  const name = sane(c.display_name || `@${c.handle}`);
+  const name = sane(c.display_name || `@${c.handle}`) || `@${monoSafe(c.handle)}`;
   const platformLabel = platform === "youtube" ? "YouTube" : "Instagram";
   const perf = (c as any).performance as any;
+  const totalDeals = rows.reduce((s, r) => s + Number(r.deals || 0), 0);
+  const laneColor = catColor(c.category);
 
   // ── document scaffolding ──────────────────────────────────────────────
   const pdf = await PDFDocument.create();
+  pdf.registerFontkit(fontkit);
   pdf.setTitle(`${name} · Sponsorprint`); pdf.setAuthor("Sponsorprint");
-  const font = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold), mono = await pdf.embedFont(StandardFonts.Courier), oblique = await pdf.embedFont(StandardFonts.HelveticaOblique);
+  const emb = (k: keyof typeof FONTS) => pdf.embedFont(Buffer.from(FONTS[k], "base64"), { subset: true });
+  const [font, semi, bold, display, mono, monoMed] = await Promise.all([emb("regular"), emb("semi"), emb("bold"), emb("display"), emb("mono"), emb("monoMed")]);
+  const isMono = (f: PDFFont) => f === mono || f === monoMed;
   const links: { page: PDFPage; x: number; y: number; w: number; h: number; url: string }[] = [];
-  let page: PDFPage = undefined as unknown as PDFPage, y = 0, pageNo = 0;
-  const newPage = (first = false) => {
-    page = pdf.addPage([W, H]); pageNo++;
-    page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: PAPER });
-    if (!first) { page.drawText("SPONSORPRINT", { x: M, y: H - 30, size: 7.5, font: mono, color: DIM }); page.drawText(sane(name), { x: M + 90, y: H - 30, size: 7.5, font: mono, color: MUTED }); page.drawLine({ start: { x: M, y: H - 38 }, end: { x: W - M, y: H - 38 }, thickness: 0.5, color: LINE }); y = H - 58; }
+  let page: PDFPage = undefined as unknown as PDFPage, y = 0;
+
+  const prep = (s: string, f: PDFFont) => (isMono(f) ? monoSafe(s) : sane(s));
+  const tw = (s: string, f: PDFFont, size: number, track = 0) => { const t = prep(s, f); return f.widthOfTextAtSize(t, size) + track * t.length; };
+  /** Draw one line. Returns its width. */
+  const text = (s: string, x: number, yy: number, o: Opt = {}) => {
+    const f = o.f || font, size = o.size || 9, track = o.track || 0, t = prep(s, f);
+    if (!t) return 0;
+    const w = f.widthOfTextAtSize(t, size) + track * t.length;
+    const dx = o.align === "right" ? x - w + track : o.align === "center" ? x - (w - track) / 2 : x;
+    if (track) page.pushOperators(setCharacterSpacing(track));
+    page.drawText(t, { x: dx, y: yy, size, font: f, color: o.color || INK });
+    if (track) page.pushOperators(setCharacterSpacing(0));
+    return w;
   };
-  const txt = (t: string, x: number, size: number, f: PDFFont = font, color: RGB = INK, yy = y) => page.drawText(sane(t), { x, y: yy, size, font: f, color });
-  const wrap = (t: string, f: PDFFont, size: number, width: number) => { const words = sane(t).split(" "); const out: string[] = []; let cur = ""; for (const w of words) { const n = cur ? cur + " " + w : w; if (f.widthOfTextAtSize(n, size) > width && cur) { out.push(cur); cur = w; } else cur = n; } if (cur) out.push(cur); return out; };
-  const link = (t: string, x: number, size: number, url: string, yy = y, f: PDFFont = font, color: RGB = ACCENT) => { const s = sane(t); const w = f.widthOfTextAtSize(s, size); page.drawText(s, { x, y: yy, size, font: f, color }); page.drawLine({ start: { x, y: yy - 1.5 }, end: { x: x + w, y: yy - 1.5 }, thickness: 0.5, color }); links.push({ page, x, y: yy - 3, w, h: size + 4, url }); };
-  const need = (h: number) => { if (y - h < M + 24) newPage(); };
-  const section = (label: string, sub?: string) => { need(44); page.drawLine({ start: { x: M, y: y + 6 }, end: { x: W - M, y: y + 6 }, thickness: 0.5, color: LINE }); y -= 14; txt(label, M, 9, bold, INK); if (sub) txt(sub, M + bold.widthOfTextAtSize(label, 9) + 10, 8.5, font, MUTED); y -= 18; };
+  const wrap = (s: string, f: PDFFont, size: number, width: number, maxLines = 99) => {
+    const words = prep(s, f).split(" "); const out: string[] = []; let cur = "";
+    for (const w of words) { const n = cur ? cur + " " + w : w; if (f.widthOfTextAtSize(n, size) > width && cur) { out.push(cur); cur = w; } else cur = n; }
+    if (cur) out.push(cur);
+    if (out.length > maxLines) { out.length = maxLines; out[maxLines - 1] = clipTo(out[maxLines - 1] + " …", f, size, width, true); }
+    return out.map((l) => (f.widthOfTextAtSize(l, size) > width ? clipTo(l, f, size, width) : l));
+  };
+  /** Cut a single line to a width, ending in an ellipsis. */
+  function clipTo(s: string, f: PDFFont, size: number, width: number, force = false) {
+    let t = prep(s, f); if (!force && f.widthOfTextAtSize(t, size) <= width) return t;
+    t = t.replace(/\s*…$/, "");
+    while (t.length > 1 && f.widthOfTextAtSize(t + "…", size) > width) t = t.slice(0, -1);
+    return t.replace(/[\s,.;:!-]+$/, "") + "…";
+  }
+  const link = (s: string, x: number, yy: number, url: string, o: Opt = {}) => {
+    const f = o.f || semi, size = o.size || 8, w = tw(s, f, size), x0 = o.align === "right" ? x - w : x;
+    text(s, x0, yy, { f, size, color: o.color || ACCENT });
+    if (url) links.push({ page, x: x0 - 2, y: yy - 3, w: w + 4, h: size + 5, url });
+    return w;
+  };
+  const rule = (x0: number, x1: number, yy: number, color: RGB = LINE, thickness = 0.5) => page.drawLine({ start: { x: x0, y: yy }, end: { x: x1, y: yy }, thickness, color });
+  /** Rounded rectangle; (x, top) is the top-left corner. */
+  const rrect = (x: number, top: number, w: number, h: number, r: number, o: { color?: RGB; borderColor?: RGB; borderWidth?: number }) => {
+    const p = `M ${r},0 H ${w - r} Q ${w},0 ${w},${r} V ${h - r} Q ${w},${h} ${w - r},${h} H ${r} Q 0,${h} 0,${h - r} V ${r} Q 0,0 ${r},0 Z`;
+    page.drawSvgPath(p, { x, y: top, color: o.color, borderColor: o.borderColor, borderWidth: o.borderWidth ?? (o.borderColor ? 0.5 : 0) });
+  };
+  const label = (s: string, x: number, yy: number, color: RGB = MUTED, o: Opt = {}) => text(s.toUpperCase(), x, yy, { f: monoMed, size: 6.5, track: 1.1, color, ...o });
+
+  const newPage = (first = false) => {
+    page = pdf.addPage([W, H]);
+    page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: PAPER });
+    if (!first) {
+      label("Sponsorprint", M, H - 32, DIM);
+      text(name, W - M, H - 32.5, { f: semi, size: 8, color: BODY, align: "right" });
+      rule(M, W - M, H - 42);
+      y = H - 66;
+    }
+  };
+  const need = (h: number) => { if (y - h < FOOT) { newPage(); return true; } return false; };
+  const section = (title: string, sub?: string, minBody = 40) => {
+    need(26 + minBody);
+    rule(M, W - M, y + 12);
+    const w = label(title, M, y - 4, INK, { size: 7.5, track: 1.4 });
+    if (sub) text(clipTo(sub, font, 8, W - 2 * M - w - 14), M + w + 12, y - 4, { size: 8, color: MUTED });
+    y -= 26;
+  };
+
   const jpg = async (b64: string | null | undefined): Promise<PDFImage | null> => { if (!b64) return null; try { return await pdf.embedJpg(new Uint8Array(Buffer.from(b64, "base64"))); } catch { return null; } };
   const k = 0.5523;
   const circleClip = (cx: number, cy: number, r: number) => [moveTo(cx + r, cy), appendBezierCurve(cx + r, cy + r * k, cx + r * k, cy + r, cx, cy + r), appendBezierCurve(cx - r * k, cy + r, cx - r, cy + r * k, cx - r, cy), appendBezierCurve(cx - r, cy - r * k, cx - r * k, cy - r, cx, cy - r), appendBezierCurve(cx + r * k, cy - r, cx + r, cy - r * k, cx + r, cy), closePath(), clip(), endPath()];
   const roundClip = (x: number, yy: number, w: number, h: number, r: number) => [moveTo(x + r, yy), lineTo(x + w - r, yy), appendBezierCurve(x + w - r * (1 - k), yy, x + w, yy + r * (1 - k), x + w, yy + r), lineTo(x + w, yy + h - r), appendBezierCurve(x + w, yy + h - r * (1 - k), x + w - r * (1 - k), yy + h, x + w - r, yy + h), lineTo(x + r, yy + h), appendBezierCurve(x + r * (1 - k), yy + h, x, yy + h - r * (1 - k), x, yy + h - r), lineTo(x, yy + r), appendBezierCurve(x, yy + r * (1 - k), x + r * (1 - k), yy, x + r, yy), closePath(), clip(), endPath()];
   const drawCircleImage = (img: PDFImage, cx: number, cy: number, r: number) => { const sc = Math.max((2 * r) / img.width, (2 * r) / img.height); const w = img.width * sc, h = img.height * sc; page.pushOperators(pushGraphicsState(), ...circleClip(cx, cy, r)); page.drawImage(img, { x: cx - w / 2, y: cy - h / 2, width: w, height: h }); page.pushOperators(popGraphicsState()); };
-  const drawCoverImage = (img: PDFImage, x: number, yy: number, w: number, h: number) => { const sc = Math.max(w / img.width, h / img.height); const iw = img.width * sc, ih = img.height * sc; page.pushOperators(pushGraphicsState(), ...roundClip(x, yy, w, h, 4)); page.drawImage(img, { x: x + (w - iw) / 2, y: yy + (h - ih) / 2, width: iw, height: ih }); page.pushOperators(popGraphicsState()); };
-  const pill = (t: string, x: number, yy: number, color: RGB, size = 7) => { const w = mono.widthOfTextAtSize(t, size) + 10; page.drawRectangle({ x, y: yy - 3, width: w, height: size + 6, color: PANEL, borderColor: LINE, borderWidth: 0.4 }); page.drawCircle({ x: x + 6, y: yy + size / 2 - 0.5, size: 2.2, color }); page.drawText(t, { x: x + 11, y: yy, size, font: mono, color: MUTED }); return w; };
+  const drawCoverImage = (img: PDFImage, x: number, yy: number, w: number, h: number, r = 4) => { const sc = Math.max(w / img.width, h / img.height); const iw = img.width * sc, ih = img.height * sc; page.pushOperators(pushGraphicsState(), ...roundClip(x, yy, w, h, r)); page.drawImage(img, { x: x + (w - iw) / 2, y: yy + (h - ih) / 2, width: iw, height: ih }); page.pushOperators(popGraphicsState()); };
+  /** Small rounded chip; returns its width. */
+  const chip = (s: string, x: number, yy: number, fg: RGB, bg: RGB | null, border?: RGB) => {
+    const size = 5.6, track = 0.55, t = s.toUpperCase(), w = tw(t, monoMed, size, track) + 7.5;
+    rrect(x, yy + 7.6, w, 10.4, 2.2, { color: bg || undefined, borderColor: border, borderWidth: border ? 0.5 : 0 });
+    text(t, x + 4, yy, { f: monoMed, size, track, color: fg });
+    return w;
+  };
 
-  // filled (primary) or outlined tag; returns its width
-  const tag = (t: string, x: number, yy: number, color: RGB, filled: boolean) => { const size = 7; const w = bold.widthOfTextAtSize(t, size) + 10; page.drawRectangle({ x, y: yy - 3.5, width: w, height: size + 6, color: filled ? color : rgb(1, 1, 1), borderColor: color, borderWidth: 0.8 }); page.drawText(t, { x: x + 5, y: yy, size, font: bold, color: filled ? rgb(1, 1, 1) : color }); return w; };
+  // ── numbers the cover needs ───────────────────────────────────────────
+  const rowIds = new Set(rows.map((r) => r.brand_id));
+  const dated = (months || []).filter((m) => rowIds.has(m.brand_id) && m.published_at).map((m) => ({ brand_id: m.brand_id as string, ym: String(m.published_at).slice(0, 7) }));
+  const now = new Date(), nowY = now.getUTCFullYear(), nowM = now.getUTCMonth();
+  const cols: string[] = []; for (let i = 23; i >= 0; i--) { const d = new Date(Date.UTC(nowY, nowM - i, 1)); cols.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`); }
+  const qOf = (ym: string) => `${ym.slice(0, 4)}-Q${Math.floor((Number(ym.slice(5, 7)) - 1) / 3) + 1}`;
+  const quarters: { key: string; q: string; yr: string; n: number; current: boolean }[] = [];
+  for (let i = 7; i >= 0; i--) { const d = new Date(Date.UTC(nowY, Math.floor(nowM / 3) * 3 - i * 3, 1)); const key = qOf(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`); quarters.push({ key, q: key.slice(5), yr: key.slice(2, 4), n: 0, current: i === 0 }); }
+  for (const d of dated) { const q = quarters.find((x) => x.key === qOf(d.ym)); if (q) q.n++; }
+  const last12 = dated.filter((d) => cols.slice(12).includes(d.ym)).length, prev12 = dated.filter((d) => cols.slice(0, 12).includes(d.ym)).length;
+  const byCat = new Map<string, number>(); for (const r of rows) byCat.set(r.category || "Other", (byCat.get(r.category || "Other") || 0) + Number(r.deals || 0));
+  const catList = [...byCat.entries()].sort((a, b) => (a[0] === "Other" ? 1 : b[0] === "Other" ? -1 : b[1] - a[1]));
+  const topCat = catList.find(([ct]) => ct !== "Other");
+  const n6 = Math.min(6, perf?.top?.length || 0);
+  const top6: any[] = (perf?.top || []).slice(0, n6);
+  const giveaways = top6.filter(isGiveaway).length;
+  const metricLabel = String(perf?.metric_label || (platform === "youtube" ? "views" : "engagement"));
 
   // ── masthead ──────────────────────────────────────────────────────────
   newPage(true);
-  const mastH = 168;
-  page.drawRectangle({ x: 0, y: H - mastH, width: W, height: mastH, color: INK });
-  // receipt tear along the bottom edge of the masthead
-  for (let x = 0; x < W; x += 9) page.drawRectangle({ x, y: H - mastH - 4, width: 4.5, height: 5, color: INK });
-  const laneColor = catColor(c.category);
-  page.drawRectangle({ x: 0, y: H - mastH - 4, width: W, height: 4, color: laneColor });
-  const avatar = await jpg((c as any).avatar_thumb);
-  const avX = M, avR = 30;
-  if (avatar) { drawCircleImage(avatar, avX + avR, H - 86, avR); page.drawCircle({ x: avX + avR, y: H - 86, size: avR + 1.5, borderColor: laneColor, borderWidth: 2 }); }
-  const textX = avatar ? M + 2 * avR + 16 : M;
-  page.drawText("S P O N S O R P R I N T", { x: M, y: H - 34, size: 8, font: mono, color: rgb(0.6, 0.64, 0.72) });
-  page.drawText(`print #${String(Math.abs(hash(c.id))).slice(0, 5)}`, { x: W - M - mono.widthOfTextAtSize("print #00000", 8), y: H - 34, size: 8, font: mono, color: rgb(0.6, 0.64, 0.72) });
-  const totalDeals = rows.reduce((s, r) => s + Number(r.deals || 0), 0);
-  const tiles: [string, string][] = [[String(rows.length), "brands"], [String(totalDeals), "disclosed deals"], [String(repeats.length), "recurring"]];
-  const tw = 78, tx0 = W - M - tiles.length * tw - (tiles.length - 1) * 8, textW = tx0 - textX - 16;
-  let nameSize = 30; while (nameSize > 14 && bold.widthOfTextAtSize(name, nameSize) > textW) nameSize -= 2;
-  page.drawText(name, { x: textX, y: H - 78, size: nameSize, font: bold, color: rgb(1, 1, 1) });
-  const meta = sane(`${platformLabel}  ·  @${c.handle}  ·  ${fmtK(c.followers)} ${platform === "youtube" ? "subs" : "followers"}`);
-  page.drawText(wrap(meta, mono, 8.5, textW)[0] || "", { x: textX, y: H - 96, size: 8.5, font: mono, color: rgb(0.72, 0.75, 0.8) });
-  if (c.category) { page.drawRectangle({ x: textX, y: H - 114, width: mono.widthOfTextAtSize(c.category.toUpperCase(), 7) + 12, height: 12, color: laneColor }); page.drawText(c.category.toUpperCase(), { x: textX + 6, y: H - 110.5, size: 7, font: mono, color: rgb(1, 1, 1) }); }
-  if (c.bio) { const bl = wrap(c.bio, font, 8, textW - (c.category ? mono.widthOfTextAtSize(c.category.toUpperCase(), 7) + 20 : 0)); page.drawText(sane(bl[0] || "") + (bl.length > 1 ? " ..." : ""), { x: textX + (c.category ? mono.widthOfTextAtSize(c.category.toUpperCase(), 7) + 20 : 0), y: H - 111, size: 8, font, color: rgb(0.62, 0.65, 0.72) }); }
-  // deals by category, as a stacked bar under the tiles
-  const byCat = new Map<string, number>(); for (const r of rows) byCat.set(r.category || "Other", (byCat.get(r.category || "Other") || 0) + Number(r.deals || 0));
-  const catList = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
-  if (totalDeals > 0) { let bx = tx0; const bw = tiles.length * tw + (tiles.length - 1) * 8; page.drawText("deals by category", { x: tx0, y: H - 148, size: 6.5, font: mono, color: rgb(0.5, 0.54, 0.62) }); for (const [ct, n] of catList) { const w = (n / totalDeals) * bw; page.drawRectangle({ x: bx, y: H - 160, width: Math.max(w - 1, 0.5), height: 7, color: catColor(ct === "Other" ? null : ct) }); bx += w; } }
-  page.drawText(sane(`printed ${c.last_scanned_at ? new Date(c.last_scanned_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : ""}  ·  public posts only`), { x: M, y: H - 148, size: 7.5, font: mono, color: rgb(0.5, 0.54, 0.62) });
-  // stat tiles on the right of the masthead
-  tiles.forEach(([v, l], i) => { const x = tx0 + i * (tw + 8); page.drawRectangle({ x, y: H - 134, width: tw, height: 56, color: rgb(0.1, 0.11, 0.14), borderColor: rgb(0.2, 0.22, 0.27), borderWidth: 0.6 }); page.drawRectangle({ x, y: H - 78, width: tw, height: 2, color: i === 2 ? rgb(0.35, 0.85, 0.55) : i === 1 ? ACCENT : laneColor }); page.drawText(v, { x: x + 10, y: H - 108, size: 22, font: bold, color: i === 2 && repeats.length ? rgb(0.35, 0.85, 0.55) : rgb(1, 1, 1) }); page.drawText(l, { x: x + 10, y: H - 124, size: 7, font: mono, color: rgb(0.6, 0.64, 0.72) }); });
-  y = H - mastH - 28;
+  const mastH = 296, mastY = H - mastH;
+  page.drawRectangle({ x: 0, y: mastY, width: W, height: mastH, color: INK });
+  // a receipt's torn edge: paper bites along the bottom of the ink
+  for (let x = 5; x < W; x += 10) page.drawCircle({ x, y: mastY, size: 2.6, color: PAPER });
+  label("S p o n s o r p r i n t".replace(/ /g, ""), M, H - 34, ON_INK, { size: 7.5, track: 3.2 });
+  const printedOn = c.last_scanned_at ? new Date(c.last_scanned_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+  const printNo = `Print #${String(Math.abs(hash(String(c.id)))).slice(0, 5)}${printedOn ? `  ·  ${printedOn}` : ""}`;
+  const byLine = [sane(by?.name || ""), sane(by?.org || "")].filter(Boolean).join(", ");
+  label(byLine ? `Prepared for you by ${byLine}` : "Prepared for you", W - M, H - 34, ON_INK_DIM, { align: "right" });
 
-  // ── the short version: the 4-6 facts a reader should leave with, as sentences ──
+  const avatar = await jpg((c as any).avatar_thumb);
+  const avR = 21, avCy = H - 78;
+  if (avatar) { drawCircleImage(avatar, M + avR, avCy, avR); page.drawCircle({ x: M + avR, y: avCy, size: avR + 1.6, borderColor: laneColor, borderWidth: 1.6 }); }
+  const textX = avatar ? M + 2 * avR + 14 : M, textW = W - M - textX;
+  let nameSize = 25; while (nameSize > 13 && display.widthOfTextAtSize(name, nameSize) > textW) nameSize -= 1;
+  text(clipTo(name, display, nameSize, textW), textX, H - 76, { f: display, size: nameSize, color: WHITE });
+  const metaBits = [platformLabel, `@${c.handle}`, `${fmtK(c.followers)} ${platform === "youtube" ? "subscribers" : "followers"}`, c.category].filter(Boolean) as string[];
+  text(clipTo(metaBits.join("  ·  "), mono, 7.8, textW), textX, H - 91, { f: mono, size: 7.8, color: ON_INK });
+  const bioLine = sane(String(c.bio || "").split(/\S+@\S+\.\S+|https?:\S+/)[0]);
+  if (bioLine) text(clipTo(bioLine, font, 8.2, Math.min(textW, 320)), textX, H - 104, { size: 8.2, color: ON_INK_DIM });
+
+  // hero: one number, then the three facts that qualify it
+  const baseY = H - 226;
+  const big = String(rows.length);
+  let bigSize = 124; while (bigSize > 60 && display.widthOfTextAtSize(big, bigSize) > 170) bigSize -= 4;
+  page.pushOperators(setCharacterSpacing(-bigSize * 0.035));
+  page.drawText(big, { x: M - bigSize * 0.045, y: baseY, size: bigSize, font: display, color: WHITE });
+  page.pushOperators(setCharacterSpacing(0));
+  const bigW = display.widthOfTextAtSize(big, bigSize) - bigSize * 0.035 * big.length;
+  const chartW = 196, chartX = W - M - chartW;
+  const stX = M + bigW + 16, stW = chartX - 18 - stX;
+  const heroLines = wrap(rows.length === 1 ? "brand has partnered with you" : "brands have partnered with you", semi, 14.5, stW, 2);
+  heroLines.forEach((ln, i) => text(ln, stX, baseY + 74 - i * 17.5, { f: semi, size: 14.5, color: WHITE }));
+  const facts = [
+    totalDeals ? `across ${totalDeals} sponsored post${totalDeals === 1 ? "" : "s"}` : "",
+    repeats.length ? `${repeats.length} came back for more` : "",
+    rows[0]?.last_seen ? `Latest: ${sane(rows[0].brand)}, ${mon(rows[0].last_seen)}` : "",
+  ].filter(Boolean);
+  facts.forEach((s, i) => text(clipTo(s, font, 10, stW), stX, baseY + 74 - heroLines.length * 17.5 - 3 - i * 15, { size: 10, color: /came back/.test(s) ? hex("#6EE7A8") : ON_INK }));
+
+  // deals by quarter, last eight quarters
+  if (dated.length) {
+    const maxQ = Math.max(...quarters.map((q) => q.n), 1), bh = 64, by = baseY + 13, gap = 6, bw = (chartW - gap * 7) / 8;
+    label("Your brand deals by quarter", chartX, by + bh + 22, ON_INK_DIM);
+    quarters.forEach((q, i) => {
+      const x = chartX + i * (bw + gap), h = q.n ? Math.max(3, (q.n / maxQ) * bh) : 1.2;
+      page.drawRectangle({ x, y: by, width: bw, height: h, color: q.n ? (q.current ? ACCENT : hex("#E6E9EF")) : INK_RULE });
+      if (q.n) text(String(q.n), x + bw / 2, by + h + 4, { f: semi, size: 8, color: q.current ? BLUE_ON_INK : WHITE, align: "center" });
+      text(q.q, x + bw / 2, by - 10, { f: mono, size: 6, color: q.current ? WHITE : ON_INK_DIM, align: "center" });
+      if (q.q === "Q1" || i === 0) text(`'${q.yr}`, x + bw / 2, by - 18, { f: mono, size: 6, color: ON_INK_DIM, align: "center" });
+    });
+  }
+
+  // category strip
+  if (totalDeals > 0) {
+    const sy = mastY + 34; let bx = M; const full = W - 2 * M;
+    for (const [ct, n] of catList) { const w = (n / totalDeals) * full; page.drawRectangle({ x: bx, y: sy, width: Math.max(w - 1.2, 0.6), height: 3.5, color: ct === "Other" ? hex("#4A5160") : catColor(ct) }); bx += w; }
+    let lx = M;
+    for (const [ct, n] of catList.slice(0, 7)) {
+      const s = `${ct === "Other" ? "Uncategorised" : ct} ${n}`; const w = tw(s.toUpperCase(), monoMed, 6.2, 0.8);
+      if (lx + w + 10 > W - M) break;
+      page.drawRectangle({ x: lx, y: sy - 14.2, width: 4.5, height: 4.5, color: ct === "Other" ? hex("#4A5160") : catColor(ct) });
+      label(s, lx + 8, sy - 14, ON_INK, { size: 6.2, track: 0.8 }); lx += w + 22;
+    }
+  }
+  y = mastY - 32;
+
+  // ── the read: a headline and three short notes ────────────────────────
   {
-    const pts: string[] = [];
-    pts.push(`${rows.length} brand${rows.length === 1 ? "" : "s"} paid for ${totalDeals} disclosed deal${totalDeals === 1 ? "" : "s"}.` + (repeats.length ? ` ${repeats.length} came back for more: ${repeats.slice(0, 3).map((r) => sane(r.brand)).join(", ")}${repeats.length > 3 ? " and others" : ""}.` : " None has booked twice yet."));
-    const topCat = catList.find(([ct]) => ct !== "Other");
-    if (topCat && totalDeals) pts.push(`Biggest category: ${topCat[0]}, ${topCat[1]} of ${totalDeals} deals.`);
-    if (rows[0]?.last_seen) pts.push(`Most recent sponsor: ${sane(rows[0].brand)}, ${mon(rows[0].last_seen)}.`);
-    const fm = (perf?.formats || []).filter((f: any) => f.count >= 3).sort((a: any, b: any) => b.avg - a.avg);
-    if (fm.length >= 2 && fm[1].avg > 0) pts.push(`${plural(fm[0].kind)} average ${fmtK(fm[0].avg)} ${perf.metric_label}, ${(fm[0].avg / fm[1].avg).toFixed(1)}x ${plural(fm[1].kind).toLowerCase()}.`);
+    label("What we noticed", M, y, ACCENT, { size: 7.5, track: 1.4 }); y -= 25;
+    const lead = !rows.length ? "We didn't find a disclosed partnership in your public posts yet."
+      : (repeats.length ? `${repeats.length} of your ${rows.length} brand partners came back for more.` : rows.length === 1 ? "One brand has partnered with you so far." : `${rows.length} brands have partnered with you, each of them once so far.`)
+        + (topCat && totalDeals && rows.length > 1 ? ` ${topCat[0]} is your strongest lane, with ${topCat[1]} of ${totalDeals} deals.` : "");
+    for (const ln of wrap(lead, display, 18.5, W - 2 * M, 2)) { text(ln, M, y, { f: display, size: 18.5, color: INK }); y -= 23; }
+    y -= 9;
+
+    const notes: [string, string][] = [];
+    if (repeats.length) {
+      const rs = [...repeats].sort((a, b) => Number(b.deals) - Number(a.deals));
+      notes.push(["Who keeps coming back", `${listAnd(rs.slice(0, 5).map((r) => `${sane(r.brand)} (${r.deals})`))}${rs.length > 5 ? `, plus ${rs.length - 5} more` : ""}. Repeat bookings are the strongest proof you can show a new brand.`]);
+    } else if (rows.length) notes.push(["Who keeps coming back", "Nobody twice yet. Every brand here already said yes once, which makes a second deal the easiest one to win."]);
+    if (dated.length) {
+      const busiest = [...quarters].reverse().sort((a, b) => b.n - a.n)[0];
+      notes.push(["Your momentum", `${last12} deal${last12 === 1 ? "" : "s"} in the last 12 months${last12 > prev12 ? `, up from ${prev12} the year before` : last12 === prev12 ? ", level with the year before" : `, and ${prev12} the year before`}.${busiest?.n ? ` Your busiest quarter was ${busiest.q} 20${busiest.yr}, with ${busiest.n}.` : ""}`]);
+    }
     if (perf?.top?.length) {
-      const t0 = perf.top[0], h0 = readHook(t0, platform);
-      pts.push(`Best post: ${fmtK(t0.metric)} ${perf.metric_label}${perf.median >= 1000 ? ` (${(t0.metric / perf.median).toFixed(0)}x median)` : ""}. The hook was ${h0.source === "said" ? "said out loud" : h0.source === "caption" ? "in the caption only" : "text on the video"}${h0.audio === "music" || h0.audio === "no-voice" ? ", with no talking" : ""}.`);
-      const mix = hookMix(perf.top.slice(0, 6), platform); if (mix) pts.push(mix);
+      const minCount = Math.max(3, Math.round(Number(perf.items || 0) * 0.05));
+      const fm = (perf.formats || []).filter((f: any) => f.count >= minCount).sort((a: any, b: any) => b.avg - a.avg);
+      let s = fm.length >= 2 && fm[1].avg > 0 ? `Your ${plural(fm[0].kind).toLowerCase()} average ${fmtK(fm[0].avg)} ${metricLabel}, ${(fm[0].avg / fm[1].avg).toFixed(1)}x your ${plural(fm[1].kind).toLowerCase()}.` : `Your typical post gets ${fmtK(perf.median)} ${metricLabel}.`;
+      if (giveaways * 2 >= n6 && giveaways >= 2) s += ` Giveaways are your biggest posts: ${giveaways === n6 ? `all ${n6}` : `${giveaways}`} of your top ${n6}.`;
+      else { const t0 = perf.top[0]; s += ` Your best post reached ${fmtK(t0.metric)}${perf.median >= 100 ? `, ${(t0.metric / perf.median).toFixed(1)}x your usual` : ""}.`; }
+      notes.push(["What your audience responds to", s]);
     }
-    const bw = W - 2 * M - 28;
-    const wrapped = pts.map((p) => wrap(p, font, 9.5, bw));
-    const boxH = 30 + wrapped.reduce((a, l) => a + l.length * 12.5 + 3, 0);
-    page.drawRectangle({ x: M, y: y - boxH + 10, width: W - 2 * M, height: boxH, color: rgb(1, 1, 1), borderColor: LINE, borderWidth: 0.6 });
-    page.drawRectangle({ x: M, y: y - boxH + 10, width: 3, height: boxH, color: ACCENT });
-    txt("THE SHORT VERSION", M + 14, 9, bold, INK); y -= 18;
-    for (const lines of wrapped) {
-      page.drawCircle({ x: M + 17, y: y + 3, size: 1.8, color: INK });
-      for (const ln of lines) { txt(ln, M + 24, 9.5, font, INK); y -= 12.5; }
-      y -= 3;
+    if (notes.length) {
+      const gap = 22, cw = (W - 2 * M - gap * (notes.length - 1)) / notes.length; let maxLines = 0;
+      notes.forEach(([h, b], i) => {
+        const x = M + i * (cw + gap);
+        rule(x, x + cw, y + 13, INK, 0.9);
+        text(h, x, y, { f: semi, size: 9, color: INK });
+        const ls = wrap(b, font, 9, cw, 6); maxLines = Math.max(maxLines, ls.length);
+        ls.forEach((ln, j) => text(ln, x, y - 15 - j * 12.6, { size: 9, color: BODY }));
+      });
+      y -= 15 + maxLines * 12.6 + 20;
     }
-    y -= 22;
   }
 
   // ── the map: brands × last 24 months ──────────────────────────────────
   const monthsBy = new Map<string, Map<string, number>>();
-  for (const m of months || []) { const k = String(m.published_at).slice(0, 7); const e = monthsBy.get(m.brand_id) || monthsBy.set(m.brand_id, new Map()).get(m.brand_id)!; e.set(k, (e.get(k) || 0) + 1); }
-  const now = new Date(); const cols: string[] = []; for (let i = 23; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); cols.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }
-  const mapRows = rows.filter((r) => [...(monthsBy.get(r.brand_id)?.keys() || [])].some((k) => cols.includes(k))).slice(0, 14);
-  if (mapRows.length) {
-    section("THE MAP", "last 24 months · one dot per month with a disclosed deal · ring = recurring partner");
-    const labelW = 118, gx0 = M + labelW, gx1 = W - M, cw = (gx1 - gx0) / 24, rh = 14;
-    need(mapRows.length * rh + 30);
-    // month ticks: Jan and Jul
-    cols.forEach((k, i) => { const mnum = Number(k.slice(5)); if (mnum === 1 || mnum === 7) { const x = gx0 + i * cw + cw / 2; page.drawLine({ start: { x, y: y + 4 }, end: { x, y: y - mapRows.length * rh + 4 }, thickness: 0.4, color: LINE2 }); page.drawText(mnum === 1 ? k.slice(0, 4) : `mid ${k.slice(0, 4)}`, { x: x - 10, y: y + 7, size: 6.5, font: mono, color: DIM }); } });
-    y -= 6;
+  for (const d of dated) { const e = monthsBy.get(d.brand_id) || monthsBy.set(d.brand_id, new Map()).get(d.brand_id)!; e.set(d.ym, (e.get(d.ym) || 0) + 1); }
+  const mapAll = rows.filter((r) => [...(monthsBy.get(r.brand_id)?.keys() || [])].some((kk) => cols.includes(kk)));
+  if (mapAll.length) {
+    const rh = 14.2, overhead = 26 + 16 + 22;
+    let fit = Math.floor((y - FOOT - overhead) / rh);
+    if (fit < Math.min(6, mapAll.length)) { newPage(); fit = Math.floor((y - FOOT - overhead) / rh); }
+    const mapRows = mapAll.slice(0, Math.min(16, fit));
+    section("Your last 24 months", `each dot is a month you posted a partnership${mapRows.length < mapAll.length ? ` · your latest ${mapRows.length} of ${mapAll.length} brands` : ""}`, mapRows.length * rh + 30);
+    const labelW = 112, gx0 = M + labelW, gx1 = W - M, cw = (gx1 - gx0) / 24, top = y + 2, bottom = top - 12 - mapRows.length * rh;
+    cols.forEach((kk, i) => {
+      const mnum = Number(kk.slice(5)), x = gx0 + i * cw;
+      if (mnum === 1) { page.drawLine({ start: { x, y: top + 6 }, end: { x, y: bottom + 4 }, thickness: 0.6, color: LINE }); text(kk.slice(0, 4), x + 4, top, { f: monoMed, size: 6.5, color: BODY }); }
+      else if (mnum === 4 || mnum === 7 || mnum === 10) { page.drawLine({ start: { x, y: top - 6 }, end: { x, y: bottom + 4 }, thickness: 0.4, color: LINE2 }); if (i < 23) text(["", "", "", "Apr", "", "", "Jul", "", "", "Oct"][mnum - 1], x + 3, top, { f: mono, size: 5.8, color: DIM }); }
+    });
+    if (Number(cols[0].slice(5)) > 1 && Number(cols[0].slice(5)) < 10) text(cols[0].slice(0, 4), gx0 + 4, top, { f: monoMed, size: 6.5, color: BODY });
+    y -= 20;
     for (const r of mapRows) {
-      page.drawText(sane(r.brand).slice(0, 22), { x: M, y: y - 4, size: 8.5, font: bold, color: INK });
-      page.drawLine({ start: { x: gx0, y: y - 1 }, end: { x: gx1, y: y - 1 }, thickness: 0.3, color: LINE2 });
-      const mm = monthsBy.get(r.brand_id) || new Map();
-      cols.forEach((k, i) => { const n = mm.get(k); if (!n) return; const x = gx0 + i * cw + cw / 2; const col = catColor(r.category); page.drawCircle({ x, y: y - 1, size: n > 2 ? 3.6 : n > 1 ? 3 : 2.4, color: col }); if (r.repeat_partner) page.drawCircle({ x, y: y - 1, size: 5, borderColor: col, borderWidth: 0.6 }); });
+      text(clipTo(sane(r.brand), semi, 8.5, labelW - 10), M, y - 3, { f: semi, size: 8.5, color: INK });
+      rule(gx0, gx1, y, LINE2, 0.4);
+      const mm = monthsBy.get(r.brand_id) || new Map(), col = catColor(r.category);
+      const hit = cols.map((kk, i) => (mm.get(kk) ? i : -1)).filter((i) => i >= 0);
+      if (r.repeat_partner && hit.length > 1) page.drawLine({ start: { x: gx0 + hit[0] * cw + cw / 2, y }, end: { x: gx0 + hit[hit.length - 1] * cw + cw / 2, y }, thickness: 1.4, color: col, opacity: 0.28 });
+      for (const i of hit) { const n = mm.get(cols[i]) || 1; page.drawCircle({ x: gx0 + i * cw + cw / 2, y, size: n > 2 ? 4 : n > 1 ? 3.3 : 2.6, color: col }); }
       y -= rh;
     }
-    // legend
-    const cats = [...new Set(mapRows.map((r) => r.category).filter(Boolean))].slice(0, 6) as string[];
-    let lx = M; y -= 6; for (const ct of cats) { lx += pill(ct, lx, y, catColor(ct)) + 6; } y -= 16;
+    y -= 2;
+    let lx = M;
+    for (const ct of [...new Set(mapRows.map((r) => r.category).filter(Boolean))].slice(0, 6) as string[]) { page.drawCircle({ x: lx + 2.5, y: y + 2.4, size: 2.5, color: catColor(ct) }); lx += 9 + text(ct, lx + 8, y, { size: 7.5, color: MUTED }) + 12; }
+    if (mapRows.some((r) => !r.category)) { page.drawCircle({ x: lx + 2.5, y: y + 2.4, size: 2.5, color: NO_CAT }); lx += 9 + text("Uncategorised", lx + 8, y, { size: 7.5, color: MUTED }) + 12; }
+    if (mapRows.some((r) => r.repeat_partner)) { page.drawLine({ start: { x: lx, y: y + 2.4 }, end: { x: lx + 16, y: y + 2.4 }, thickness: 1.4, color: MUTED, opacity: 0.4 }); page.drawCircle({ x: lx, y: y + 2.4, size: 2.5, color: MUTED }); page.drawCircle({ x: lx + 16, y: y + 2.4, size: 2.5, color: MUTED }); text("came back", lx + 23, y, { size: 7.5, color: MUTED }); }
+    y -= 30;
   }
 
   // ── what's performing ─────────────────────────────────────────────────
-  // Each card answers, in reading order: how big (number, vs median), what the
-  // viewer got first (one bold line, tagged SAID OUT LOUD / TEXT ON VIDEO /
-  // CAPTION ONLY), then the other two channels in fixed rows with plain empty
-  // states ("Nobody talks. Music only."), so nothing has to be reopened.
-  if (perf?.top?.length) {
-    const n6 = Math.min(6, perf.top.length);
-    section("WHAT'S PERFORMING", `best ${n6} of ${perf.items} posts · median ${fmtK(perf.median)} ${perf.metric_label}`);
-    txt("Bold line = what a viewer hears or sees first. The tag says where it came from; the rows below show the other channels.", M, 7.5, oblique, MUTED); y -= 16;
-    const best = Math.max(...perf.top.slice(0, n6).map((t: any) => Number(t.metric) || 0), 1);
-    const thumbs = await Promise.all(perf.top.slice(0, n6).map((t: any) => jpg(t.thumb)));
-    const SRC: Record<string, RGB> = { said: ACCENT, "on-video": PURPLE, "on-cover": PURPLE, caption: MUTED };
-    const leadKey = (h: HookRead) => (h.source === "said" ? "voice" : h.source === "caption" ? "caption" : "screen");
-    for (let k = 0; k < n6; k++) {
-      const t = perf.top[k];
-      const h = readHook(t, platform);
-      const th = thumbs[k];
-      const thumbW = th ? 46 : 0;
-      const numX = M + 12 + (th ? thumbW + 10 : 0);
-      const colX = numX + 86, colW = W - M - 12 - colX;
-      const leadLines = wrap(`"${h.lead}"`, bold, 11, colW).slice(0, 3);
-      if (wrap(`"${h.lead}"`, bold, 11, colW).length > 3) leadLines[2] = leadLines[2].replace(/.{0,3}$/, "...");
-      const rowsC = h.channels.filter((c) => c.key !== leadKey(h));
-      const cardH = Math.max(th ? 72 : 60, 14 + 15 + leadLines.length * 13.5 + 4 + rowsC.length * 11.5 + 14);
-      need(cardH + 8);
-      const top = y + 4;
-      page.drawRectangle({ x: M, y: top - cardH, width: W - 2 * M, height: cardH, color: rgb(1, 1, 1), borderColor: LINE, borderWidth: 0.5 });
-      page.drawRectangle({ x: M, y: top - cardH, width: 3, height: cardH, color: t.sponsored ? GREEN : laneColor });
-      if (th) drawCoverImage(th, M + 12, top - 10 - Math.min(cardH - 20, 82), thumbW, Math.min(cardH - 20, 82));
-      // number column
-      page.drawText(`#${k + 1}`, { x: numX, y: top - 14, size: 7.5, font: mono, color: MUTED });
-      page.drawText(fmtK(t.metric), { x: numX, y: top - 32, size: 18, font: bold, color: INK });
-      page.drawText(perf.metric_label, { x: numX, y: top - 43, size: 7.5, font, color: MUTED });
-      const mult = perf.median >= 1000 ? `${(t.metric / perf.median).toFixed(1)}x median` : `#${k + 1} of ${perf.items}`;
-      page.drawText(mult, { x: numX, y: top - 54, size: 8, font: bold, color: GREEN });
-      page.drawRectangle({ x: numX, y: top - 61, width: 70, height: 3, color: LINE2 });
-      page.drawRectangle({ x: numX, y: top - 61, width: Math.max(2, 70 * (Number(t.metric) / best)), height: 3, color: t.sponsored ? GREEN : laneColor });
-      // tags row: where the hook came from, what the audio is, then date/format
-      let cy = top - 14, tx = colX;
-      tx += tag(h.sourceLabel, tx, cy, SRC[h.source], true) + 5;
-      if (h.audio !== "voice" && h.audioLabel) tx += tag(h.audioLabel, tx, cy, h.audio === "unread" ? MUTED : AMBER, false) + 5;
-      const meta = `${mon(t.published_at)} · ${t.kind}${t.sponsored ? " · SPONSORED" : ""}`;
-      page.drawText(meta, { x: W - M - 12 - font.widthOfTextAtSize(meta, 7.5), y: cy, size: 7.5, font, color: t.sponsored ? GREEN : MUTED });
-      cy -= 17;
-      for (const ln of leadLines) { page.drawText(sane(ln), { x: colX, y: cy, size: 11, font: bold, color: INK }); cy -= 13.5; }
-      cy -= 3;
-      for (const c of rowsC) {
-        page.drawText(c.label, { x: colX, y: cy, size: 7, font: mono, color: MUTED });
-        const body = c.text ? `"${c.text}"` : c.empty || "";
-        const f = c.text ? font : oblique, col = c.text ? INK : (c.key === "voice" && (h.audio === "music" || h.audio === "no-voice" || h.audio === "silent") ? AMBER_TXT : MUTED);
-        const bw = colW - 62 - (c === rowsC[rowsC.length - 1] ? 50 : 0);
-        const ls = wrap(body, f, 8.5, bw);
-        page.drawText(sane(ls[0] || "") + (ls.length > 1 ? " ..." : ""), { x: colX + 58, y: cy, size: 8.5, font: f, color: col });
-        cy -= 11.5;
-      }
-      link("open post", W - M - 12 - font.widthOfTextAtSize("open post", 8), 8, t.url, top - cardH + 8);
-      y = top - cardH - 10;
+  // Cards read top to bottom: how big, what kind of post, the line a viewer got
+  // first (and which channel carried it), then one supporting line if another
+  // channel had text. Empty channels are left out rather than labelled.
+  if (n6) {
+    const gapX = 12, cardW = (W - 2 * M - gapX) / 2, gapY = 8;
+    const reads: HookRead[] = top6.map((t: any) => readHook(t, platform));
+    // a second channel with its own words (say, on-screen text under a spoken hook) earns one extra line on every card
+    const others = reads.map((h) => (h.source === "caption" ? undefined : h.channels.find((ch) => ch.text && ch.text !== h.lead && ch.key !== (h.source === "said" ? "voice" : "screen"))));
+    const cardH = others.some(Boolean) ? 102 : 90;
+    const thumbs = await Promise.all(top6.map((t: any) => jpg(t.thumb)));
+    const flagGiveaways = giveaways * 2 >= n6 && giveaways >= 2;
+    if (y - (26 + (flagGiveaways ? 30 : 4) + cardH) < FOOT) newPage();
+    section("Your top posts", `best ${n6} of your last ${perf.items} · your typical post gets ${fmtK(perf.median)} ${metricLabel}`, cardH);
+    if (flagGiveaways) {
+      rrect(M, y + 10, W - 2 * M, 21, 3, { color: AMBER_BG });
+      const w0 = text(giveaways === n6 ? `All ${n6} are giveaways.` : `${giveaways} of these ${n6} are giveaways.`, M + 9, y - 3.5, { f: semi, size: 8.5, color: AMBER });
+      text("They are your biggest posts. For everyday reach, we'd pitch the format averages below.", M + 9 + w0 + 5, y - 3.5, { size: 8.5, color: AMBER });
+      y -= 30;
+    } else y -= 4;
+    const SRC: Record<string, string> = { said: "Said out loud", "on-video": "Text on video", "on-cover": "Text on cover", caption: "Caption" };
+    for (let i = 0; i < n6; i++) {
+      const colI = i % 2;
+      if (colI === 0 && need(cardH + gapY)) y -= 2;
+      const t = top6[i], h = reads[i], other = others[i], th = thumbs[i], gv = isGiveaway(t);
+      const x = M + colI * (cardW + gapX), top = y + 8;
+      rrect(x, top, cardW, cardH, 5, { color: WHITE, borderColor: LINE, borderWidth: 0.6 });
+      const tW = 57, tH = cardH - 20;
+      if (th) drawCoverImage(th, x + 10, top - 10 - tH, tW, tH, 4);
+      else rrect(x + 10, top - 10, tW, tH, 4, { color: hex("#F1F3F6") });
+      rrect(x + 10, top - 10, 15, 12, 3, { color: INK });
+      text(String(i + 1), x + 17.5, top - 19, { f: monoMed, size: 6.5, color: WHITE, align: "center" });
+      const cx0 = x + 10 + tW + 11, cx1 = x + cardW - 11, cw = cx1 - cx0;
+      // metric row
+      const mw = text(fmtK(t.metric), cx0, top - 26, { f: display, size: 18, color: INK });
+      text(metricLabel, cx0 + mw + 5, top - 26, { size: 7.5, color: MUTED });
+      if (perf.median >= 100) text(`${(t.metric / perf.median).toFixed(1)}x your usual`, cx1, top - 26, { f: semi, size: 8, color: GREEN, align: "right" });
+      // chips
+      let chx = cx0; const chy = top - 40;
+      if (gv) chx += chip("Giveaway", chx, chy, AMBER, AMBER_BG) + 4;
+      if (t.sponsored) chx += chip("Sponsored", chx, chy, GREEN, hex("#E7F6EE")) + 4;
+      if (h.source !== "caption") chx += chip(SRC[h.source], chx, chy, ACCENT, hex("#EBF0FF")) + 4;
+      if (h.audio !== "voice" && h.audio !== "no-audio" && h.audio !== "unread" && h.audioLabel && chx + 60 < cx1) chx += chip(h.audioLabel.split(",")[0].split("(")[0].trim(), chx, chy, MUTED, null, LINE) + 4;
+      // the line itself
+      let leadRaw = sane(stripGiveawayClosed(h.lead || "") || h.lead || t.title || "");
+      if (h.source === "caption" && String(t.hook || "").length >= 80 && !/[.!?…]$/.test(leadRaw)) leadRaw = leadRaw.replace(/\s+\S*$/, "") + "…"; // the stored caption opener is cut mid-word
+      const firstY = chx === cx0 ? top - 42 : top - 53;
+      const leadLines = wrap(`“${leadRaw}”`, semi, 9, cw, chx === cx0 ? 3 : 2);
+      leadLines.forEach((ln, j) => text(ln, cx0, firstY - j * 11.4, { f: semi, size: 9, color: INK }));
+      if (other) text(clipTo(`${other.key === "caption" ? "Caption" : other.key === "voice" ? "Voice" : "On screen"}: “${stripGiveawayClosed(other.text || "")}”`, font, 7.6, cw), cx0, firstY - leadLines.length * 11.4 - 1, { size: 7.6, color: MUTED });
+      // foot
+      label(`${String(t.kind || "post")} · ${mon(t.published_at)}`, cx0, top - cardH + 10, DIM, { size: 6, track: 0.7 });
+      if (t.url) link("open ↗", cx1, top - cardH + 9.5, t.url, { size: 7.8, align: "right" });
+      if (colI === 1 || i === n6 - 1) y -= cardH + gapY;
     }
-    y -= 6;
-    const fm = (perf.formats || []).filter((f: any) => f.count >= 2).sort((a: any, b: any) => b.avg - a.avg);
-    if (fm.length) { txt("By format", M, 8, bold, INK); txt(fm.map((f: any) => `${plural(f.kind)} ${fmtK(f.avg)} avg (${f.count} posts)`).join("     "), M + 70, 8.5, font, INK); y -= 13; }
-    const hooks = (perf.hooks || []).filter((h: any) => h.hook !== "Other").slice(0, 4);
-    if (hooks.length) { txt("Caption openers", M, 8, bold, INK); txt(hooks.map((h: any) => `${h.hook} ${fmtK(h.avg)} avg (${h.count} posts)`).join("     "), M + 70, 8.5, font, INK); y -= 13; }
-    y -= 8;
-  }
+    y -= 12;
 
-  // ── recurring sponsors ────────────────────────────────────────────────
-  section("RECURRING SPONSORS", repeats.length ? "booked more than once · a budget line, not a one-off" : undefined);
-  if (!repeats.length) { txt("None yet: no brand has booked this creator more than once in the window.", M, 9, font, MUTED); y -= 16; }
-  for (const r of repeats) {
-    need(22);
-    page.drawCircle({ x: M + 4, y: y + 3, size: 3, color: catColor(r.category) });
-    txt(sane(r.brand), M + 14, 10.5, bold);
-    txt(`${r.deals} deals  ·  ${mon(r.first_seen)} to ${mon(r.last_seen)}`, M + 190, 8, mono, MUTED);
-    if (r.content_url) link("latest post", W - M - font.widthOfTextAtSize("latest post", 8), 8, r.content_url);
-    y -= 17;
+    // format and opener averages, side by side
+    const fm = (perf.formats || []).filter((f: any) => f.count >= 2).sort((a: any, b: any) => b.avg - a.avg).slice(0, 4);
+    const openers = (perf.openers || []).filter((o: any) => !isGiveaway(o) && o.count >= 2 && sane(o.label)).sort((a: any, b: any) => (b.mult || 0) - (a.mult || 0)).filter((o: any, i: number) => i < 2 || (o.mult || 0) >= 1).slice(0, 4);
+    const hooks = openers.length ? [] : (perf.hooks || []).filter((hk: any) => hk.hook !== "Other" && hk.count >= 2).slice(0, 4);
+    const right = openers.length ? openers.map((o: any) => ({ l: `“${sane(o.label).replace(/[!>.\s]+$/, "")}”`, v: `${Number(o.mult || o.avg / Math.max(perf.median, 1)).toFixed(1)}x usual`, n: `${o.count} posts`, up: (o.mult || 0) >= 1.15 })) : hooks.map((hk: any) => ({ l: sane(hk.hook), v: `${fmtK(hk.avg)} avg`, n: `${hk.count} posts`, up: hk.avg >= perf.median }));
+    const lines = Math.max(fm.length, right.length);
+    if (lines) {
+      need(22 + lines * 15 + 16);
+      const gap = 28, pw = (W - 2 * M - gap) / 2, px = [M, M + pw + gap];
+      if (fm.length) {
+        rule(px[0], px[0] + (right.length ? pw : W - 2 * M), y + 12, INK, 0.9); label(`Your formats · average ${metricLabel}`, px[0], y, INK);
+        const maxAvg = Math.max(...fm.map((f: any) => f.avg), 1), barX = px[0] + 68, barW = pw - 68 - 92;
+        fm.forEach((f: any, i: number) => { const yy = y - 18 - i * 15; text(plural(f.kind), px[0], yy, { size: 8.8, color: INK }); page.drawRectangle({ x: barX, y: yy, width: barW, height: 6, color: LINE2 }); page.drawRectangle({ x: barX, y: yy, width: Math.max(2, barW * (f.avg / maxAvg)), height: 6, color: i === 0 ? ACCENT : hex("#AEB6C4") }); text(fmtK(f.avg), barX + barW + 8, yy, { f: semi, size: 8.8, color: INK }); text(`${f.count} posts`, px[0] + pw, yy, { f: mono, size: 6.5, color: DIM, align: "right" }); });
+      }
+      if (right.length) {
+        const x = fm.length ? px[1] : px[0], w = fm.length ? pw : W - 2 * M;
+        rule(x, x + w, y + 12, INK, 0.9); label(openers.length ? "Openers that work for you" : "How your captions open", x, y, INK);
+        right.forEach((o: any, i: number) => { const yy = y - 18 - i * 15; text(clipTo(o.l, font, 8.8, w - 118), x, yy, { size: 8.8, color: INK }); text(o.v, x + w - 48, yy, { f: semi, size: 8.5, color: o.up ? GREEN : MUTED, align: "right" }); text(o.n, x + w, yy, { f: mono, size: 6.5, color: DIM, align: "right" }); });
+      }
+      y -= 18 + lines * 15 + 20;
+    }
   }
-  y -= 4;
 
   // ── all disclosed sponsors ────────────────────────────────────────────
-  section("ALL DISCLOSED SPONSORS", `${rows.length} brands · ${totalDeals} deals · newest first${rows.some((r) => /\(\?\)/.test(r.brand)) ? " · (?) = brand guessed from the post, verify" : ""}`);
-  const cx = { brand: M, cat: M + 215, deals: M + 335, last: M + 390, post: W - M - 40 };
-  txt("brand", cx.brand, 6.5, mono, DIM); txt("category", cx.cat, 6.5, mono, DIM); txt("deals", cx.deals, 6.5, mono, DIM); txt("last", cx.last, 6.5, mono, DIM); txt("post", cx.post, 6.5, mono, DIM); y -= 12;
-  rows.forEach((r, i) => {
-    need(18);
-    if (i % 2 === 0) page.drawRectangle({ x: M - 4, y: y - 4, width: W - 2 * M + 8, height: 15, color: rgb(0.975, 0.977, 0.982) });
-    page.drawRectangle({ x: M - 4, y: y - 4, width: 2.5, height: 15, color: catColor(r.category) });
-    txt(sane(r.brand).slice(0, 36), cx.brand + 4, 9.5, bold);
-    if (r.category) { page.drawCircle({ x: cx.cat + 3, y: y + 3, size: 2.2, color: catColor(r.category) }); txt(sane(r.category), cx.cat + 9, 8, font, MUTED); }
-    const maxDeals = Math.max(...rows.map((x) => Number(x.deals) || 0), 1);
-    txt(String(r.deals), cx.deals, 9, mono); page.drawRectangle({ x: cx.deals + 18, y: y + 1, width: Math.max(2, 28 * (Number(r.deals) / maxDeals)), height: 5, color: catColor(r.category) });
-    txt(mon(r.last_seen), cx.last, 8, mono, MUTED);
-    if (r.content_url) link("view", cx.post, 8, r.content_url);
-    y -= 15;
-  });
-  y -= 8;
-
-  // ── most recent sponsored posts ───────────────────────────────────────
-  if (recent?.length) {
-    section("MOST RECENT SPONSORED POSTS");
-    for (const p of recent as any[]) {
-      need(26);
-      txt(`${mon(p.published_at)}  ·  ${sane(p.brands?.name || "")}`, M, 8, mono, MUTED); y -= 11;
-      link(sane(p.content_title || p.content_url).slice(0, 100), M, 9, p.content_url); y -= 15;
+  if (rows.length) {
+    let rh = 15.4; const two = rows.length > 8, gap = 24, cw = two ? (W - 2 * M - gap) / 2 : W - 2 * M;
+    section("Every partnership we found", `${rows.length} brand${rows.length === 1 ? "" : "s"} · ${totalDeals} deal${totalDeals === 1 ? "" : "s"} · newest first${repeats.length ? " · blue count = came back" : ""}${rows.some((r) => /\(\?\)/.test(r.brand)) ? " · (?) = brand guessed from the post, verify" : ""}`, 14 + rh * Math.min(4, rows.length));
+    const xs = (x: number) => ({ brand: x + 11, cat: x + cw - 136, deals: x + cw - 64, last: x + cw - 58, post: x + cw });
+    const heads = (x: number) => { const c = xs(x); label("Brand", c.brand, y, DIM, { size: 5.8, track: 0.9 }); label("Category", c.cat, y, DIM, { size: 5.8, track: 0.9 }); label("Deals", c.deals, y, DIM, { size: 5.8, track: 0.9, align: "right" }); label("Last", c.last + 2, y, DIM, { size: 5.8, track: 0.9 }); label("Post", c.post, y, DIM, { size: 5.8, track: 0.9, align: "right" }); };
+    let i = 0;
+    while (i < rows.length) {
+      if (y - 14 - rh * 2 < FOOT) newPage();
+      heads(M); if (two && rows.length - i > 1) heads(M + cw + gap);
+      y -= 7;
+      const left = rows.length - i, colLen = two ? Math.ceil(left / 2) : left;
+      if (colLen * rh > y - FOOT && colLen * 13.2 <= y - FOOT) rh = (y - FOOT) / colLen; // a few rows over: tighten rather than orphan them on a new page
+      const fit = Math.max(1, Math.floor((y - FOOT + 0.01) / rh)), take = Math.min(rows.length - i, two ? fit * 2 : fit), perCol = two ? Math.ceil(take / 2) : take;
+      for (let j = 0; j < take; j++) {
+        const r = rows[i + j], colI = two ? Math.floor(j / perCol) : 0, x = M + colI * (cw + gap), yy = y - 10 - (j - colI * perCol) * rh, c2 = xs(x);
+        rule(x, x + cw, yy + 10.6, LINE2, 0.5);
+        page.drawCircle({ x: x + 3.5, y: yy + 2.8, size: 2.6, color: catColor(r.category) });
+        text(clipTo(sane(r.brand), semi, 9, c2.cat - c2.brand - 8), c2.brand, yy, { f: semi, size: 9, color: INK });
+        if (r.category) text(clipTo(sane(r.category), font, 7.8, c2.deals - c2.cat - 20), c2.cat, yy, { size: 7.8, color: MUTED });
+        text(String(r.deals), c2.deals, yy, r.repeat_partner ? { f: bold, size: 9, color: ACCENT, align: "right" } : { size: 8.5, color: BODY, align: "right" });
+        text(mon(r.last_seen), c2.last + 2, yy, { f: mono, size: 7, color: MUTED });
+        if (r.content_url) link("view", c2.post, yy, r.content_url, { size: 7.6, align: "right" });
+      }
+      y -= perCol * rh + 12; i += take;
     }
+  }
+
+
+  // ── where we'd start: the pitch, on its own ink page ───────────────────
+  const inkPages = new Set<PDFPage>();
+  if (rows.length) {
+    const yearAgo = `${cols[12]}-01`;
+    const recentOnce = rows.filter((r) => !r.repeat_partner && String(r.last_seen || "") >= yearAgo).slice(0, 4);
+    const quiet = [...rows].filter((r) => r.last_seen && String(r.last_seen) < yearAgo).sort((a, b) => Number(b.deals) - Number(a.deals)).slice(0, 3);
+    const names = (rs: any[]) => listAnd(rs.map((r) => sane(r.brand)));
+    const moves: [string, string][] = [];
+    if (repeats.length) { const rs = [...repeats].sort((a, b) => Number(b.deals) - Number(a.deals)).slice(0, 3); moves.push(["Turn your repeats into longer deals", `${names(rs)} already ${rs.length === 1 ? "rebooks" : "rebook"} you. That is the case for a multi-month or ambassador deal instead of one post at a time.`]); }
+    if (recentOnce.length) moves.push(["Go back for the second deal", `${names(recentOnce)} ${recentOnce.length === 1 ? "has" : "have"} worked with you in the last year${recentOnce.some((r) => Number(r.deals) > 1) ? "" : ", once each"}. They already said yes, so a follow-up is the easiest deal to win.`]);
+    if (quiet.length) moves.push(["Reopen the quiet ones", `It has been over a year since ${names(quiet)}. We'd go back with your current numbers and a fresh idea.`]);
+    if (topCat && moves.length < 3) moves.push([`Go deeper in ${topCat[0].toLowerCase()}`, `${topCat[1]} of your ${totalDeals} deals are in ${topCat[0].toLowerCase()}. Brands next door to the ones on your list can already see you fit.`]);
+    page = pdf.addPage([W, H]); inkPages.add(page);
+    page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: INK });
+    label("Sponsorprint", M, H - 34, ON_INK, { size: 7.5, track: 3.2 });
+    text(name, W - M, H - 34.5, { f: semi, size: 8, color: ON_INK, align: "right" });
+    y = H - 96;
+    label("Where we'd start", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 }); y -= 38;
+    for (const ln of wrap(moves.length === 1 ? "The first move we'd make with you." : `${["Two", "Three"][Math.min(moves.length, 3) - 2]} moves we'd make with you first.`, display, 28, W - 2 * M, 2)) { page.pushOperators(setCharacterSpacing(-0.5)); page.drawText(ln, { x: M, y, size: 28, font: display, color: WHITE }); page.pushOperators(setCharacterSpacing(0)); y -= 33; }
+    y -= 22;
+    moves.slice(0, 3).forEach(([h, b], i) => {
+      rule(M, W - M, y + 22, INK_RULE, 0.8);
+      text(`0${i + 1}`, M, y, { f: monoMed, size: 8.5, color: BLUE_ON_INK });
+      text(clipTo(h, display, 14.5, W - 2 * M - 40), M + 40, y - 1, { f: display, size: 14.5, color: WHITE });
+      const ls = wrap(b, font, 9.8, 440, 3);
+      ls.forEach((ln, j) => text(ln, M + 40, y - 19 - j * 13.6, { size: 9.8, color: ON_INK }));
+      y -= 19 + ls.length * 13.6 + 30;
+    });
+    const laneName = String(c.category || "").toLowerCase(), floor = 150;
+    // brands booking creators like them that have never booked them
+    if (lane?.leads?.length && y - (40 + Math.ceil(Math.min(lane.leads.length, 6) / 3) * 34) > floor) {
+      rule(M, W - M, y + 22, INK_RULE, 0.8);
+      const lw = label("Brands we'd pitch you to", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 });
+      text(`booking ${laneName} creators like you right now, and not on your list yet`, M + lw + 12, y, { size: 8, color: ON_INK_DIM });
+      y -= 26;
+      const cw3 = (W - 2 * M - 2 * 20) / 3, ls = lane.leads.slice(0, 6);
+      ls.forEach((b, i) => { const x = M + (i % 3) * (cw3 + 20), yy = y - Math.floor(i / 3) * 34; text(clipTo(sane(b.brand), display, 13.5, cw3), x, yy, { f: display, size: 13.5, color: WHITE }); text(lane.counts ? `${b.n} ${laneName} creators this year` : sane(b.category || ""), x, yy - 12.5, { size: 7.8, color: ON_INK_DIM }); });
+      y -= Math.ceil(ls.length / 3) * 34 + 20;
+    }
+    // categories the lane has partners in and they don't
+    const gaps = (lane?.gaps || []).slice(0, 3);
+    if (gaps.length && y - 96 > floor) {
+      rule(M, W - M, y + 22, INK_RULE, 0.8);
+      const lw = label("Gaps we'd fill", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 });
+      text("categories your lane gets paid in that aren't on your list yet", M + lw + 12, y, { size: 8, color: ON_INK_DIM });
+      y -= 26;
+      const cw3 = (W - 2 * M - 2 * 20) / 3; let maxL = 0;
+      gaps.forEach((g, i) => {
+        const x = M + i * (cw3 + 20), ct = sane(g.category);
+        text(ct, x, y, { f: display, size: 13.5, color: WHITE });
+        const body = `${Math.round(g.share * 100)}% of ${laneName} creators we track have ${/^[aeiou]/i.test(ct) ? "an" : "a"} ${ct.toLowerCase()} partner.${g.examples.length ? ` Think ${listAnd(g.examples.map(sane))}.` : ""}`;
+        const ls = wrap(body, font, 8.6, cw3, 4); maxL = Math.max(maxL, ls.length);
+        ls.forEach((ln, j) => text(ln, x, y - 14 - j * 12, { size: 8.6, color: ON_INK }));
+      });
+      y -= 14 + maxL * 12 + 20;
+    }
+    rule(M, W - M, y + 22, INK_RULE, 0.8);
+    const signoff = sane(by?.signoff || "").replace(/[,.\s]+$/, "");
+    if (signoff && signoff.length <= 40) text(signoff.charAt(0).toUpperCase() + signoff.slice(1) + ",", M, 124, { f: display, size: 22, color: WHITE });
+    if (byLine) text(byLine, M, signoff ? 104 : 112, { f: semi, size: 10, color: ON_INK });
+    text(`Prepared for ${name}${printedOn ? ` on ${printedOn}` : ""}`, M, byLine ? (signoff ? 89 : 97) : 112, { size: 9, color: ON_INK_DIM });
   }
 
   // ── footers ───────────────────────────────────────────────────────────
   const pages = pdf.getPages();
   pages.forEach((pg, i) => {
-    pg.drawLine({ start: { x: M, y: M - 6 }, end: { x: W - M, y: M - 6 }, thickness: 0.5, color: LINE });
-    pg.drawText("Public posts only, read through the official YouTube and Instagram APIs. Disclosed deals (#ad, #partner, paid partnership, sponsored by). Not a complete record of any brand's spending.", { x: M, y: M - 18, size: 6.2, font, color: DIM });
-    pg.drawText("sponsorprint.com", { x: M, y: M - 28, size: 7, font: mono, color: GREEN });
-    pg.drawText(`${i + 1} / ${pages.length}`, { x: W - M - mono.widthOfTextAtSize(`${i + 1} / ${pages.length}`, 7), y: M - 28, size: 7, font: mono, color: DIM });
+    page = pg; const dark = inkPages.has(pg);
+    rule(M, W - M, 46, dark ? INK_RULE : LINE);
+    text("Built from your public posts through the official YouTube and Instagram APIs. It only counts partnerships you disclosed (#ad, #partner, paid partnership), so your real list is likely longer.", M, 34, { size: 6.1, color: dark ? ON_INK_DIM : DIM });
+    link("sponsorprint.com", M, 22, "https://sponsorprint.com", { f: monoMed, size: 7, color: dark ? WHITE : INK });
+    text(printNo, W / 2, 22, { f: mono, size: 6.5, color: dark ? ON_INK_DIM : DIM, align: "center" });
+    text(`${i + 1} / ${pages.length}`, W - M, 22, { f: mono, size: 7, color: dark ? ON_INK_DIM : DIM, align: "right" });
   });
   for (const l of links) {
     const annot = pdf.context.obj({ Type: "Annot", Subtype: "Link", Rect: [l.x, l.y, l.x + l.w, l.y + l.h], Border: [0, 0, 0], A: { Type: "Action", S: "URI", URI: PDFString.of(l.url) } });
