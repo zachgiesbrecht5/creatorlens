@@ -307,17 +307,17 @@ export async function renderPrint({ c, platform, wall, months, by, lane, full }:
     if (pitchLed) {
       y += 13;
       text(`They're booking ${laneName} creators like you right now, and they aren't on your list yet.`, M, y, { size: 10.5, color: ON_INK }); y -= 22;
-      const g = 10, cw3 = (W - 2 * M - 2 * g) / 3, th = lane?.counts ? 68 : 56;
+      const roomy = !full, g = 10, cw3 = (W - 2 * M - 2 * g) / 3, th = (lane?.counts ? 68 : 56) + (roomy ? 22 : 0), pad = roomy ? 11 : 0;
       leads.forEach((b, i) => {
         const x = M + (i % 3) * (cw3 + g), top = y - Math.floor(i / 3) * (th + g), nm = sane(b.brand);
         rrect(x, top, cw3, th, 7, { color: TILE, borderColor: INK_RULE, borderWidth: 0.8 });
-        page.drawRectangle({ x: x + 14, y: top - 19.6, width: 4.5, height: 4.5, color: catColor(b.category) });
-        label(sane(b.category || "Brand"), x + 23, top - 19.5, ON_INK_DIM, { size: 6.2, track: 0.9 });
-        let ns = 19; while (ns > 11 && display.widthOfTextAtSize(nm, ns) > cw3 - 28) ns -= 0.5;
-        text(clipTo(nm, display, ns, cw3 - 28), x + 14, top - 42, { f: display, size: ns, color: WHITE });
-        if (lane?.counts) text(`${b.n} ${laneName} creators this year`, x + 14, top - 56, { size: 7.8, color: ON_INK_DIM });
+        page.drawRectangle({ x: x + 14, y: top - 19.6 - pad * 0.6, width: 4.5, height: 4.5, color: catColor(b.category) });
+        label(sane(b.category || "Brand"), x + 23, top - 19.5 - pad * 0.6, ON_INK_DIM, { size: 6.2, track: 0.9 });
+        let ns = roomy ? 22 : 19; while (ns > 11 && display.widthOfTextAtSize(nm, ns) > cw3 - 28) ns -= 0.5;
+        text(clipTo(nm, display, ns, cw3 - 28), x + 14, top - 42 - pad * 1.5, { f: display, size: ns, color: WHITE });
+        if (lane?.counts) text(`${b.n} ${laneName} creators this year`, x + 14, top - 56 - pad * 1.7, { size: 7.8, color: ON_INK_DIM });
       });
-      y -= Math.ceil(leads.length / 3) * (th + g) + 26;
+      y -= Math.ceil(leads.length / 3) * (th + g) + (roomy ? 40 : 26);
     } else y -= 10;
 
     // categories the lane has partners in and they don't
@@ -335,22 +335,28 @@ export async function renderPrint({ c, platform, wall, months, by, lane, full }:
         const ls = wrap(body, font, 8.6, cw3, 3); maxL = Math.max(maxL, ls.length);
         ls.forEach((ln, j) => text(ln, x, y - 22 - j * 12, { size: 8.6, color: ON_INK }));
       });
-      y -= 22 + maxL * 12 + 22;
+      y -= 22 + maxL * 12 + (full ? 22 : 40);
     }
 
-    // first moves: roomy when they lead the page, compact under the pitch
-    const big = !pitchLed && !gaps.length, mv = moves.slice(0, 3);
-    if (pitchLed || gaps.length) { rule(M, W - M, y + 20, INK_RULE, 0.8); label(mv.length === 1 ? "The first move we'd make" : "The first moves we'd make", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 }); y -= 26; }
-    else y -= 8;
-    const hs = big ? 14.5 : 12, bs = big ? 9.8 : 9, lh = bs * 1.4, floor = 138;
-    for (let i = 0; i < mv.length; i++) {
-      const [h, b] = mv[i], ls = wrap(b, font, bs, 470, big ? 3 : 2), need = hs + 5 + ls.length * lh;
-      if (y - need < floor) break;
-      if (big) rule(M, W - M, y + 22, INK_RULE, 0.8);
-      text(`0${i + 1}`, M, y, { f: monoMed, size: 8.5, color: BLUE_ON_INK });
-      text(clipTo(h, display, hs, W - 2 * M - 40), M + 40, y - 1, { f: display, size: hs, color: WHITE });
-      ls.forEach((ln, j) => text(ln, M + 40, y - hs - 5 - j * lh, { size: bs, color: ON_INK }));
-      y -= need + (big ? 30 : 13);
+    // First moves are about brands the creator already has, which is a conversation rather than a headline:
+    // they stay out of the email version unless there is no lane data and they are all the page has.
+    if (full || (!pitchLed && !gaps.length)) {
+      const big = !pitchLed && !gaps.length, mv = moves.slice(0, 3);
+      if (pitchLed || gaps.length) { rule(M, W - M, y + 20, INK_RULE, 0.8); label(mv.length === 1 ? "The first move we'd make" : "The first moves we'd make", M, y, BLUE_ON_INK, { size: 7.5, track: 1.4 }); y -= 26; }
+      else y -= 8;
+      const hs = big ? 14.5 : 12, bs = big ? 9.8 : 9, lh = bs * 1.4, floor = 138;
+      for (let i = 0; i < mv.length; i++) {
+        const [h, b] = mv[i], ls = wrap(b, font, bs, 470, big ? 3 : 2), need = hs + 5 + ls.length * lh;
+        if (y - need < floor) break;
+        if (big) rule(M, W - M, y + 22, INK_RULE, 0.8);
+        text(`0${i + 1}`, M, y, { f: monoMed, size: 8.5, color: BLUE_ON_INK });
+        text(clipTo(h, display, hs, W - 2 * M - 40), M + 40, y - 1, { f: display, size: hs, color: WHITE });
+        ls.forEach((ln, j) => text(ln, M + 40, y - hs - 5 - j * lh, { size: bs, color: ON_INK }));
+        y -= need + (big ? 30 : 13);
+      }
+    } else {
+      rule(M, W - M, y + 20, INK_RULE, 0.8);
+      for (const ln of wrap("That's where we'd start. The rest is a conversation, and we'd love to have it.", display, 17, 420, 2)) { text(ln, M, y - 8, { f: display, size: 17, color: WHITE }); y -= 23; }
     }
     const signoff = sane(by?.signoff || "").replace(/[,.\s]+$/, "");
     rule(M, W - M, 136, INK_RULE, 0.8);
